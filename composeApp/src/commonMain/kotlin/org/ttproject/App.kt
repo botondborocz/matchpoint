@@ -39,6 +39,7 @@ import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import org.ttproject.components.DesktopSidebar
 import org.ttproject.components.MobileBottomNav
+import org.ttproject.components.MobileBottomNavPill
 import org.ttproject.components.MobileTopBar
 import org.ttproject.data.TokenStorage
 import org.ttproject.screens.AiHubScreen
@@ -232,13 +233,25 @@ fun App(
                             exitTransition = {
                                 if (targetState.destination.hasRoute(NavRoute.ChatDetail::class) ||
                                     targetState.destination.hasRoute(NavRoute.AiChat::class)) {
-                                    slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = tween(300, easing = LinearEasing))
+                                    if (isIosPlatform()) {
+                                        // iOS: Keep the original slide out
+                                        slideOutHorizontally(targetOffsetX = { -it / 3 }, animationSpec = tween(300, easing = LinearEasing))
+                                    } else {
+                                        // Android: Stay perfectly still so the map doesn't flash.
+                                        ExitTransition.None
+                                    }
                                 } else null
                             },
                             popEnterTransition = {
                                 if (initialState.destination.hasRoute(NavRoute.ChatDetail::class) ||
                                     initialState.destination.hasRoute(NavRoute.AiChat::class)) {
-                                    slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = tween(300, easing = LinearEasing))
+                                    if (isIosPlatform()) {
+                                        // iOS: Keep the original slide in
+                                        slideInHorizontally(initialOffsetX = { -it / 3 }, animationSpec = tween(300, easing = LinearEasing))
+                                    } else {
+                                        // Android: Stay perfectly still while the top screen fades out.
+                                        EnterTransition.None
+                                    }
                                 } else null
                             }
                         ) {
@@ -277,7 +290,7 @@ fun App(
                                     // No logic needed! It's permanently glued to the HomeBase screen.
                                     if (isMobile) {
                                         Box(modifier = Modifier.align(Alignment.BottomCenter).zIndex(10f)) {
-                                            MobileBottomNav(currentRoute = currentRoute, onNavigate = onTabNavigate)
+                                            MobileBottomNavPill(currentRoute = currentRoute, onNavigate = onTabNavigate)
                                         }
                                     }
 
@@ -410,21 +423,26 @@ fun App(
                         // --- SCREEN B: CHAT DETAIL SCREEN ---
                         composable<NavRoute.ChatDetail>(
                             enterTransition = {
-                                slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300, easing = LinearEasing))
+                                if (isIosPlatform()) {
+                                    slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300, easing = LinearEasing))
+                                } else {
+                                    // Android: Smooth fade in over the frozen HomeBase
+                                    fadeIn(animationSpec = tween(250))
+                                }
                             },
                             popExitTransition = {
-                                slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300, easing = LinearEasing))
+                                if (isIosPlatform()) {
+                                    slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300, easing = LinearEasing))
+                                } else {
+                                    // Android: Smooth fade out to reveal the frozen HomeBase
+                                    fadeOut(animationSpec = tween(250))
+                                }
                             }
                         ) { backStackEntry ->
                             val route = backStackEntry.toRoute<NavRoute.ChatDetail>()
-                            val chatViewModel =
-                                koinViewModel<ChatViewModel>(
-                                    parameters = {
-                                        org.koin.core.parameter.parametersOf(
-                                            route.chatId
-                                        )
-                                    }
-                                )
+                            val chatViewModel = koinViewModel<ChatViewModel>(
+                                parameters = { org.koin.core.parameter.parametersOf(route.chatId) }
+                            )
 
                             Box(modifier = Modifier.fillMaxSize()) {
                                 ChatDetailScreen(
@@ -434,17 +452,26 @@ fun App(
                                     otherUserImageUrl = route.otherUserImageUrl,
                                     initialThemeName = route.themeName,
                                     bottomNavPadding = 0.dp,
-                                    onBack = { rootNavController.popBackStack() } // 👇 Pops the root stack!
+                                    onBack = { rootNavController.popBackStack() }
                                 )
                             }
                         }
-                        // 👇 NEW SCREEN C: AI CHAT SCREEN (Full Screen slide over bottom nav)
+
+                        // --- SCREEN C: AI CHAT SCREEN ---
                         composable<NavRoute.AiChat>(
                             enterTransition = {
-                                slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300, easing = LinearEasing))
+                                if (isIosPlatform()) {
+                                    slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300, easing = LinearEasing))
+                                } else {
+                                    fadeIn(animationSpec = tween(250))
+                                }
                             },
                             popExitTransition = {
-                                slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300, easing = LinearEasing))
+                                if (isIosPlatform()) {
+                                    slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300, easing = LinearEasing))
+                                } else {
+                                    fadeOut(animationSpec = tween(250))
+                                }
                             }
                         ) {
                             Box(modifier = Modifier.fillMaxSize()) {

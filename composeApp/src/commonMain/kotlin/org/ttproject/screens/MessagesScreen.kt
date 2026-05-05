@@ -801,18 +801,41 @@ fun ChatDetailScreen(
                             val seconds = recordingDuration % 60
                             Text(text = "${minutes}:${seconds.toString().padStart(2, '0')}", color = currentTheme.myBubbleColor, fontWeight = FontWeight.Bold)
                         }
-                        Box(
-                            modifier = Modifier.size(36.dp).clip(CircleShape).background(currentTheme.myBubbleColor).clickable { // 👈 Reduced from 42.dp
-                                isRecordingVoice = false
-                                val audioBytes = voiceRecorder.stopRecording()
-                                if (audioBytes != null && recordingDuration > 0) {
-                                    viewModel.sendVoiceMessage(chatId, audioBytes, replyingToMessageId)
-                                    replyingToMessageId = null
-                                }
-                            },
-                            contentAlignment = Alignment.Center
-                        ) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send Voice", tint = Color.White, modifier = Modifier.size(16.dp).offset(x = 1.dp)) }
+                        // 3. Dynamic Send / Mic Button
+                        val hasText = messageText.text.isNotBlank()
 
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(currentTheme.myBubbleColor)
+                                .clickable {
+                                    if (hasText) {
+                                        viewModel.sendMessage(messageText.text, replyingToMessageId)
+                                        messageText = TextFieldValue("")
+                                        replyingToMessageId = null
+                                    } else {
+                                        voiceRecorder.startRecording { isRecordingVoice = true }
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (hasText) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = "Send",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(17.dp).offset(x = 2.dp)
+                                )
+                            } else {
+                                Icon(
+                                    painter = painterResource(Res.drawable.mic),
+                                    contentDescription = "Record Voice",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
                     } else {
                         // --- STANDARD UI ---
                         val showMediaIcons = messageText.text.isBlank() || forceShowIcons
@@ -823,12 +846,12 @@ fun ChatDetailScreen(
                             enter = androidx.compose.animation.expandHorizontally() + fadeIn(),
                             exit = androidx.compose.animation.shrinkHorizontally() + fadeOut()
                         ) {
-                            IconButton(onClick = { forceShowIcons = true }, modifier = Modifier.size(36.dp)) { // 👈 Reduced from 42.dp
+                            IconButton(onClick = { forceShowIcons = true }, modifier = Modifier.size(36.dp)) {
                                 Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = "Expand Media", tint = currentTheme.myBubbleColor, modifier = Modifier.size(18.dp))
                             }
                         }
 
-                        // 2. The Media Icons
+                        // 2. The Media Icons (Camera, Video, Gallery - Mic removed from here)
                         androidx.compose.animation.AnimatedVisibility(
                             visible = showMediaIcons,
                             enter = androidx.compose.animation.expandHorizontally() + fadeIn(),
@@ -836,9 +859,9 @@ fun ChatDetailScreen(
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.height(38.dp) // 👈 Reduced from 42.dp
+                                modifier = Modifier.height(38.dp)
                             ) {
-                                IconButton(onClick = { cameraLauncher.launch() }, modifier = Modifier.size(36.dp)) { // 👈 Reduced from 36.dp
+                                IconButton(onClick = { cameraLauncher.launch() }, modifier = Modifier.size(36.dp)) {
                                     Icon(painterResource(Res.drawable.camera), contentDescription = "Camera", tint = currentTheme.myBubbleColor, modifier = Modifier.size(20.dp))
                                 }
                                 IconButton(onClick = { videoLauncher.launch() }, modifier = Modifier.size(36.dp)) {
@@ -847,16 +870,10 @@ fun ChatDetailScreen(
                                 IconButton(onClick = { mediaLauncher.launch() }, modifier = Modifier.size(36.dp)) {
                                     Icon(painterResource(Res.drawable.image), contentDescription = "Gallery", tint = currentTheme.myBubbleColor, modifier = Modifier.size(18.dp))
                                 }
-                                IconButton(
-                                    onClick = { if (messageText.text.isBlank()) voiceRecorder.startRecording { isRecordingVoice = true } },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(painterResource(Res.drawable.mic), contentDescription = "Record Voice", tint = currentTheme.myBubbleColor, modifier = Modifier.size(20.dp))
-                                }
                             }
                         }
 
-                        // Text Input Field
+                        // 3. Text Input Field
                         BasicTextField(
                             value = messageText,
                             onValueChange = { messageText = it; forceShowIcons = false },
@@ -872,7 +889,7 @@ fun ChatDetailScreen(
                                         forceShowIcons = true
                                     }
                                 }
-                                .padding(horizontal = 8.dp, vertical = 8.dp), // 👈 Reduced vertical padding from 12.dp to 8.dp
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
                             textStyle = TextStyle(color = AppColors.TextPrimary, fontSize = 16.sp),
                             cursorBrush = SolidColor(currentTheme.myBubbleColor),
                             decorationBox = { innerTextField ->
@@ -885,17 +902,39 @@ fun ChatDetailScreen(
                             }
                         )
 
-                        // Send Text Button
+                        // 4. Dynamic Send / Mic Button (Now at the end!)
+                        val hasText = messageText.text.isNotBlank()
                         Box(
-                            modifier = Modifier.size(38.dp).clip(CircleShape).background(if (messageText.text.isNotBlank()) currentTheme.myBubbleColor else AppColors.TextGray.copy(alpha = 0.2f)) // 👈 Reduced from 42.dp
-                                .clickable(enabled = messageText.text.isNotBlank()) {
-                                    viewModel.sendMessage(messageText.text, replyingToMessageId)
-                                    messageText = TextFieldValue("")
-                                    replyingToMessageId = null
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(CircleShape)
+                                .background(currentTheme.myBubbleColor)
+                                .clickable {
+                                    if (hasText) {
+                                        viewModel.sendMessage(messageText.text, replyingToMessageId)
+                                        messageText = TextFieldValue("")
+                                        replyingToMessageId = null
+                                    } else {
+                                        voiceRecorder.startRecording { isRecordingVoice = true }
+                                    }
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = if (messageText.text.isNotBlank()) Color.White else AppColors.TextGray, modifier = Modifier.size(17.dp).offset(x = 2.dp)) // 👈 Reduced icon from 18 to 16
+                            if (hasText) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = "Send",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(17.dp).offset(x = 2.dp)
+                                )
+                            } else {
+                                Icon(
+                                    painter = painterResource(Res.drawable.mic),
+                                    contentDescription = "Record Voice",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
                 }

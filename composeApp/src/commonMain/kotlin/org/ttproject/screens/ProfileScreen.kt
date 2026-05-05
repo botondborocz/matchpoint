@@ -1,5 +1,8 @@
 package org.ttproject.screens
 
+import BadgeData
+import BadgeDetailsDialog
+import BadgesSection
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
@@ -91,7 +94,6 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
 import org.ttproject.AppIcon
-import org.ttproject.components.BadgesSection
 import org.ttproject.components.NativeDatePickerField
 import org.ttproject.components.NativeDropdownField
 import org.ttproject.data.TokenStorage
@@ -116,6 +118,7 @@ fun ProfileScreen(
     var isEditGearModalOpen by remember { mutableStateOf(false) }
     var isEditBasicInfoModalOpen by remember { mutableStateOf(false) } // 👈 NEW
     var isMatchCardPreviewOpen by remember { mutableStateOf(false) } // 👈 NEW
+    var selectedBadge by remember { mutableStateOf<BadgeData?>(null) }
 
     val scope = rememberCoroutineScope()
     var imageToUpload by remember { mutableStateOf<ByteArray?>(null) }
@@ -138,6 +141,14 @@ fun ProfileScreen(
                 viewModel.uploadProfileImage(imageToUpload!!)
                 imageToUpload = null
             }
+        )
+    }
+
+    // BADGE DETAILS DIALOG
+    if (selectedBadge != null) {
+        BadgeDetailsDialog(
+            badge = selectedBadge!!,
+            onDismiss = { selectedBadge = null }
         )
     }
 
@@ -280,7 +291,12 @@ fun ProfileScreen(
                         ) { 50 }
                     ) {
                         Column {
-                            BadgesSection() // Ezt a komponenst hívjuk meg!
+                            // 👇 Now pass the onClick handler to update the state!
+                            BadgesSection(
+                                onBadgeClick = { clickedBadge ->
+                                    selectedBadge = clickedBadge
+                                }
+                            )
                             Spacer(modifier = Modifier.height(32.dp))
                         }
                     }
