@@ -1,5 +1,6 @@
 package org.ttproject.screens
 
+import MiniBadge
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -479,7 +480,7 @@ fun MatchCardContent(
 
     Box(
         modifier = Modifier
-            .fillMaxSize() // Takes up exactly the space granted by the parent Box
+            .fillMaxSize()
             .clip(RoundedCornerShape(24.dp))
             .then(if (hasImage) Modifier else Modifier.background(backgroundBrush))
     ) {
@@ -537,22 +538,6 @@ fun MatchCardContent(
                     )
 
                     Spacer(modifier = Modifier.weight(1f))
-
-//                    Row(
-//                        verticalAlignment = Alignment.CenterVertically,
-//                        modifier = Modifier
-//                            .border(1.dp, AppColors.AccentOrange, RoundedCornerShape(8.dp))
-//                            .padding(horizontal = 8.dp, vertical = 4.dp)
-//                    ) {
-//                        Icon(Icons.Default.Star, contentDescription = null, tint = AppColors.AccentOrange, modifier = Modifier.size(14.dp))
-//                        Spacer(modifier = Modifier.width(4.dp))
-//                        Text(
-//                            text = "ELO ${player.elo}",
-//                            color = AppColors.AccentOrange,
-//                            fontSize = 12.sp,
-//                            fontWeight = FontWeight.Bold
-//                        )
-//                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -569,8 +554,34 @@ fun MatchCardContent(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // 👇 UPDATED ROW: TagChip + Badges
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // 1. Skill Level
                     TagChip(player.skillLevel)
+
+                    // 2. Badges (If they have any)
+                    val completedBadges = player.topBadges.filter { it.currentLevel > 0 }
+
+                    if (completedBadges.isNotEmpty()) {
+                        // Subtle vertical separator line
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(16.dp)
+                                .background(Color.White.copy(alpha = 0.3f))
+                        )
+
+                        // Top 4 Badges row
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            // Take max 4 to not overflow the card width
+                            completedBadges.take(4).forEach { badge ->
+                                MiniBadge(badge)
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -27,6 +27,7 @@ import org.ttproject.data.UpdateLanguageRequest
 import org.ttproject.data.UpdateProfileRequest
 import org.ttproject.data.UserProfile
 import org.ttproject.database.tables.Swipes
+import org.ttproject.services.BadgeService
 import org.ttproject.services.MatchService
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -34,7 +35,7 @@ import java.time.LocalDate
 import java.time.Period
 import java.util.UUID
 
-fun Route.userRoutes() {
+fun Route.userRoutes(badgeService: BadgeService) {
     // We put this inside the JWT block so only logged-in users can see other players
     authenticate("auth-jwt") {
         route("/api/users") {
@@ -128,10 +129,18 @@ fun Route.userRoutes() {
 
             get("/me") {
                 val principal = call.principal<JWTPrincipal>()
-                val userId = principal?.payload?.getClaim("userId")?.asString()
+                val userIdStr = principal?.payload?.getClaim("userId")?.asString()
+                    ?: return@get call.respond(HttpStatusCode.Unauthorized, "Invalid token: Missing user ID")
+
+                // 2. Now it's safe to convert to UUID!
+                val userId = UUID.fromString(userIdStr)
+
+                // 3. Update the streak (Optionally extract timezone from header here)
+                val userTimezone = call.request.headers["X-Timezone"] ?: "UTC"
+                badgeService.updateStreak(userId, userTimezone)
 
                 val userProfile = transaction {
-                    Users.selectAll().where { Users.id eq UUID.fromString(userId) }
+                    Users.selectAll().where { Users.id eq UUID.fromString(userIdStr) }
                         .singleOrNull()?.let { row ->
                             UserProfile(
                                 id = row[Users.id].toString(),

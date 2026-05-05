@@ -1,6 +1,7 @@
 package org.ttproject.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
@@ -107,6 +108,7 @@ import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.SheetState
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.layout
@@ -713,23 +715,23 @@ fun ChatDetailScreen(
                     }
                 }
 
-                // 👇 THE FIX: An invisible Box handles the alignment to protect the compiler scope
                 Box(
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 8.dp) // Hovers just above the text field!
+                        .align(Alignment.BottomEnd) // 👈 1. Moved to Bottom Right
+                        .padding(bottom = 8.dp, end = 12.dp) // 👈 2. Added right-side padding to align with the input field
                 ) {
                     androidx.compose.animation.AnimatedVisibility(
                         visible = showScrollToBottom,
                         enter = fadeIn() + androidx.compose.animation.scaleIn(),
                         exit = fadeOut() + androidx.compose.animation.scaleOut()
                     ) {
-                        // A sleek circular button that perfectly matches your chat theme
+                        // A sleek circular button that matches the other user's theme
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(36.dp)
+                                .shadow(4.dp, CircleShape) // 👈 Added a shadow so it pops off the background
                                 .clip(CircleShape)
-                                .background(currentTheme.myBubbleColor)
+                                .background(currentTheme.otherBubbleColor) // 👈 3. Uses the other user's bubble color
                                 .clickable {
                                     coroutineScope.launch {
                                         // Smoothly glide back down to the newest message
@@ -739,17 +741,27 @@ fun ChatDetailScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.ArrowDownward,
+                                imageVector = Icons.Default.KeyboardArrowDown, // 👈 4. iOS-style chevron arrow
                                 contentDescription = "Scroll to newest",
-                                tint = Color.White
+                                tint = AppColors.TextPrimary, // 👈 Ensures visibility against the usually lighter "other" bubble color
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
                 }
             } // 👈 End of the Box wrapper
 
-            // --- THE KEYBOARD-AWARE INPUT AREA (OPTION 2: FLOATING ISLAND) ---
-            Column(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 16.dp)) {
+            // --- THE KEYBOARD-AWARE INPUT AREA (UNIFIED FLOATING ISLAND) ---
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, end = 12.dp, bottom = 16.dp)
+                    // 👇 1. The entire container is now one big rounded bubble!
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(if (org.ttproject.isDark) Color.Black.copy(alpha = 0.25f) else Color.Black.copy(alpha = 0.05f))
+                    .border(1.dp, currentTheme.myBubbleColor.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
+                    .animateContentSize() // Smoothly expands when reply pops up
+            ) {
                 AnimatedVisibility(
                     visible = replyingToMessage != null,
                     enter = expandVertically() + fadeIn(),
@@ -761,31 +773,25 @@ fun ChatDetailScreen(
                             themeColor = currentTheme.myBubbleColor,
                             onCancel = { replyingToMessageId = null }
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
 
-                // 👇 The Outer Island Wrapper (Slimmed Down!)
+                // 👇 2. The Input Row (Background and border removed since the parent handles it now)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(28.dp))
-                        .background(if (org.ttproject.isDark) Color.Black.copy(alpha = 0.25f) else Color.Black.copy(alpha = 0.05f))
-//                        .background(AppColors.SurfaceDark.copy(alpha = 0.85f))
-//                        .background(currentTheme.myBubbleColor.copy(alpha = 0.15f))
-                        .border(1.dp, currentTheme.myBubbleColor.copy(alpha = 0.3f), RoundedCornerShape(28.dp))
-                        .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), // 👈 Reduced outer padding
+                        .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.Bottom
                 ) {
                     if (isRecordingVoice) {
                         // --- ACTIVE RECORDING UI ---
                         IconButton(
                             onClick = { isRecordingVoice = false; voiceRecorder.cancelRecording() },
-                            modifier = Modifier.size(36.dp) // 👈 Reduced from 42.dp
+                            modifier = Modifier.size(36.dp)
                         ) { Icon(Icons.Default.Close, contentDescription = "Cancel", tint = Color.Red, modifier = Modifier.size(20.dp)) }
 
                         Row(
-                            modifier = Modifier.weight(1f).height(38.dp).padding(horizontal = 12.dp), // 👈 Reduced from 42.dp
+                            modifier = Modifier.weight(1f).height(38.dp).padding(horizontal = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
@@ -801,40 +807,29 @@ fun ChatDetailScreen(
                             val seconds = recordingDuration % 60
                             Text(text = "${minutes}:${seconds.toString().padStart(2, '0')}", color = currentTheme.myBubbleColor, fontWeight = FontWeight.Bold)
                         }
-                        // 3. Dynamic Send / Mic Button
-                        val hasText = messageText.text.isNotBlank()
 
+                        // 👇 3. FIX: Dedicated SEND button for Voice Recording (No more `hasText` check here!)
                         Box(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(CircleShape)
                                 .background(currentTheme.myBubbleColor)
                                 .clickable {
-                                    if (hasText) {
-                                        viewModel.sendMessage(messageText.text, replyingToMessageId)
-                                        messageText = TextFieldValue("")
+                                    isRecordingVoice = false
+                                    val audioBytes = voiceRecorder.stopRecording()
+                                    if (audioBytes != null && recordingDuration > 0) {
+                                        viewModel.sendVoiceMessage(chatId, audioBytes, replyingToMessageId)
                                         replyingToMessageId = null
-                                    } else {
-                                        voiceRecorder.startRecording { isRecordingVoice = true }
                                     }
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            if (hasText) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = "Send",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(17.dp).offset(x = 2.dp)
-                                )
-                            } else {
-                                Icon(
-                                    painter = painterResource(Res.drawable.mic),
-                                    contentDescription = "Record Voice",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                contentDescription = "Send Voice",
+                                tint = Color.White,
+                                modifier = Modifier.size(17.dp).offset(x = 2.dp)
+                            )
                         }
                     } else {
                         // --- STANDARD UI ---
@@ -1499,6 +1494,21 @@ fun AnimatedMessageBubble(
         }
     }
 
+    // 👇 1. ADD THE HIGHLIGHT ALPHA ANIMATABLE
+    val highlightAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
+
+    // 👇 2. ADD THE BACKGROUND FLASH EFFECT
+    LaunchedEffect(isHighlighted) {
+        if (isHighlighted) {
+            // Quick fade into a translucent highlight
+            highlightAlpha.animateTo(0.25f, tween(200))
+            // Hold it for a split second so the user's eye catches it after the scroll finishes
+            kotlinx.coroutines.delay(250)
+            // Smoothly fade back to transparent
+            highlightAlpha.animateTo(0f, tween(600))
+        }
+    }
+
     LaunchedEffect(playAnimation) {
         if (playAnimation) {
             launch { alphaAnim.animateTo(1f, tween(250)) }
@@ -1518,7 +1528,18 @@ fun AnimatedMessageBubble(
     val voiceUrl = if (isVoice) text.substringAfter("[VOICE]") else ""
     val isActiveVoice = currentlyPlayingUrl == voiceUrl
     val isSeekingAllowed = isActiveVoice && isAudioPlaying
-
+//    Column(
+//        modifier = Modifier
+//            .fillMaxWidth() // 👈 Ensure it takes the full width so the flash goes edge-to-edge!
+//            .background(myBubbleColor.copy(alpha = highlightAlpha.value)) // 👈 Flashes the theme color
+//            .graphicsLayer {
+//                translationX = if (isMe) (offsetAnim.value / 2) else (-offsetAnim.value / 2)
+//                translationY = offsetAnim.value
+//                this.alpha = alphaAnim.value
+//                // scaleX and scaleY removed!
+//            }
+//    ) {
+//        // --- THE CENTERED TIMESTAMP ---
     Column(
         // 👇 THE FIX: Bypass the graphicsLayer cache bug by using physical layout modifiers!
         modifier = Modifier
@@ -1725,12 +1746,10 @@ fun ChatBubble(
     var reactionBounds by remember { mutableStateOf<Rect?>(null) }
     val bubbleShape = RoundedCornerShape(topStart, topEnd, bottomEnd, bottomStart)
 
-    BoxWithConstraints(
+    Box(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = if (isMe) Alignment.TopEnd else Alignment.TopStart
     ) {
-        val maxBubbleWidth = maxWidth * 0.80f
-
         Column(horizontalAlignment = if (isMe) Alignment.End else Alignment.Start) {
             Box(contentAlignment = Alignment.BottomEnd) {
 
@@ -1759,7 +1778,7 @@ fun ChatBubble(
                 // This single Column now handles background, padding, bounds, AND gestures
                 Column(
                     modifier = Modifier
-                        .widthIn(max = maxBubbleWidth)
+                        .maxWidthPercent(0.80f) // 👈 KMP SAFE AND BLAZING FAST
                         .onGloballyPositioned { coordinates ->
                             bubbleBounds = coordinates.boundsInRoot()
                         }
@@ -2203,7 +2222,7 @@ fun ReplyPreview(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 8.dp)
+            .padding(start = 12.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(bgColor) // 👈 Translucent to blend with gradient!
             .border(
@@ -2217,8 +2236,9 @@ fun ReplyPreview(
         Box(
             modifier = Modifier
                 .width(4.dp)
-                .height(40.dp)
-                .background(themeColor) // 👈 Theme matched bar
+                .height(36.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(themeColor)
         )
         Spacer(modifier = Modifier.width(8.dp))
 
@@ -2621,5 +2641,21 @@ fun VoiceMessageContent(
                 modifier = Modifier.align(Alignment.End).offset(y = (-4).dp)
             )
         }
+    }
+}
+
+// A lightning-fast, KMP-safe modifier to constrain max width by percentage
+fun Modifier.maxWidthPercent(percent: Float) = this.layout { measurable, constraints ->
+    // Calculate 80% of whatever the parent container's max width is
+    val maxAllowedWidth = (constraints.maxWidth * percent).toInt()
+
+    // Force the child to measure itself within this new boundary
+    val placeable = measurable.measure(
+        constraints.copy(maxWidth = maxAllowedWidth)
+    )
+
+    // Place it!
+    layout(placeable.width, placeable.height) {
+        placeable.placeRelative(0, 0)
     }
 }

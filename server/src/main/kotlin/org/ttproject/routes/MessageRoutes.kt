@@ -42,6 +42,7 @@ import org.ttproject.database.tables.Connections
 import org.ttproject.database.tables.MessageReactions
 import org.ttproject.database.tables.Messages
 import org.ttproject.database.tables.Users
+import org.ttproject.services.BadgeService
 import org.ttproject.services.ConnectionManager
 import java.lang.reflect.Array.set
 import java.time.Instant
@@ -50,7 +51,7 @@ import java.util.UUID
 // You will need a simple class to manage your active WebSocket connections
 val connectionManager = ConnectionManager()
 
-fun Route.messageRoutes() {
+fun Route.messageRoutes(badgeService: BadgeService) {
 
     authenticate("auth-jwt") {
         get("/api/connections") {
@@ -262,6 +263,11 @@ fun Route.messageRoutes() {
                                                 it[replyToMessageId] = replyToId
                                             } get Messages.id
                                         }
+
+                                        badgeService.incrementMetric(
+                                            userIdParam = senderId,
+                                            column = org.ttproject.database.tables.UserBadgeMetrics.sentMessages
+                                        )
 
                                         // 👇 Use the new ConnectionManager function!
                                         if (!connectionManager.isUserConnected(

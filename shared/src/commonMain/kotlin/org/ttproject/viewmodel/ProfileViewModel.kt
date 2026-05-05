@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.ttproject.data.UserBadgeMetricsDto
 import org.ttproject.repository.UserRepository
 
 sealed class ProfileState {
@@ -23,7 +24,8 @@ sealed class ProfileState {
         val bio: String? = null,
         val birthDate: String? = null,
         val skillLevel: String? = null,
-        val age: Int? = null
+        val age: Int? = null,
+        val badgeMetrics: UserBadgeMetricsDto? = null // 👈 ADD THIS
     ) : ProfileState()
     data class Error(val message: String) : ProfileState()
 }
@@ -53,15 +55,25 @@ class ProfileViewModel(
         viewModelScope.launch {
             _uiState.value = ProfileState.Loading
             try {
+                // 1. Fetch the main profile data
                 val user = userRepository.getMyProfile()
 
+                // 👇 2. Fetch the badge metrics (wrapped in try-catch so it doesn't break the profile if it fails)
+                val metrics = try {
+                    userRepository.getBadgeMetrics()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    null // Fallback to null if the network request fails
+                }
+
+                // 3. Update the UI state with BOTH profile and badge data
                 _uiState.value = ProfileState.Success(
                     name = user.name, elo = user.elo, winRate = user.winRate,
                     language = user.preferredLanguage, imageUrl = user.imageUrl,
                     blade = user.blade, rubberFh = user.rubberFh, rubberBh = user.rubberBh,
-                    // 👇 Map the new fields
                     bio = user.bio, birthDate = user.birthDate,
-                    skillLevel = user.skillLevel, age = user.age
+                    skillLevel = user.skillLevel, age = user.age,
+                    badgeMetrics = metrics // 👈 Pass the fetched metrics here!
                 )
             } catch (e: Exception) {
                 _uiState.value = ProfileState.Error("Failed to load profile: ${e.message}")

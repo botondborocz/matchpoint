@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.jetbrains.compose.resources.painterResource
@@ -65,11 +66,29 @@ fun MobileBottomNavPill(
         messagesViewModel.loadConnections()
     }
 
+    // 1. Get the raw bottom inset size from the system
+    val density = LocalDensity.current
+    val bottomInsetDp = with(density) {
+        WindowInsets.navigationBars.getBottom(this).toDp()
+    }
+
+    // 2. Calculate dynamic padding.
+    // We want a minimum of 16.dp distance from the screen edge,
+    // but if the system inset is already huge (like iOS), we only add a tiny bit of extra breathing room (e.g., 4.dp).
+    val dynamicBottomPadding = if (bottomInsetDp > 20.dp) 4.dp else 16.dp
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            // 3. Apply the system insets FIRST
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = 16.dp, vertical = 16.dp)
+            // 4. Apply our adjusted padding
+            .padding(
+                start = 16.dp,
+                end = 16.dp,
+                top = 16.dp,
+                bottom = dynamicBottomPadding
+            )
     ) {
         BoxWithConstraints(
             modifier = Modifier

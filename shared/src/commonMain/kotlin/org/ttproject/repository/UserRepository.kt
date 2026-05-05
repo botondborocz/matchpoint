@@ -6,6 +6,7 @@ import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -19,6 +20,8 @@ import org.ttproject.data.TokenStorage
 import org.ttproject.data.UpdateLanguageRequest
 import org.ttproject.data.UpdateProfileRequest
 import org.ttproject.data.UserProfile
+import org.ttproject.data.UserBadgeMetricsDto
+import kotlinx.datetime.TimeZone
 
 // 1. The Interface
 interface UserRepository {
@@ -26,10 +29,13 @@ interface UserRepository {
     suspend fun getUserProfile(username: String): Result<UserProfile>
     suspend fun updateProfile(
         name: String, blade: String, forehand: String, backhand: String,
-        bio: String?, birthDate: String?, skillLevel: String? // 👈 ADDED
+        bio: String?, birthDate: String?, skillLevel: String?
     ): Result<Boolean>
     suspend fun updateLanguage(language: String): Result<Boolean>
     suspend fun uploadProfileImage(imageBytes: ByteArray): Result<Boolean>
+
+    // 👇 ADDED: Fetch Badge Metrics
+    suspend fun getBadgeMetrics(): UserBadgeMetricsDto
 }
 
 // 2. The Implementation
@@ -42,8 +48,11 @@ class UserRepositoryImpl(
         val token = tokenStorage.getToken()
             ?: throw Exception("No auth token found! User should be logged out.")
 
+        val localTz = TimeZone.currentSystemDefault().id
+
         val response = httpClient.get("${SERVER_IP}/api/users/me") {
             bearerAuth(token)
+            header("X-Timezone", localTz)
         }
 
         if (response.status.value in 200..299) {
@@ -83,7 +92,6 @@ class UserRepositoryImpl(
         return try {
             val response = httpClient.put("${SERVER_IP}/api/users/me") {
                 contentType(ContentType.Application.Json)
-                // 👇 Pass the new variables into the Request object
                 setBody(UpdateProfileRequest(name, blade, forehand, backhand, bio, birthDate, skillLevel))
                 bearerAuth(tokenStorage.getToken()!!)
             }
@@ -118,7 +126,6 @@ class UserRepositoryImpl(
         }
     }
 
-    // 👇 New implementation for sending the image via Multipart Form Data
     override suspend fun uploadProfileImage(imageBytes: ByteArray): Result<Boolean> {
         return try {
             val token = tokenStorage.getToken() ?: throw Exception("No auth token")
@@ -130,7 +137,6 @@ class UserRepositoryImpl(
                         formData {
                             append("image", imageBytes, Headers.build {
                                 append(HttpHeaders.ContentType, "image/jpeg")
-                                // The filename doesn't matter too much here since the server assigns a new one
                                 append(HttpHeaders.ContentDisposition, "filename=\"profile_pic.jpg\"")
                             })
                         }
@@ -146,6 +152,24 @@ class UserRepositoryImpl(
         } catch (e: Exception) {
             e.printStackTrace()
             Result.failure(e)
+        }
+    }
+
+    // 👇 ADDED: Implementation for fetching the badge metrics
+    override suspend fun getBadgeMetrics(): UserBadgeMetricsDto {
+        val token = tokenStorage.getToken()
+            ?: throw Exception("No auth token found! User should be logged out.")
+
+        val response = httpClient.get("${SERVER_IP}/api/profile/badges") {
+            bearerAuth(token)
+        }
+
+        if (response.status.isSuccess()) {
+            return response.body()
+        } else if (response.status.value == 401) {
+            throw Exception("Session expired. Please log in again.")
+        } else {
+            throw Exception("Failed to fetch badge metrics. Server returned: ${response.status}")
         }
     }
 }

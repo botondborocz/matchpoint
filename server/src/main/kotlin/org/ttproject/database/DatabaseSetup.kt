@@ -13,6 +13,7 @@ import org.ttproject.database.tables.Matches
 import org.ttproject.database.tables.MessageReactions
 import org.ttproject.database.tables.Messages
 import org.ttproject.database.tables.Swipes
+import org.ttproject.database.tables.UserBadgeMetrics
 import org.ttproject.database.tables.Users
 
 // 1. Define the 1-table schema
@@ -43,7 +44,7 @@ fun initDatabase() {
     // 3. Automatically create the table if it doesn't exist yet
     transaction {
         SchemaUtils.createMissingTablesAndColumns(Users, Swipes, Locations, Matches, Connections, Messages,
-            MessageReactions, AiAnalyses)
+            MessageReactions, AiAnalyses, UserBadgeMetrics)
     }
 
     insertDummyData()

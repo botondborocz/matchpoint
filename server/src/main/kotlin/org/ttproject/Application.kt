@@ -36,7 +36,9 @@ import io.ktor.server.plugins.cors.routing.*
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.pingPeriod
 import io.ktor.server.websocket.timeout
+import org.ttproject.routes.badgeRouting
 import org.ttproject.routes.messageRoutes
+import org.ttproject.services.BadgeService
 import java.io.File
 import kotlin.time.Duration.Companion.seconds
 
@@ -124,11 +126,14 @@ fun Application.module() {
         }
     }
 
+    val badgeService = BadgeService()
+
     routing {
         authRoutes()
-        userRoutes()
+        userRoutes(badgeService)
         locationRoutes()
-        messageRoutes()
+        messageRoutes(badgeService)
+        badgeRouting(badgeService)
 
         get("/") {
             call.respondText("Ktor Server is Online!")

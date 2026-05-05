@@ -1,6 +1,5 @@
 package org.ttproject.screens
 
-import BadgeData
 import BadgeDetailsDialog
 import BadgesSection
 import androidx.compose.animation.AnimatedVisibility
@@ -92,10 +91,12 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import mapMetricsToBadges
 import org.koin.compose.koinInject
 import org.ttproject.AppIcon
 import org.ttproject.components.NativeDatePickerField
 import org.ttproject.components.NativeDropdownField
+import org.ttproject.data.BadgeData
 import org.ttproject.data.TokenStorage
 import org.ttproject.isIosPlatform
 import ttproject.composeapp.generated.resources.Res as AppRes
@@ -291,8 +292,8 @@ fun ProfileScreen(
                         ) { 50 }
                     ) {
                         Column {
-                            // 👇 Now pass the onClick handler to update the state!
                             BadgesSection(
+                                metrics = userData.badgeMetrics, // 👈 PASS THE REAL DATA HERE
                                 onBadgeClick = { clickedBadge ->
                                     selectedBadge = clickedBadge
                                 }
@@ -376,6 +377,8 @@ fun MatchCardPreviewDialog(
     profileData: ProfileState.Success,
     onDismiss: () -> Unit
 ) {
+    val mappedBadges = mapMetricsToBadges(profileData.badgeMetrics)
+
     // Map ProfileState to the Player object your MatchCard expects
     val meAsPlayer = Player(
         id = "me",
@@ -384,7 +387,8 @@ fun MatchCardPreviewDialog(
         age = profileData.age ?: 0,
         elo = profileData.elo,
         distanceKm = 0,
-        imageUrl = profileData.imageUrl
+        imageUrl = profileData.imageUrl,
+        topBadges = mappedBadges
     )
 
     val cardGradient = Brush.verticalGradient(
