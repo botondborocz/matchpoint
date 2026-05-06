@@ -123,6 +123,24 @@ fun App(
         )
     }
 
+    var currentThemeStyle by remember {
+        mutableStateOf(
+            when (tokenStorage.getAppTheme()) {
+                "vip" -> AppThemeStyle.VIP
+                "adrenalin" -> AppThemeStyle.ADRENALIN
+                "matrix" -> AppThemeStyle.MATRIX
+                "arctic" -> AppThemeStyle.ARCTIC
+                "neon" -> AppThemeStyle.NEON
+                "stealth" -> AppThemeStyle.STEALTH
+                "tokyo" -> AppThemeStyle.TOKYO
+                "classic" -> AppThemeStyle.CLASSIC
+                "royal" -> AppThemeStyle.ROYAL
+                "volt" -> AppThemeStyle.VOLT
+                else -> AppThemeStyle.DEFAULT
+            }
+        )
+    } // Ide jön majd a mentett érték betöltése
+
     val isSystemDark = isSystemInDarkTheme()
     val isCurrentlyDark = when (currentThemeMode) {
         ThemeMode.Light -> false
@@ -138,7 +156,8 @@ fun App(
     key(currentLanguage) {
         CompositionLocalProvider(
             LocalThemeMode provides currentThemeMode,
-            LocalIsDarkTheme provides isCurrentlyDark
+            LocalIsDarkTheme provides isCurrentlyDark,
+            LocalAppThemeStyle provides currentThemeStyle
         ) {
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                 val isMobile = maxWidth < 600.dp
@@ -272,6 +291,25 @@ fun App(
                                                                         }
                                                                     )
                                                                     currentThemeMode = newThemeMode
+                                                                },
+                                                                onChangeAppThemeStyle = { newStyle ->
+                                                                    tokenStorage.saveAppTheme(
+                                                                        when (newStyle) {
+                                                                            AppThemeStyle.DEFAULT -> "default"
+                                                                            AppThemeStyle.VIP -> "vip"
+                                                                            AppThemeStyle.ADRENALIN -> "adrenalin"
+                                                                            AppThemeStyle.MATRIX -> "matrix"
+                                                                            AppThemeStyle.ARCTIC -> "arctic"
+                                                                            AppThemeStyle.NEON -> "neon"
+                                                                            AppThemeStyle.STEALTH -> "stealth"
+                                                                            AppThemeStyle.TOKYO -> "tokyo"
+                                                                            AppThemeStyle.CLASSIC -> "classic"
+                                                                            AppThemeStyle.ROYAL -> "royal"
+                                                                            AppThemeStyle.VOLT -> "volt"
+                                                                        }
+                                                                    )
+                                                                    currentThemeStyle = newStyle
+                                                                    // Itt még el is mentheted a választást, ha szeretnéd
                                                                 }
                                                             )
                                                         } else {

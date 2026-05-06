@@ -94,8 +94,11 @@ import kotlinx.datetime.toLocalDateTime
 import mapMetricsToBadges
 import org.koin.compose.koinInject
 import org.ttproject.AppIcon
+import org.ttproject.AppThemeStyle
+import org.ttproject.LocalAppThemeStyle
 import org.ttproject.components.NativeDatePickerField
 import org.ttproject.components.NativeDropdownField
+import org.ttproject.components.PremiumThemeSelector
 import org.ttproject.data.BadgeData
 import org.ttproject.data.TokenStorage
 import org.ttproject.isIosPlatform
@@ -104,10 +107,13 @@ import ttproject.composeapp.generated.resources.Res as AppRes
 @Composable
 fun ProfileScreen(
     currentLanguage: String = "en",
+    currentAppThemeStyle: AppThemeStyle = LocalAppThemeStyle.current, // 👈 ÚJ
+    isUserPremium: Boolean = true, // 👈 ÚJ: Később kösd be a ProfileState-ből
     currentThemeMode: ThemeMode = ThemeMode.System,
     onLogoutClick: () -> Unit = {},
     onChangeLanguage: (String) -> Unit = {},
     onChangeTheme: (ThemeMode) -> Unit = {},
+    onChangeAppThemeStyle: (AppThemeStyle) -> Unit = {},
     viewModel: ProfileViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -349,9 +355,12 @@ fun ProfileScreen(
                             SettingsAndLogout(
                                 currentLanguage = currentLanguage,
                                 currentThemeMode = currentThemeMode,
+                                currentAppThemeStyle = currentAppThemeStyle, // 👈 ÚJ
+                                isUserPremium = isUserPremium, // 👈 ÚJ
                                 onLogoutClick = { viewModel.clearProfile(); onLogoutClick() },
                                 onChangeLanguage = onChangeLanguage,
                                 onChangeTheme = onChangeTheme,
+                                onChangeAppThemeStyle = onChangeAppThemeStyle, // 👈 ÚJ
                                 viewModel = viewModel,
                                 snackbarHostState = snackbarHostState
                             )
@@ -920,9 +929,12 @@ private fun GearItem(
 private fun SettingsAndLogout(
     currentLanguage: String,
     currentThemeMode: ThemeMode,
+    currentAppThemeStyle: AppThemeStyle,
+    isUserPremium: Boolean,
     onLogoutClick: () -> Unit,
     onChangeLanguage: (String) -> Unit,
     onChangeTheme: (ThemeMode) -> Unit,
+    onChangeAppThemeStyle: (AppThemeStyle) -> Unit,
     viewModel: ProfileViewModel,
     snackbarHostState: SnackbarHostState, // 👈 Accept the state
     tokenStorage: TokenStorage = koinInject()
@@ -930,6 +942,20 @@ private fun SettingsAndLogout(
     val scope = rememberCoroutineScope() // 👈 Add a coroutine scope for the snackbar
 
     Column(modifier = Modifier.fillMaxWidth()) {
+        // 👇 ITT VAN A TÉMAVÁLASZTÓ KÁRTYA SZEKCIÓ
+        PremiumThemeSelector(
+            currentThemeStyle = currentAppThemeStyle,
+            isUserPremium = isUserPremium,
+            onThemeSelected = onChangeAppThemeStyle,
+            onPremiumLockedClick = {
+                scope.launch {
+                    snackbarHostState.showSnackbar("Ez egy prémium téma! Oldd fel az előfizetéssel.")
+                }
+            }
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         LanguageSelector(currentLanguage, onChangeLanguage, viewModel)
 
         Spacer(modifier = Modifier.height(12.dp))

@@ -19,26 +19,52 @@ val isDark: Boolean
     }
 
 object AppColors {
+//    val Background: Color
+//        @Composable
+//        get() {
+//            val targetColor = if (isDark) SharedTheme.hexBackground.toColor() else SharedTheme.hexBackgroundLight.toColor()
+//            val animatedColor by animateColorAsState(
+//                targetValue = targetColor,
+//                animationSpec = tween(durationMillis = 500), // 500ms fade!
+//                label = "BackgroundAnimation"
+//            )
+//            return animatedColor
+//        }
+//    val SurfaceDark: Color
+//        @Composable
+//        get() {
+//            val targetColor = if (isDark) SharedTheme.hexSurfaceDark.toColor() else SharedTheme.hexSurfaceLight.toColor()
+//            val animatedColor by animateColorAsState(
+//                targetValue = targetColor,
+//                animationSpec = tween(durationMillis = 500),
+//                label = "SurfaceAnimation"
+//            )
+//            return animatedColor
+//        }
     val Background: Color
-        @Composable
-        get() {
-            val targetColor = if (isDark) SharedTheme.hexBackground.toColor() else SharedTheme.hexBackgroundLight.toColor()
-            val animatedColor by animateColorAsState(
-                targetValue = targetColor,
-                animationSpec = tween(durationMillis = 500), // 500ms fade!
-                label = "BackgroundAnimation"
-            )
-            return animatedColor
-        }
+    @Composable
+    get() {
+        val theme = LocalAppThemeStyle.current // 👇 Lekérjük az aktív témát
+        val targetColor = if (isDark) theme.darkBg.toColor() else theme.lightBg.toColor()
+        val animatedColor by animateColorAsState(targetColor, tween(500), label = "BgAnim")
+        return animatedColor
+    }
+
     val SurfaceDark: Color
         @Composable
         get() {
-            val targetColor = if (isDark) SharedTheme.hexSurfaceDark.toColor() else SharedTheme.hexSurfaceLight.toColor()
-            val animatedColor by animateColorAsState(
-                targetValue = targetColor,
-                animationSpec = tween(durationMillis = 500),
-                label = "SurfaceAnimation"
-            )
+            val theme = LocalAppThemeStyle.current
+            val targetColor = if (isDark) theme.darkSurface.toColor() else theme.lightSurface.toColor()
+            val animatedColor by animateColorAsState(targetColor, tween(500), label = "SurfaceAnim")
+            return animatedColor
+        }
+
+    val AccentOrange: Color // A név maradhat, de mostantól a dinamikus akcentus színt adja!
+        @Composable
+        get() {
+            val theme = LocalAppThemeStyle.current
+            val targetColor = if (isDark) theme.darkAccent.toColor() else theme.lightAccent.toColor()
+            val animatedColor by animateColorAsState(targetColor, tween(500), label = "AccentAnim")
             return animatedColor
         }
     val AccentCyan: Color
@@ -96,17 +122,17 @@ object AppColors {
             )
             return animatedColor
         }
-    val AccentOrange: Color
-        @Composable
-        get() {
-            val targetColor = if (isDark) SharedTheme.hexAccentOrange.toColor() else SharedTheme.hexAccentOrangeLight.toColor()
-            val animatedColor by animateColorAsState(
-                targetValue = targetColor,
-                animationSpec = tween(durationMillis = 500),
-                label = "AccentOrangeAnimation"
-            )
-            return animatedColor
-        }
+//    val AccentOrange: Color
+//        @Composable
+//        get() {
+//            val targetColor = if (isDark) SharedTheme.hexAccentOrange.toColor() else SharedTheme.hexAccentOrangeLight.toColor()
+//            val animatedColor by animateColorAsState(
+//                targetValue = targetColor,
+//                animationSpec = tween(durationMillis = 500),
+//                label = "AccentOrangeAnimation"
+//            )
+//            return animatedColor
+//        }
     val ErrorText: Color
         @Composable
         get() {
