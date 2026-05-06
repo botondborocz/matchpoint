@@ -109,7 +109,8 @@
     fun MapScreen(
         viewModel: LocationViewModel = koinViewModel(),
         tokenStorage: TokenStorage = koinInject(),
-        isActive: Boolean = true
+        isActive: Boolean = true,
+        onNavBarVisibilityChange: (Boolean) -> Unit = {}
     ) {
         val state by viewModel.uiState.collectAsState()
     
@@ -314,6 +315,17 @@
                 animationSpec = spring(stiffness = Spring.StiffnessLow),
                 label = "MapPadding"
             )
+
+            // 1. FAB Logic: Hides when a club is selected OR the sheet is pulled up
+            val showFloatingElements = selectedClub == null && sheetState.targetValue != SheetState.Expanded
+
+            // 2. NavBar Logic: Hides ONLY when the sheet is pulled up (ignores the club card)
+            val showMapNavBar = sheetState.targetValue != SheetState.Expanded
+
+            // 3. Send the NavBar specific state to App.kt!
+            LaunchedEffect(showMapNavBar) {
+                onNavBarVisibilityChange(showMapNavBar)
+            }
     
             // BACKGROUND MAP
             NativeMap(
@@ -375,7 +387,7 @@
             // THE FLOATING ACTION BUTTONS
             AnimatedVisibility(
                 // 👇 1. Add && isActive here!
-                visible = selectedClub == null && sheetState.targetValue != SheetState.Expanded && isActive,
+                visible = showFloatingElements && isActive,
                 // 👇 2. Add a bouncy slide-in from the right
                 enter = slideInHorizontally(
                     initialOffsetX = { it },

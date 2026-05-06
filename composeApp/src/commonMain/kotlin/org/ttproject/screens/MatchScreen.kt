@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
+import mapMetricsToBadges
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
@@ -562,23 +563,29 @@ fun MatchCardContent(
                     // 1. Skill Level
                     TagChip(player.skillLevel)
 
-                    // 2. Badges (If they have any)
-                    val completedBadges = player.topBadges.filter { it.currentLevel > 0 }
+                    // 2. Badges (Mapped on the fly!)
+                    if (player.badgeMetrics != null) {
+                        val allBadges = mapMetricsToBadges(player.badgeMetrics)
 
-                    if (completedBadges.isNotEmpty()) {
-                        // Subtle vertical separator line
-                        Box(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .height(16.dp)
-                                .background(Color.White.copy(alpha = 0.3f))
-                        )
+                        // Get only completed badges, optionally sorted by highest level first
+                        val completedBadges = allBadges
+                            .filter { it.currentLevel > 0 }
+                            .sortedByDescending { it.currentLevel }
 
-                        // Top 4 Badges row
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            // Take max 4 to not overflow the card width
-                            completedBadges.take(4).forEach { badge ->
-                                MiniBadge(badge)
+                        if (completedBadges.isNotEmpty()) {
+                            // Subtle vertical separator line
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .height(16.dp)
+                                    .background(Color.White.copy(alpha = 0.3f))
+                            )
+
+                            // Top 4 Badges row
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                completedBadges.take(4).forEach { badge ->
+                                    MiniBadge(badge)
+                                }
                             }
                         }
                     }

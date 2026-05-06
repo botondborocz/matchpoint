@@ -388,7 +388,7 @@ fun MatchCardPreviewDialog(
         elo = profileData.elo,
         distanceKm = 0,
         imageUrl = profileData.imageUrl,
-        topBadges = mappedBadges
+        badgeMetrics = profileData.badgeMetrics
     )
 
     val cardGradient = Brush.verticalGradient(

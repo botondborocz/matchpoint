@@ -27,6 +27,7 @@ import org.ttproject.data.UpdateLanguageRequest
 import org.ttproject.data.UpdateProfileRequest
 import org.ttproject.data.UserProfile
 import org.ttproject.database.tables.Swipes
+import org.ttproject.database.tables.UserBadgeMetrics
 import org.ttproject.services.BadgeService
 import org.ttproject.services.MatchService
 import java.net.URLEncoder
@@ -52,17 +53,40 @@ fun Route.userRoutes(badgeService: BadgeService) {
                 val userLng = call.request.queryParameters["lng"]?.toDoubleOrNull()
 
                 val allPlayers = transaction {
-                    Users.selectAll().map { row ->
-                        // Map your DB row to a simple data class to send as JSON
-                        PlayerResponse(
-                            id = row[Users.id].toString(),
-                            username = row[Users.username],
-                            skillLevel = row[Users.skillLevel].toString(),
-                            lat = row[Users.lastLat],
-                            lng = row[Users.lastLng],
-                            imageUrl = row[Users.profileImageUrl]
-                        )
-                    }.filter { it.id != currentUserId }
+                    // 👇 Use a LEFT JOIN to fetch Users AND their Badges in one single, fast query!
+                    Users.leftJoin(org.ttproject.database.tables.UserBadgeMetrics)
+                        .selectAll()
+                        .map { row ->
+
+                            // 1. Extract the badge metrics if they exist for this user
+                            val metricsDto = if (row.getOrNull(UserBadgeMetrics.userId) != null) {
+                                org.ttproject.data.UserBadgeMetricsDto(
+                                    addedTables = row[UserBadgeMetrics.addedTables],
+                                    uploadedPhotos = row[UserBadgeMetrics.uploadedPhotos],
+                                    writtenReviews = row[UserBadgeMetrics.writtenReviews],
+                                    successfulMatches = row[UserBadgeMetrics.successfulMatches],
+                                    sentMessages = row[UserBadgeMetrics.sentMessages],
+                                    profileSwipes = row[UserBadgeMetrics.profileSwipes],
+                                    trimmedVideos = row[UserBadgeMetrics.trimmedVideos],
+                                    aiQuestions = row[UserBadgeMetrics.aiQuestions],
+                                    currentStreak = row[UserBadgeMetrics.currentStreak],
+                                    maxStreak = row[UserBadgeMetrics.maxStreak],
+                                    invitedFriends = row[UserBadgeMetrics.invitedFriends]
+                                )
+                            } else null
+
+                            // 2. Map to the PlayerResponse
+                            PlayerResponse(
+                                id = row[Users.id].toString(),
+                                username = row[Users.username] ?: "Player",
+                                skillLevel = row[Users.skillLevel]?.name ?: "Beginner",
+                                lat = row[Users.lastLat],
+                                lng = row[Users.lastLng],
+                                imageUrl = row[Users.profileImageUrl],
+                                // 👇 Attach the badges to send to the frontend!
+                                badgeMetrics = metricsDto
+                            )
+                        }.filter { it.id != currentUserId }
                 }
 
                 val alreadySwipedPlayers = transaction {
@@ -122,6 +146,29 @@ fun Route.userRoutes(badgeService: BadgeService) {
                     targetId = targetPlayerId,
                     isLiked = swipeRequest.isLiked
                 )
+
+                // 👇 NEW: BADGE INCREMENT LOGIC
+                val swiperUuid = UUID.fromString(currentUserId)
+                val targetUuid = UUID.fromString(targetPlayerId)
+
+                // Every swipe counts towards the "Radar" badge for the person swiping
+                badgeService.incrementMetric(
+                    userIdParam = swiperUuid,
+                    column = UserBadgeMetrics.profileSwipes
+                )
+
+                // If they matched, reward BOTH players with the "Jégtörő" (Ice Breaker) badge progress!
+                if (isMatch) {
+                    badgeService.incrementMetric(
+                        userIdParam = swiperUuid,
+                        column = UserBadgeMetrics.successfulMatches
+                    )
+                    badgeService.incrementMetric(
+                        userIdParam = targetUuid,
+                        column = UserBadgeMetrics.successfulMatches
+                    )
+                }
+                // 👆 END NEW LOGIC
 
                 // 5. Reply to the mobile app!
                 call.respond(HttpStatusCode.OK, SwipeResponse(isMatch = isMatch))

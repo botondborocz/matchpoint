@@ -2,7 +2,7 @@ package org.ttproject.data
 
 import kotlinx.serialization.Serializable
 
-//@Serializable
+@Serializable
 // Removed @Serializable here if BadgeData contains ImageVector,
 // OR keep it and map it in your ViewModel!
 data class Player(
@@ -16,5 +16,5 @@ data class Player(
     val elo: Int = (1000..2000).random(),
     val distanceKm: Int = (1..10).random(),
     val imageUrl: String? = null,
-    val topBadges: List<BadgeData> = emptyList()
+    val badgeMetrics: UserBadgeMetricsDto? = null
 )

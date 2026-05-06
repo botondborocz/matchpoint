@@ -40,5 +40,6 @@ data class PlayerResponse(
     val lat: Double?,
     val lng: Double?,
     val preferredLanguage: String? = null,
-    val imageUrl: String? = null
+    val imageUrl: String? = null,
+    val badgeMetrics: UserBadgeMetricsDto? = null
 )
