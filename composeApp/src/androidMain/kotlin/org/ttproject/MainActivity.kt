@@ -24,6 +24,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import org.ttproject.util.LiveActivityController
 
 class MainActivity : ComponentActivity() {
     private var pendingChatId by mutableStateOf<String?>(null)
@@ -32,6 +33,7 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        LiveActivityController.applicationContext = this.applicationContext
 
         val smallestWidth = resources.configuration.smallestScreenWidthDp
         if (smallestWidth < 600) {

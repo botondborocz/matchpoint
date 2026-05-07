@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -197,8 +198,16 @@ actual fun NativeMap(
         ]
     """.trimIndent()
 
-    val normalBitmap = remember(context) { createClubBitmap(context, isSelected = false) }
-    val selectedBitmap = remember(context) { createClubBitmap(context, isSelected = true) }
+    // 👇 3. Read the Composable color safely here, inside the @Composable function
+    val currentAccentColor = AppColors.AccentOrange
+
+    // 👇 4. Pass the color into the remember key so it redraws if the theme changes!
+    val normalBitmap = remember(context, currentAccentColor) {
+        createClubBitmap(context, isSelected = false, currentAccentColor)
+    }
+    val selectedBitmap = remember(context, currentAccentColor) {
+        createClubBitmap(context, isSelected = true, currentAccentColor)
+    }
 
     // --- THE MAP ---
     GoogleMap(
@@ -272,7 +281,11 @@ actual fun NativeMap(
     }
 }
 
-private fun createClubBitmap(context: android.content.Context, isSelected: Boolean): android.graphics.Bitmap {
+private fun createClubBitmap(
+    context: android.content.Context,
+    isSelected: Boolean,
+    accentColor: Color // 👇 1. Add the color as a parameter!
+): android.graphics.Bitmap {
     val density = context.resources.displayMetrics.density
     val sizeDp = if (isSelected) 48f else 36f
     val sizePx = (sizeDp * density).toInt()
@@ -282,7 +295,12 @@ private fun createClubBitmap(context: android.content.Context, isSelected: Boole
 
     val paint = android.graphics.Paint().apply {
         isAntiAlias = true
-        color = if (isSelected) android.graphics.Color.parseColor("#FF5722") else android.graphics.Color.parseColor("#FFFF7B42")
+        // 👇 2. Use the passed parameter instead of AppColors
+        color = if (isSelected) {
+            accentColor.toArgb()
+        } else {
+            accentColor.copy(alpha = 0.8f).toArgb()
+        }
     }
     canvas.drawCircle(sizePx / 2f, sizePx / 2f, sizePx / 2f, paint)
 
@@ -295,6 +313,5 @@ private fun createClubBitmap(context: android.content.Context, isSelected: Boole
     val yPos = (sizePx / 2f) - ((textPaint.descent() + textPaint.ascent()) / 2)
     canvas.drawText("🏓", sizePx / 2f, yPos, textPaint)
 
-    // 👇 RETURN RAW BITMAP NOW
     return bitmap
 }

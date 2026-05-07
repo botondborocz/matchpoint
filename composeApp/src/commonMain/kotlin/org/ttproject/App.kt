@@ -228,9 +228,12 @@ fun App(
                                         ) {
                                             when (route) {
                                                 NavRoute.Map -> {
-                                                    Box(modifier = Modifier.fillMaxSize().padding(bottom = frozenBottomPadding)) {
-                                                        // 👇 2. UPDATED: Pass the callback here!
+                                                    val systemNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                                                    Box(modifier = Modifier.fillMaxSize().padding(bottom = systemNavPadding)) {
+                                                        // 👇 Get the raw system navigation bar height
                                                         MapScreen(
+                                                            bottomNavHeight = frozenBottomPadding,
+                                                            systemNavHeight = 60.dp, // 👇 Pass this new parameter!
                                                             onNavBarVisibilityChange = { isVisible ->
                                                                 isMapNavBarVisible = isVisible
                                                             }

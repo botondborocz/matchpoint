@@ -26,6 +26,7 @@ import platform.UIKit.UIImageSymbolWeightBold
 import platform.UIKit.UIUserInterfaceStyle
 import platform.darwin.NSObject
 import kotlinx.cinterop.useContents
+import org.ttproject.AppColors
 import platform.CoreLocation.kCLAuthorizationStatusNotDetermined
 import platform.CoreLocation.kCLAuthorizationStatusAuthorizedAlways
 import platform.CoreLocation.kCLAuthorizationStatusAuthorizedWhenInUse
@@ -46,6 +47,7 @@ actual fun NativeMap(
     val currentOnMarkerClick by rememberUpdatedState(onMarkerClick)
     val currentOnBoundsChanged by rememberUpdatedState(onBoundsChanged)
 
+    val currentAccentColor by rememberUpdatedState(AppColors.AccentOrange)
     var lastHandledTrigger by remember { mutableStateOf(0) }
 
     // 👇 1. Just initialize the manager, DO NOT request permission yet!
@@ -71,14 +73,8 @@ actual fun NativeMap(
             }
 
             override fun mapView(mapView: MKMapView, viewForAnnotation: MKAnnotationProtocol): MKAnnotationView? {
+                if (viewForAnnotation is MKUserLocation) return null
 
-                // 👇 2. THE FIX: Return null for the User Location.
-                // This tells iOS to use the native, animated, pulsing blue dot with the halo!
-                if (viewForAnnotation is MKUserLocation) {
-                    return null
-                }
-
-                // B. CUSTOM CLUB PINS
                 val identifier = "CustomOrangePin"
                 var annotationView = mapView.dequeueReusableAnnotationViewWithIdentifier(identifier) as? MKMarkerAnnotationView
 
@@ -89,9 +85,15 @@ actual fun NativeMap(
                     annotationView.annotation = viewForAnnotation
                 }
 
-                annotationView.markerTintColor = UIColor.colorWithRed(1.0, 0.482, 0.259, 1.0)
-                annotationView.glyphText = "🏓"
+                // 👇 2. Read from our state variable, NOT directly from AppColors!
+                annotationView.markerTintColor = UIColor.colorWithRed(
+                    red = currentAccentColor.red.toDouble(),
+                    green = currentAccentColor.green.toDouble(),
+                    blue = currentAccentColor.blue.toDouble(),
+                    alpha = currentAccentColor.alpha.toDouble()
+                )
 
+                annotationView.glyphText = "🏓"
                 return annotationView
             }
         }
