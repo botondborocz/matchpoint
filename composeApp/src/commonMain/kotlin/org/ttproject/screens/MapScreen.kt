@@ -221,7 +221,7 @@ fun MapScreen(
         val layoutHeightPx = constraints.maxHeight.toFloat()
         val layoutWidthPx = constraints.maxWidth.toFloat()
 
-        val dynamicBottomOffset = 90.dp + systemNavHeight
+        val dynamicBottomOffset = 150.dp + systemNavHeight
         val peekHeightPx = with(density) { dynamicBottomOffset.toPx() }
 
         val topInsetPx = WindowInsets.systemBars.getTop(density).toFloat()
@@ -465,6 +465,7 @@ fun MapScreen(
                             ClubDetailsFullScreen(
                                 club = currentClub,
                                 brandOrange = brandOrange,
+                                systemNavHeight = systemNavHeight,
                                 onClose = { isDetailsExpanded = false }
                             )
                         } else {
@@ -606,7 +607,12 @@ fun ClubCardCompact(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ClubDetailsFullScreen(club: TTClub, brandOrange: Color, onClose: () -> Unit) {
+fun ClubDetailsFullScreen(
+    club: TTClub,
+    brandOrange: Color,
+    systemNavHeight: Dp,
+    onClose: () -> Unit
+) {
     // Master list of tags
     val tags = listOf("Good Net", "Bring Own Net", "Smooth Surface", "Damaged Table", "Spacious", "Often Crowded", "Friendly Vibe")
     var selectedTags by remember { mutableStateOf(setOf<String>()) }
@@ -623,7 +629,7 @@ fun ClubDetailsFullScreen(club: TTClub, brandOrange: Color, onClose: () -> Unit)
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 32.dp)
+            .padding(bottom = 32.dp + systemNavHeight)
     ) {
         // HEADER
         Row(
