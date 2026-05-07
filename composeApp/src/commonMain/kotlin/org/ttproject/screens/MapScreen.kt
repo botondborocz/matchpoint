@@ -1,8 +1,10 @@
 package org.ttproject.screens
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -56,6 +58,8 @@ import kotlin.math.roundToInt
 import org.ttproject.shared.resources.Res as SharedRes
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -97,7 +101,7 @@ fun MapScreen(
     tokenStorage: TokenStorage = koinInject(),
     isActive: Boolean = true,
     bottomNavHeight: Dp = 0.dp,
-    systemNavHeight: Dp = 0.dp, // 👇 1. ADDED THIS NEW PARAMETER
+    systemNavHeight: Dp = 0.dp,
     onNavBarVisibilityChange: (Boolean) -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -130,6 +134,8 @@ fun MapScreen(
 
     var selectedClub by remember { mutableStateOf<TTClub?>(null) }
     var isDetailsExpanded by remember { mutableStateOf(false) }
+
+    var isAddingTable by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
     var userLocationTrigger by remember { mutableStateOf(0) }
@@ -211,11 +217,10 @@ fun MapScreen(
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val screenHeight = this.maxHeight
+        val screenWidth = this.maxWidth
         val layoutHeightPx = constraints.maxHeight.toFloat()
+        val layoutWidthPx = constraints.maxWidth.toFloat()
 
-        // 👇 2. SIMPLIFIED PEEK HEIGHT
-        // Only uses the system nav padding, ignoring the custom floating navbar.
-        // 90.dp is the standard peek height (enough to show the drag handle and "Nearby Clubs" text).
         val dynamicBottomOffset = 90.dp + systemNavHeight
         val peekHeightPx = with(density) { dynamicBottomOffset.toPx() }
 
@@ -243,8 +248,6 @@ fun MapScreen(
             }
         }
 
-        // 👇 3. MAP PADDING
-        // Matches the dynamic offset exactly so the Google Logo sits right above the collapsed sheet.
         val targetBottomPadding = when (sheetState.targetValue) {
             SheetState.Expanded -> screenHeight
             SheetState.HalfExpanded -> screenHeight * 0.33f
@@ -257,7 +260,7 @@ fun MapScreen(
         )
 
         val showFloatingElements = selectedClub == null && sheetState.targetValue != SheetState.Expanded
-        val showMapNavBar = sheetState.targetValue != SheetState.Expanded && !isDetailsExpanded
+        val showMapNavBar = sheetState.targetValue != SheetState.Expanded && !isDetailsExpanded && !isAddingTable
 
         LaunchedEffect(showMapNavBar) {
             onNavBarVisibilityChange(showMapNavBar)
@@ -289,36 +292,122 @@ fun MapScreen(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                FilterChip(stringResource(SharedRes.string.indoor), isIndoorSelected, brandOrange, cardBg) { isIndoorSelected = !isIndoorSelected }
-                FilterChip(stringResource(SharedRes.string.outdoor), isOutdoorSelected, brandOrange, cardBg) { isOutdoorSelected = !isOutdoorSelected }
+                FilterChip(
+                    stringResource(SharedRes.string.indoor),
+                    isIndoorSelected,
+                    brandOrange,
+                    cardBg
+                ) { isIndoorSelected = !isIndoorSelected }
+                FilterChip(
+                    stringResource(SharedRes.string.outdoor),
+                    isOutdoorSelected,
+                    brandOrange,
+                    cardBg
+                ) { isOutdoorSelected = !isOutdoorSelected }
             }
         }
 
+        // 👇 1. Calculate exactly how far up the sheet is currently covering the screen
+        val sheetOffsetYRaw = if (sheetState.offset.isNaN()) (layoutHeightPx - peekHeightPx) else sheetState.offset
+        val sheetVisibleHeightDp = with(density) { (layoutHeightPx - sheetOffsetYRaw).coerceAtLeast(0f).toDp() }
+
+        // 👇 2. "CENTER ON ME" BUTTON
         AnimatedVisibility(
-            visible = showFloatingElements && isActive,
+            visible = showFloatingElements && isActive, // Hides when adding table
             enter = slideInHorizontally(initialOffsetX = { it }, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)) + fadeIn(),
             exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(end = 16.dp)
-                .graphicsLayer {
-                    val sheetY = if (sheetState.offset.isNaN()) layoutHeightPx else sheetState.offset
-                    translationY = sheetY - size.height - 16.dp.toPx()
-                }
-        ){
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                FloatingActionButton(onClick = { }, containerColor = cardBg, contentColor = brandOrange, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Default.Add, contentDescription = "Add Club")
-                }
-                FloatingActionButton(onClick = { userLocationTrigger++ }, containerColor = cardBg, contentColor = brandOrange, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Default.MyLocation, contentDescription = "Center on me")
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = sheetVisibleHeightDp + 16.dp)
+        ) {
+            FloatingActionButton(
+                onClick = { userLocationTrigger++ },
+                containerColor = cardBg,
+                contentColor = brandOrange,
+                modifier = Modifier.size(48.dp),
+                // 👇 Lock the standard FAB to 16.dp radius and 8.dp shadow to match our custom button
+                shape = RoundedCornerShape(16.dp),
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 8.dp)
+            ) {
+                Icon(Icons.Default.MyLocation, contentDescription = "Center on me")
+            }
+        }
+
+        // 👇 3. THE MORPHING "ADD TABLE" BUTTON
+        val expandProgress by animateFloatAsState(
+            targetValue = if (isAddingTable) 1f else 0f,
+            animationSpec = tween(350, easing = FastOutSlowInEasing),
+            label = "ExpandProgress"
+        )
+
+        val restingBottomPadding = sheetVisibleHeightDp + 76.dp
+        val currentBottomPadding = restingBottomPadding * (1f - expandProgress)
+        val currentEndPadding = 16.dp * (1f - expandProgress)
+
+        // 👇 THE FIX: Changed from 24.dp to 16.dp so it perfectly matches the FAB above it!
+        val currentRadius = 16.dp * (1f - expandProgress)
+        val currentElevation = 8.dp * (1f - expandProgress)
+
+        val currentWidth = 48.dp + (screenWidth - 48.dp) * expandProgress
+        val currentHeight = 48.dp + (screenHeight - 48.dp) * expandProgress
+
+        val formBgColor by animateColorAsState(
+            targetValue = if (isAddingTable) AppColors.Background else cardBg,
+            label = "fabColor"
+        )
+
+        AnimatedVisibility(
+            visible = (showFloatingElements && isActive) || isAddingTable,
+            enter = slideInHorizontally(initialOffsetX = { it }, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)) + fadeIn(),
+            exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomEnd).zIndex(20f)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(currentRadius), // Will now be 16.dp when resting!
+                color = formBgColor,
+                shadowElevation = currentElevation,
+                modifier = Modifier
+                    .padding(bottom = currentBottomPadding, end = currentEndPadding)
+                    .size(width = currentWidth, height = currentHeight)
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+
+                    // BUTTON STATE
+                    if (expandProgress < 1f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .alpha(1f - expandProgress)
+                                .clickable { isAddingTable = true },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Add Club", tint = brandOrange)
+                        }
+                    }
+
+                    // FULL SCREEN STATE
+                    if (expandProgress > 0f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .alpha(expandProgress)
+                        ) {
+                            Box(modifier = Modifier.requiredSize(screenWidth, screenHeight)) {
+                                AddTableFullScreen(
+                                    brandOrange = brandOrange,
+                                    cardBg = cardBg,
+                                    systemNavHeight = systemNavHeight,
+                                    onClose = { isAddingTable = false }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // 4. CLUB CARD PADDING
         val cardBottomPadding by animateDpAsState(
-            targetValue = if (isDetailsExpanded) 0.dp else dynamicBottomOffset + 16.dp, // hovers 16dp above the sheet
+            targetValue = if (isDetailsExpanded) 0.dp else dynamicBottomOffset + 16.dp,
             animationSpec = spring(stiffness = Spring.StiffnessLow), label = ""
         )
         val cardSidePadding by animateDpAsState(
@@ -344,6 +433,8 @@ fun MapScreen(
                     fadeIn(tween(300)).togetherWith(fadeOut(tween(300))).using(SizeTransform(clip = false))
                 }
             },
+            // 👇 1. Added BottomCenter alignment here to keep the master block symmetrical
+            contentAlignment = Alignment.BottomCenter,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = cardBottomPadding, start = cardSidePadding, end = cardSidePadding)
@@ -352,25 +443,22 @@ fun MapScreen(
             label = "ClubCardAnimation"
         ) { currentClub ->
             if (currentClub != null) {
-
-                // 👇 1. The Wrapper Surface that bounds the content
                 Surface(
                     shape = RoundedCornerShape(cardCornerRadius),
                     color = cardBg,
                     shadowElevation = 8.dp,
-                    // REMOVED the abrupt .animateContentSize() and conditional Modifiers here!
                     modifier = Modifier.fillMaxWidth()
                 ) {
-
-                    // 👇 2. NEW: Inner AnimatedContent handles the morphing beautifully
                     AnimatedContent(
                         targetState = isDetailsExpanded,
                         transitionSpec = {
-                            // Crossfade the content and animate the size using the exact same spring stiffness as your padding!
                             fadeIn(tween(250)) togetherWith fadeOut(tween(250)) using SizeTransform(clip = true) { _, _ ->
                                 spring(stiffness = Spring.StiffnessLow)
                             }
                         },
+                        // 👇 2. Force TopCenter alignment during morphing to stop the left-edge snap!
+                        contentAlignment = Alignment.TopCenter,
+                        modifier = Modifier.fillMaxWidth(),
                         label = "DetailsMorph"
                     ) { expanded ->
                         if (expanded) {
@@ -420,7 +508,7 @@ fun MapScreen(
                             .width(40.dp).height(4.dp).clip(RoundedCornerShape(2.dp))
                             .background(Color.Gray.copy(alpha = 0.5f)).align(Alignment.CenterHorizontally)
                     )
-                    NearbyClubsList(visibleClubs, cardBg, brandOrange, handleClubSelection)
+                    NearbyClubsList(visibleClubs, cardBg, brandOrange, systemNavHeight, handleClubSelection)
                 }
             }
         }
@@ -436,7 +524,8 @@ fun ClubCardCompact(
     var showMapChoice by remember { mutableStateOf(false) }
     val buttonHeight = 36.dp
 
-    Column(modifier = Modifier.padding(16.dp)) {
+    // 👇 3. Force fillMaxWidth here so the width matches the expanded view perfectly
+    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
         Row(verticalAlignment = Alignment.Top) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(club.name, color = AppColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -523,7 +612,7 @@ fun ClubDetailsFullScreen(club: TTClub, brandOrange: Color, onClose: () -> Unit)
     var selectedTags by remember { mutableStateOf(setOf<String>()) }
     var reviewText by remember { mutableStateOf("") }
 
-    // Dummy Aggregated Tag Data (What the API would return for this club)
+    // Dummy Aggregated Tag Data
     val aggregatedTags = mapOf(
         "Good Net" to 42,
         "Spacious" to 18,
@@ -556,7 +645,6 @@ fun ClubDetailsFullScreen(club: TTClub, brandOrange: Color, onClose: () -> Unit)
             contentPadding = PaddingValues(horizontal = 16.dp),
             modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
         ) {
-            // "Add Photo" Button Item
             item {
                 Box(
                     modifier = Modifier
@@ -573,7 +661,6 @@ fun ClubDetailsFullScreen(club: TTClub, brandOrange: Color, onClose: () -> Unit)
                 }
             }
 
-            // Dummy Photos
             items(4) {
                 Box(
                     modifier = Modifier.size(160.dp, 100.dp).background(Color(0xFF2A2D34), RoundedCornerShape(12.dp)),
@@ -604,19 +691,16 @@ fun ClubDetailsFullScreen(club: TTClub, brandOrange: Color, onClose: () -> Unit)
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // DETAILED REVIEW FEED (Only shows reviews with text/images)
+        // DETAILED REVIEW FEED
         Text("Detailed Reviews", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 
-        // Dummy Detailed Review
         Surface(color = Color(0xFF2A2D34), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Great spot!", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold)
                 Text("Reviewed by Player 1 • 2 days ago", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
 
-                // Optional Text
                 Text("Really liked playing here. Just be warned that table #2 has a slight dead spot on the right side.", color = Color.LightGray, fontSize = 14.sp, modifier = Modifier.padding(bottom = 12.dp))
 
-                // Tags selected in this specific review
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(color = Color(0xFF333947), shape = RoundedCornerShape(12.dp)) { Text("Good Net", fontSize = 12.sp, color = Color.LightGray, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
                     Surface(color = Color(0xFF333947), shape = RoundedCornerShape(12.dp)) { Text("Damaged Table", fontSize = 12.sp, color = Color.LightGray, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
@@ -631,7 +715,6 @@ fun ClubDetailsFullScreen(club: TTClub, brandOrange: Color, onClose: () -> Unit)
         // ADD REVIEW SECTION
         Text("Write a Review", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp))
 
-        // Step 1: Tags
         FlowRow(
             modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -653,7 +736,6 @@ fun ClubDetailsFullScreen(club: TTClub, brandOrange: Color, onClose: () -> Unit)
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Step 2: Optional Text
         OutlinedTextField(
             value = reviewText,
             onValueChange = { reviewText = it },
@@ -672,9 +754,8 @@ fun ClubDetailsFullScreen(club: TTClub, brandOrange: Color, onClose: () -> Unit)
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Step 3: Attach Photos to Review
         TextButton(
-            onClick = { /* TODO: Launch Image Picker for Review */ },
+            onClick = { /* TODO: Launch Image Picker */ },
             modifier = Modifier.padding(horizontal = 8.dp)
         ) {
             Icon(Icons.Default.Image, contentDescription = "Attach Photos", tint = brandOrange, modifier = Modifier.size(20.dp))
@@ -684,13 +765,11 @@ fun ClubDetailsFullScreen(club: TTClub, brandOrange: Color, onClose: () -> Unit)
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Submit
         Button(
-            onClick = { /* TODO: Submit Review */ onClose() },
+            onClick = { onClose() },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(48.dp),
             colors = ButtonDefaults.buttonColors(containerColor = brandOrange),
             shape = RoundedCornerShape(12.dp),
-            // Disable until they select at least one tag or write text
             enabled = selectedTags.isNotEmpty() || reviewText.isNotBlank()
         ) {
             Text("Submit Review", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -713,8 +792,8 @@ fun FilterChip(
 }
 
 @Composable
-fun NearbyClubsList(clubs: List<TTClub>, cardBg: Color, brandOrange: Color, onClubClick: (TTClub) -> Unit) {
-    LazyColumn(contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+fun NearbyClubsList(clubs: List<TTClub>, cardBg: Color, brandOrange: Color, systemNavHeight: Dp, onClubClick: (TTClub) -> Unit) {
+    LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + systemNavHeight), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text(stringResource(SharedRes.string.nearby_clubs), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 8.dp)) }
         items(clubs) { club -> ClubCard(club, cardBg, brandOrange, onClick = { onClubClick(club) }) }
     }
@@ -729,6 +808,153 @@ fun ClubCard(club: TTClub, cardBg: Color, brandOrange: Color, onClick: () -> Uni
             Column(modifier = Modifier.weight(1f)) {
                 Text(club.name, color = AppColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text("${club.distance} • ${club.tables} Tables", color = Color.Gray, fontSize = 14.sp)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun AddTableFullScreen(brandOrange: Color, cardBg: Color, systemNavHeight: Dp, onClose: () -> Unit) {
+    var isIndoor by remember { mutableStateOf(false) }
+    var tableCount by remember { mutableStateOf(1) }
+    var isFree by remember { mutableStateOf(true) }
+    var notesText by remember { mutableStateOf("") }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = AppColors.Background // Uses the main app background
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+        ) {
+            // HEADER
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Add New Table", color = AppColors.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                IconButton(onClick = onClose, modifier = Modifier.size(32.dp).background(Color(0xFF333947), RoundedCornerShape(16.dp))) {
+                    Icon(Icons.Default.Close, "Close", tint = Color.White, modifier = Modifier.size(18.dp))
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+            ) {
+                // PHOTO SECTION (Big and inviting)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                        .background(cardBg, RoundedCornerShape(16.dp))
+                        .clickable { /* TODO: Launch Image Picker */ },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = "Add Photo", tint = brandOrange, modifier = Modifier.size(40.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Add Table Photos", color = brandOrange, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text("Optional, but highly recommended!", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                Text("Table Details", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // TYPE TOGGLE
+                Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Type", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(text = "Outdoor", isSelected = !isIndoor, activeColor = brandOrange, inactiveColor = Color(0xFF333947)) { isIndoor = false }
+                            FilterChip(text = "Indoor", isSelected = isIndoor, activeColor = brandOrange, inactiveColor = Color(0xFF333947)) { isIndoor = true }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // COUNT STEPPER
+                Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Number of Tables", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            IconButton(
+                                onClick = { if (tableCount > 1) tableCount-- },
+                                modifier = Modifier.size(36.dp).background(Color(0xFF333947), CircleShape)
+                            ) { Text("-", color = Color.White, fontWeight = FontWeight.Bold) }
+
+                            Text("$tableCount", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+
+                            IconButton(
+                                onClick = { if (tableCount < 20) tableCount++ },
+                                modifier = Modifier.size(36.dp).background(brandOrange, CircleShape)
+                            ) { Text("+", color = Color.White, fontWeight = FontWeight.Bold) }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // COST TOGGLE
+                Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Cost", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(text = "Free", isSelected = isFree, activeColor = brandOrange, inactiveColor = Color(0xFF333947)) { isFree = true }
+                            FilterChip(text = "Paid", isSelected = !isFree, activeColor = brandOrange, inactiveColor = Color(0xFF333947)) { isFree = false }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                Text("Notes (Optional)", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // NOTES
+                OutlinedTextField(
+                    value = notesText,
+                    onValueChange = { notesText = it },
+                    placeholder = { Text("Bring your own net, usually crowded at 6pm, etc...", color = Color.Gray) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = cardBg,
+                        unfocusedContainerColor = cardBg,
+                        focusedIndicatorColor = brandOrange,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        focusedTextColor = AppColors.TextPrimary,
+                        unfocusedTextColor = AppColors.TextPrimary
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                // Extra spacer so content isn't hidden behind the submit button
+                Spacer(modifier = Modifier.height(80.dp + systemNavHeight))
+            }
+
+            // SUBMIT BUTTON (Pinned to bottom)
+            Surface(
+                color = AppColors.Background.copy(alpha = 0.9f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Button(
+                    onClick = { /* TODO: Submit to backend */ onClose() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp + systemNavHeight)
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = brandOrange),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Text("Submit Table", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
             }
         }
     }
