@@ -134,9 +134,26 @@ actual fun NativeMap(
             mapView.layoutMargins = UIEdgeInsetsMake(0.0, 0.0, bottomPadding.value.toDouble(), 0.0)
             mapView.overrideUserInterfaceStyle = if (isDark) UIUserInterfaceStyle.UIUserInterfaceStyleDark else UIUserInterfaceStyle.UIUserInterfaceStyleLight
 
-            // 3. PLOT MARKERS
+            // 👇 1. GRAB THE LATEST COLOR
+            val currentUIColor = UIColor.colorWithRed(
+                red = currentAccentColor.red.toDouble(),
+                green = currentAccentColor.green.toDouble(),
+                blue = currentAccentColor.blue.toDouble(),
+                alpha = currentAccentColor.alpha.toDouble()
+            )
+
             val existingCustomPins = mapView.annotations.filter { it !is MKUserLocation }
 
+            // 👇 2. FORCE COLOR UPDATE ON VISIBLE PINS
+            // This actively re-paints the pins that are currently on the screen
+            existingCustomPins.forEach { annotation ->
+                val view = mapView.viewForAnnotation(annotation as MKAnnotationProtocol) as? MKMarkerAnnotationView
+                if (view != null) {
+                    view.markerTintColor = currentUIColor
+                }
+            }
+
+            // 3. PLOT NEW MARKERS (Your existing logic)
             if (existingCustomPins.size != locations.size) {
                 mapView.removeAnnotations(existingCustomPins)
 
@@ -149,7 +166,7 @@ actual fun NativeMap(
                 }
             }
 
-            // 4. ZOOM TO SELECTED CLUB
+            // 4. ZOOM TO SELECTED CLUB (Your existing logic)
             if (selectedClub != null) {
                 val annotationToSelect = mapView.annotations.firstOrNull {
                     (it as? MKAnnotationProtocol)?.title == selectedClub.id
@@ -167,15 +184,13 @@ actual fun NativeMap(
                 }
             }
 
-            // 👇 5. DEFERRED LOCATION PROMPT & ZOOM
+            // 5. DEFERRED LOCATION PROMPT & ZOOM (Your existing logic)
             if (userLocationTrigger > lastHandledTrigger) {
                 lastHandledTrigger = userLocationTrigger
 
-                // If they haven't been asked yet, prompt them!
                 if (locationManager.authorizationStatus == kCLAuthorizationStatusNotDetermined) {
                     locationManager.requestWhenInUseAuthorization()
                 } else {
-                    // If they already said yes, zoom to them!
                     val userLoc = mapView.userLocation.location
                     if (userLoc != null) {
                         val region = MKCoordinateRegionMakeWithDistance(userLoc.coordinate, 1000.0, 1000.0)

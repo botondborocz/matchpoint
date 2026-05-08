@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.ttproject.data.AddReviewRequest
+import org.ttproject.data.AddTableRequest
+import org.ttproject.data.TTReview
 import org.ttproject.repository.LocationRepository
 
 sealed class LocationsUiState {
@@ -29,23 +32,90 @@ class LocationViewModel(
     }
 
     fun fetchNearbyLocations() {
-        // This launches on the Main Thread to safely update the UI state
         viewModelScope.launch {
             _uiState.value = LocationsUiState.Loading
-
             try {
-                // 👇 Shift the heavy lifting to a background thread
                 val locations = withContext(Dispatchers.Default) {
                     repository.getNearbyLocations()
                 }
-
-                // 🗑️ The println loop is entirely deleted from here
-
-                // Back on the Main thread automatically: update the UI
                 _uiState.value = LocationsUiState.Success(locations)
-
             } catch (e: Exception) {
                 _uiState.value = LocationsUiState.Error(e.message ?: "Unknown error occurred")
+            }
+        }
+    }
+
+    fun submitNewTable(
+        lat: Double,
+        lng: Double,
+        isIndoor: Boolean,
+        count: Int,
+        isFree: Boolean,
+        notes: String,
+        images: List<ByteArray>, // 👇 ADDED
+        onSuccess: () -> Unit
+    ) {
+        viewModelScope.launch {
+            val request = AddTableRequest(
+                latitude = lat,
+                longitude = lng,
+                type = if (isIndoor) "Indoor" else "Outdoor",
+                tableCount = count,
+                isFree = isFree,
+                notes = notes.takeIf { it.isNotBlank() },
+                images = images // 👇 ADDED
+            )
+
+            val result = repository.addTable(request)
+
+            if (result.isSuccess) {
+                fetchNearbyLocations()
+                onSuccess()
+            } else {
+                println("Error adding table: ${result.exceptionOrNull()?.message}")
+            }
+        }
+    }
+
+    private val _clubReviews = MutableStateFlow<List<TTReview>>(emptyList())
+    val clubReviews = _clubReviews.asStateFlow()
+
+    fun loadReviewsForClub(locationId: String) {
+        viewModelScope.launch {
+            _clubReviews.value = emptyList()
+            val result = repository.getReviews(locationId)
+            if (result.isSuccess) {
+                _clubReviews.value = result.getOrNull() ?: emptyList()
+            }
+        }
+    }
+
+    fun submitReview(
+        locationId: String,
+        tags: List<String>,
+        text: String,
+        images: List<ByteArray>, // 👇 ADDED
+        onSuccess: () -> Unit
+    ) {
+        viewModelScope.launch {
+            val request = AddReviewRequest(text, tags, images) // 👇 ADDED
+            val result = repository.addReview(locationId, request)
+            if (result.isSuccess) {
+                loadReviewsForClub(locationId)
+                onSuccess()
+            }
+        }
+    }
+
+    fun addLocationImages(locationId: String, images: List<ByteArray>, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            val result = repository.addLocationImages(locationId, images)
+            if (result.isSuccess) {
+                // Refresh the master list so the new images are available globally!
+                fetchNearbyLocations()
+                onSuccess()
+            } else {
+                println("Error adding standalone images: ${result.exceptionOrNull()?.message}")
             }
         }
     }

@@ -17,5 +17,6 @@ data class Location(
     val isFree: Boolean,
     val tableCount: Int,
     val address: String? = null,
-    val createdBy: String? = null     // ID of the user who added it
+    val createdBy: String? = null,     // ID of the user who added it
+    val imageUrls: List<String> = emptyList()
 )

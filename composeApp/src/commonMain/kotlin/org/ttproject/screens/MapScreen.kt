@@ -2,6 +2,7 @@ package org.ttproject.screens
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -35,7 +36,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -48,7 +48,6 @@ import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.ttproject.AppColors
-import org.ttproject.shared.resources.free
 import org.ttproject.shared.resources.indoor
 import org.ttproject.shared.resources.nearby_clubs
 import org.ttproject.shared.resources.outdoor
@@ -57,15 +56,32 @@ import org.ttproject.util.ThemeMode
 import kotlin.math.roundToInt
 import org.ttproject.shared.resources.Res as SharedRes
 import androidx.compose.animation.core.exponentialDecay
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.Velocity
+import coil3.compose.AsyncImage
+import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
+import io.github.vinceglb.filekit.core.PickerMode
+import io.github.vinceglb.filekit.core.PickerType
 import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
@@ -80,8 +96,12 @@ import ttproject.composeapp.generated.resources.google_logo_white
 
 data class TTClub(
     val id: String, val name: String, val distance: String, val tables: Int,
-    val rating: Double, val lat: Double, val lng: Double, val tags: List<String>, val type: LocationType
+    val rating: Double, val lat: Double, val lng: Double, val tags: List<String>, val type: LocationType,
+    val createdBy: String = "Anonymous", // 👇 Added this!
+    val imageUrls: List<String> = emptyList()
 )
+
+data class GalleryImage(val url: String, val authorName: String)
 
 enum class SheetState { Expanded, HalfExpanded, Collapsed }
 
@@ -112,9 +132,17 @@ fun MapScreen(
         when (val s = state) {
             is LocationsUiState.Success -> s.locations.map { loc ->
                 TTClub(
-                    id = loc.id?.toString() ?: "", name = loc.name, distance = "Calculating...",
-                    tables = loc.tableCount, rating = 0.0, lat = loc.latitude, lng = loc.longitude,
-                    tags = listOf(loc.type.name, if (loc.isFree) "Free" else "Paid"), type = loc.type
+                    id = loc.id ?: "${loc.latitude},${loc.longitude}",
+                    name = loc.name,
+                    distance = "Calculating...",
+                    tables = loc.tableCount,
+                    rating = 0.0,
+                    lat = loc.latitude,
+                    lng = loc.longitude,
+                    tags = listOf(loc.type.name, if (loc.isFree) "Free" else "Paid"),
+                    type = loc.type,
+                    createdBy = loc.createdBy ?: "Anonymous", // 👇 Pass it here!
+                    imageUrls = loc.imageUrls
                 )
             }
             else -> emptyList()
@@ -136,6 +164,7 @@ fun MapScreen(
     var isDetailsExpanded by remember { mutableStateOf(false) }
 
     var isAddingTable by remember { mutableStateOf(false) }
+    var isPickingLocation by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
     var userLocationTrigger by remember { mutableStateOf(0) }
@@ -278,7 +307,7 @@ fun MapScreen(
         )
 
         AnimatedVisibility(
-            visible = isActive && !isDetailsExpanded,
+            visible = isActive && !isDetailsExpanded && !isPickingLocation,
             enter = slideInVertically(initialOffsetY = { -it }, animationSpec = tween(400, delayMillis = 100)) + fadeIn(tween(400, delayMillis = 100)),
             exit = fadeOut(tween(200)),
             modifier = Modifier.align(Alignment.TopCenter)
@@ -310,6 +339,67 @@ fun MapScreen(
         // 👇 1. Calculate exactly how far up the sheet is currently covering the screen
         val sheetOffsetYRaw = if (sheetState.offset.isNaN()) (layoutHeightPx - peekHeightPx) else sheetState.offset
         val sheetVisibleHeightDp = with(density) { (layoutHeightPx - sheetOffsetYRaw).coerceAtLeast(0f).toDp() }
+
+        // 👇 HIGH-VISIBILITY BOTTOM INSTRUCTION PANEL
+        AnimatedVisibility(
+            visible = isPickingLocation,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(), // Slides up from bottom
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                // Sits at the exact same height as the FABs, leaving 80dp on the right so the FABs aren't covered!
+                .padding(bottom = sheetVisibleHeightDp + 16.dp, start = 16.dp, end = 80.dp)
+                .fillMaxWidth()
+                .zIndex(19f)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = cardBg,
+                shadowElevation = 8.dp,
+                // 👇 1. THE EXACT HEIGHT MATH: 48dp + 12dp + 48dp = 108.dp
+                modifier = Modifier.height(108.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(16.dp)
+                ) {
+                    // 👇 2. Removed the title, made the description the primary focus
+                    Text(
+                        text = "Drag the map to place the crosshair exactly over the table.",
+                        color = AppColors.TextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = 20.sp
+                    )
+
+                    // This pushes the Cancel button perfectly to the bottom of the 108dp box
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    TextButton(
+                        onClick = { isPickingLocation = false },
+                        contentPadding = PaddingValues(0.dp),
+                        modifier = Modifier.height(24.dp)
+                    ) {
+                        Text("Cancel", color = brandOrange, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // 👇 CENTER CROSSHAIR
+        AnimatedVisibility(
+            visible = isPickingLocation,
+            enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
+            exit = scaleOut() + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.Center)
+                .offset(y = -mapBottomPadding / 2) // Perfectly aligns with the shifted Google Maps camera center!
+                .zIndex(10f)
+        ) {
+            Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black.copy(alpha = 0.5f), modifier = Modifier.size(36.dp).offset(y = 2.dp)) // Drop shadow
+                Icon(Icons.Default.Add, contentDescription = null, tint = brandOrange, modifier = Modifier.size(36.dp))
+            }
+        }
 
         // 👇 2. "CENTER ON ME" BUTTON
         AnimatedVisibility(
@@ -372,31 +462,52 @@ fun MapScreen(
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
 
-                    // BUTTON STATE
+                    // BUTTON STATE (Fades out as it grows)
                     if (expandProgress < 1f) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .alpha(1f - expandProgress)
-                                .clickable { isAddingTable = true },
+                                .clickable {
+                                    // 👇 1. Intercept the click!
+                                    if (!isPickingLocation) {
+                                        isPickingLocation = true
+                                        // Auto-collapse the sheet so they have room to drag the map
+                                        coroutineScope.launch { sheetState.animateTo(SheetState.Collapsed) }
+                                    } else {
+                                        isPickingLocation = false
+                                        isAddingTable = true // Trigger the giant morph!
+                                    }
+                                },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = "Add Club", tint = brandOrange)
+                            // 👇 2. Smoothly crossfade the icon from Add to Checkmark!
+                            AnimatedContent(targetState = isPickingLocation, label = "IconMorph") { picking ->
+                                if (picking) {
+                                    Icon(Icons.Default.Check, contentDescription = "Confirm", tint = brandOrange)
+                                } else {
+                                    Icon(Icons.Default.Add, contentDescription = "Add", tint = brandOrange)
+                                }
+                            }
                         }
                     }
 
-                    // FULL SCREEN STATE
+                    // FULL SCREEN STATE (Fades in as it grows)
                     if (expandProgress > 0f) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .alpha(expandProgress)
-                        ) {
+                        Box(modifier = Modifier.fillMaxSize().alpha(expandProgress)) {
                             Box(modifier = Modifier.requiredSize(screenWidth, screenHeight)) {
+
+                                // 👇 Calculate exact center from the map bounds
+                                val centerLat = mapBounds?.let { (it.north + it.south) / 2 } ?: 0.0
+                                val centerLng = mapBounds?.let { (it.east + it.west) / 2 } ?: 0.0
+
                                 AddTableFullScreen(
                                     brandOrange = brandOrange,
                                     cardBg = cardBg,
                                     systemNavHeight = systemNavHeight,
+                                    lat = centerLat, // 👇 Pass coordinates
+                                    lng = centerLng,
+                                    viewModel = viewModel,
                                     onClose = { isAddingTable = false }
                                 )
                             }
@@ -462,10 +573,20 @@ fun MapScreen(
                         label = "DetailsMorph"
                     ) { expanded ->
                         if (expanded) {
+                            // 👇 Fetch reviews when the screen expands!
+                            LaunchedEffect(currentClub.id) {
+                                viewModel.loadReviewsForClub(currentClub.id)
+                            }
+
+                            // Get the ID from your existing tokenStorage
+                            val currentUserId = tokenStorage.getUserId() ?: ""
+
                             ClubDetailsFullScreen(
                                 club = currentClub,
                                 brandOrange = brandOrange,
                                 systemNavHeight = systemNavHeight,
+                                viewModel = viewModel,
+                                currentUserId = currentUserId, // 👇 Pass this down!
                                 onClose = { isDetailsExpanded = false }
                             )
                         } else {
@@ -605,180 +726,503 @@ fun ClubCardCompact(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun ClubDetailsFullScreen(
     club: TTClub,
     brandOrange: Color,
     systemNavHeight: Dp,
+    viewModel: LocationViewModel,
+    currentUserId: String,
     onClose: () -> Unit
 ) {
-    // Master list of tags
     val tags = listOf("Good Net", "Bring Own Net", "Smooth Surface", "Damaged Table", "Spacious", "Often Crowded", "Friendly Vibe")
     var selectedTags by remember { mutableStateOf(setOf<String>()) }
     var reviewText by remember { mutableStateOf("") }
+    var isSubmitting by remember { mutableStateOf(false) }
 
-    // Dummy Aggregated Tag Data
-    val aggregatedTags = mapOf(
-        "Good Net" to 42,
-        "Spacious" to 18,
-        "Friendly Vibe" to 12
-    )
+    val reviews by viewModel.clubReviews.collectAsState()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 32.dp + systemNavHeight)
-    ) {
-        // HEADER
-        Row(
+    val hasReviewed = remember(reviews, currentUserId) {
+        reviews.any { it.userId == currentUserId }
+    }
+
+    // 👇 Map the real username for the original table!
+    val allGalleryImages = remember(club.imageUrls, reviews) {
+        val list = mutableListOf<GalleryImage>()
+        club.imageUrls.forEach { url -> list.add(GalleryImage(url, club.createdBy)) } // 👈 CHANGED
+        reviews.forEach { review ->
+            review.imageUrls.forEach { url -> list.add(GalleryImage(url, review.username)) }
+        }
+        list.distinctBy { it.url }
+    }
+
+    var fullScreenInitialPage by remember { mutableStateOf<Int?>(null) }
+    val scope = rememberCoroutineScope()
+
+    // 👇 1. THE NEW STANDALONE GALLERY UPLOADER
+    var isUploadingGallery by remember { mutableStateOf(false) }
+    val galleryLauncher = rememberFilePickerLauncher(
+        type = PickerType.Image,
+        mode = PickerMode.Multiple(maxItems = 5) // Let them add up to 5 at once!
+    ) { files ->
+        if (files != null && files.isNotEmpty()) {
+            scope.launch {
+                isUploadingGallery = true
+                val newBytes = files.mapNotNull { it.readBytes() }
+                viewModel.addLocationImages(club.id, newBytes) {
+                    isUploadingGallery = false
+                    // Optionally close the sheet, or just let them stay!
+                    // onClose()
+                }
+            }
+        }
+    }
+
+    // Existing Review Uploader
+    var reviewImages by remember { mutableStateOf<List<ByteArray>>(emptyList()) }
+    val reviewMediaLauncher = rememberFilePickerLauncher(
+        type = PickerType.Image,
+        mode = PickerMode.Multiple(maxItems = 3)
+    ) { files ->
+        if (files != null) {
+            scope.launch {
+                val newBytes = files.mapNotNull { it.readBytes() }
+                reviewImages = (reviewImages + newBytes).take(3)
+            }
+        }
+    }
+
+    val aggregatedTags = remember(reviews) { reviews.flatMap { it.tags }.groupingBy { it }.eachCount() }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 32.dp + systemNavHeight)
         ) {
-            Text(club.name, color = AppColors.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            IconButton(onClick = onClose, modifier = Modifier.size(32.dp).background(Color(0xFF333947), RoundedCornerShape(16.dp))) {
-                Icon(Icons.Default.Close, "Close", tint = Color.White, modifier = Modifier.size(18.dp))
+            // --- HEADER ---
+            Row(
+                modifier = Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top)).padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(club.name, color = AppColors.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                IconButton(onClick = onClose, modifier = Modifier.size(32.dp).background(Color(0xFF333947), RoundedCornerShape(16.dp))) {
+                    Icon(Icons.Default.Close, "Close", tint = Color.White, modifier = Modifier.size(18.dp))
+                }
             }
-        }
 
-        // GALLERY WITH "ADD PHOTO" BUTTON
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
-        ) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .size(120.dp, 100.dp)
-                        .background(Color(0xFF333947), RoundedCornerShape(12.dp))
-                        .clickable { /* TODO: Launch Image Picker for Gallery */ },
-                    contentAlignment = Alignment.Center
+            // --- THE AGGREGATED TOP GALLERY ---
+            if (allGalleryImages.isNotEmpty() || hasReviewed) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.CameraAlt, contentDescription = "Add Photo", tint = brandOrange)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text("Add Photo", color = brandOrange, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    if (hasReviewed) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .size(120.dp, 100.dp)
+                                    .background(Color(0xFF333947), RoundedCornerShape(12.dp))
+                                    // 👇 2. TRIGGER THE NEW LAUNCHER!
+                                    .clickable(enabled = !isUploadingGallery) { galleryLauncher.launch() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                // 👇 3. SHOW A LOADING SPINNER WHILE UPLOADING
+                                if (isUploadingGallery) {
+                                    CircularProgressIndicator(color = brandOrange, modifier = Modifier.size(24.dp))
+                                } else {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(Icons.Default.CameraAlt, contentDescription = "Add Photo", tint = brandOrange)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text("Add Photo", color = brandOrange, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    itemsIndexed(allGalleryImages) { index, galleryImage ->
+                        Box(
+                            modifier = Modifier
+                                .size(160.dp, 100.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { fullScreenInitialPage = index }
+                        ) {
+                            AsyncImage(
+                                model = galleryImage.url,
+                                contentDescription = "Table Image",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
                     }
                 }
             }
 
-            items(4) {
-                Box(
-                    modifier = Modifier.size(160.dp, 100.dp).background(Color(0xFF2A2D34), RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center
+            // --- AGGREGATOR ---
+            if (aggregatedTags.isNotEmpty()) {
+                Text("What players say", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                FlowRow(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Image", color = Color.Gray)
-                }
-            }
-        }
-
-        // AGGREGATOR: What players are saying
-        Text("What players say", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-        FlowRow(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            aggregatedTags.forEach { (tag, count) ->
-                Surface(shape = RoundedCornerShape(20.dp), color = Color(0xFF2A2D34)) {
-                    Text(
-                        text = "$tag ($count)",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        fontSize = 13.sp, color = AppColors.TextPrimary
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // DETAILED REVIEW FEED
-        Text("Detailed Reviews", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-
-        Surface(color = Color(0xFF2A2D34), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Great spot!", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold)
-                Text("Reviewed by Player 1 • 2 days ago", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
-
-                Text("Really liked playing here. Just be warned that table #2 has a slight dead spot on the right side.", color = Color.LightGray, fontSize = 14.sp, modifier = Modifier.padding(bottom = 12.dp))
-
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Surface(color = Color(0xFF333947), shape = RoundedCornerShape(12.dp)) { Text("Good Net", fontSize = 12.sp, color = Color.LightGray, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
-                    Surface(color = Color(0xFF333947), shape = RoundedCornerShape(12.dp)) { Text("Damaged Table", fontSize = 12.sp, color = Color.LightGray, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-        HorizontalDivider(color = Color(0xFF333947), modifier = Modifier.padding(horizontal = 16.dp))
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // ADD REVIEW SECTION
-        Text("Write a Review", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp))
-
-        FlowRow(
-            modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            tags.forEach { tag ->
-                val isSelected = selectedTags.contains(tag)
-                FilterChip(
-                    text = tag,
-                    isSelected = isSelected,
-                    activeColor = brandOrange,
-                    inactiveColor = Color(0xFF333947),
-                    onClick = {
-                        selectedTags = if (isSelected) selectedTags - tag else selectedTags + tag
+                    aggregatedTags.entries.sortedByDescending { it.value }.forEach { (tag, count) ->
+                        Surface(shape = RoundedCornerShape(20.dp), color = Color(0xFF2A2D34)) {
+                            Text(text = "$tag ($count)", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 13.sp, color = AppColors.TextPrimary)
+                        }
                     }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            // --- DETAILED REVIEW FEED ---
+            Text("Detailed Reviews", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+
+            if (reviews.isEmpty()) {
+                Text("No reviews yet. Be the first to review!", color = Color.Gray, modifier = Modifier.padding(horizontal = 16.dp))
+            } else {
+                reviews.filter { !it.textContent.isNullOrBlank() || it.tags.isNotEmpty() || it.imageUrls.isNotEmpty() }.forEach { review ->
+                    Surface(color = Color(0xFF2A2D34), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            val displayName = if (review.userId == currentUserId) "You" else review.username
+                            Text(text = displayName, color = AppColors.TextPrimary, fontWeight = FontWeight.Bold)
+                            Text("Reviewed recently", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
+
+                            if (!review.textContent.isNullOrBlank()) {
+                                Text(review.textContent!!, color = Color.LightGray, fontSize = 14.sp, modifier = Modifier.padding(bottom = 12.dp))
+                            }
+
+                            if (review.imageUrls.isNotEmpty()) {
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                                ) {
+                                    items(review.imageUrls) { url ->
+                                        val globalIndex = allGalleryImages.indexOfFirst { it.url == url }
+                                        Box(
+                                            modifier = Modifier
+                                                .size(80.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .clickable { if (globalIndex != -1) fullScreenInitialPage = globalIndex }
+                                        ) {
+                                            AsyncImage(
+                                                model = url,
+                                                contentDescription = "Review Image",
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (review.tags.isNotEmpty()) {
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    review.tags.forEach { tag ->
+                                        Surface(color = Color(0xFF333947), shape = RoundedCornerShape(12.dp)) {
+                                            Text(tag, fontSize = 12.sp, color = Color.LightGray, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider(color = Color(0xFF333947), modifier = Modifier.padding(horizontal = 16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // --- CONDITIONAL REVIEW SECTION ---
+            if (hasReviewed) {
+                Surface(
+                    color = brandOrange.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, tint = brandOrange, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("Thanks for reviewing!", color = brandOrange, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text("Your review helps other players find the best tables.", color = AppColors.TextPrimary.copy(alpha = 0.8f), fontSize = 13.sp)
+                        }
+                    }
+                }
+            } else {
+                Text("Write a Review", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp))
+
+                FlowRow(
+                    modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    tags.forEach { tag ->
+                        val isSelected = selectedTags.contains(tag)
+                        FilterChip(
+                            text = tag,
+                            isSelected = isSelected,
+                            activeColor = brandOrange,
+                            inactiveColor = Color(0xFF333947),
+                            onClick = { selectedTags = if (isSelected) selectedTags - tag else selectedTags + tag }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = reviewText,
+                    onValueChange = { reviewText = it },
+                    placeholder = { Text("Add more details... (Optional)", color = Color.Gray) },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).heightIn(min = 100.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color(0xFF2A2D34),
+                        unfocusedContainerColor = Color(0xFF2A2D34),
+                        focusedIndicatorColor = brandOrange,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        focusedTextColor = AppColors.TextPrimary,
+                        unfocusedTextColor = AppColors.TextPrimary
+                    ),
+                    shape = RoundedCornerShape(12.dp)
                 )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // INSTANT PREVIEW ROW FOR REVIEWS
+                if (reviewImages.isNotEmpty()) {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        modifier = Modifier.fillMaxWidth().height(80.dp).padding(bottom = 12.dp)
+                    ) {
+                        items(reviewImages) { imageBytes ->
+                            Box(modifier = Modifier.size(80.dp).clip(RoundedCornerShape(8.dp))) {
+                                AsyncImage(model = imageBytes, contentDescription = "Preview", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                            }
+                        }
+                    }
+                }
+
+                // 👇 2. MASSIVE, PLEASING "ATTACH PHOTOS" BUTTON
+                if (reviewImages.size < 3) {
+                    OutlinedButton(
+                        onClick = { galleryLauncher.launch() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .height(56.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, brandOrange.copy(alpha = 0.5f)),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = brandOrange.copy(alpha = 0.05f) // Subtle tint
+                        )
+                    ) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = "Attach Photos", tint = brandOrange, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("Attach Photos", color = brandOrange, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = {
+                        if (!isSubmitting) {
+                            isSubmitting = true
+                            viewModel.submitReview(
+                                locationId = club.id, tags = selectedTags.toList(), text = reviewText,
+                                images = reviewImages,
+                                onSuccess = {
+                                    selectedTags = emptySet()
+                                    reviewText = ""
+                                    reviewImages = emptyList()
+                                    isSubmitting = false
+                                }
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = brandOrange),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = (selectedTags.isNotEmpty() || reviewText.isNotBlank() || reviewImages.isNotEmpty()) && !isSubmitting
+                ) {
+                    if (isSubmitting) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                    else Text("Submit Review", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // --- FULL SCREEN VIEWER WITH ATTRIBUTION ---
+        if (fullScreenInitialPage != null && allGalleryImages.isNotEmpty()) {
+            val pagerState = rememberPagerState(
+                initialPage = fullScreenInitialPage!!,
+                pageCount = { allGalleryImages.size }
+            )
 
-        OutlinedTextField(
-            value = reviewText,
-            onValueChange = { reviewText = it },
-            placeholder = { Text("Add more details... (Optional)", color = Color.Gray) },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).heightIn(min = 100.dp),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = Color(0xFF2A2D34),
-                unfocusedContainerColor = Color(0xFF2A2D34),
-                focusedIndicatorColor = brandOrange,
-                unfocusedIndicatorColor = Color.Transparent,
-                focusedTextColor = AppColors.TextPrimary,
-                unfocusedTextColor = AppColors.TextPrimary
-            ),
-            shape = RoundedCornerShape(12.dp)
-        )
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { fullScreenInitialPage = null },
+                properties = androidx.compose.ui.window.DialogProperties(
+                    usePlatformDefaultWidth = false,
+                    dismissOnBackPress = true,
+                    dismissOnClickOutside = true
+                )
+            ) {
+                val transitionState = remember {
+                    MutableTransitionState(false).apply { targetState = true }
+                }
 
-        Spacer(modifier = Modifier.height(12.dp))
+                AnimatedVisibility(
+                    visibleState = transitionState,
+                    enter = fadeIn(tween(300)) + scaleIn(initialScale = 0.9f, animationSpec = tween(300)),
+                    exit = fadeOut() + scaleOut(targetScale = 0.9f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.95f))
+                    ) {
+                        // 👇 Notice userScrollEnabled is gone! It scrolls natively now.
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize()
+                        ) { page ->
+                            val image = allGalleryImages[page]
 
-        TextButton(
-            onClick = { /* TODO: Launch Image Picker */ },
-            modifier = Modifier.padding(horizontal = 8.dp)
-        ) {
-            Icon(Icons.Default.Image, contentDescription = "Attach Photos", tint = brandOrange, modifier = Modifier.size(20.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Attach Photos", color = brandOrange, fontWeight = FontWeight.Bold)
-        }
+                            var scale by remember { mutableFloatStateOf(1f) }
+                            var offset by remember { mutableStateOf(Offset.Zero) }
 
-        Spacer(modifier = Modifier.height(16.dp))
+                            LaunchedEffect(pagerState.currentPage) {
+                                if (pagerState.currentPage != page) {
+                                    scale = 1f
+                                    offset = Offset.Zero
+                                }
+                            }
 
-        Button(
-            onClick = { onClose() },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(48.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = brandOrange),
-            shape = RoundedCornerShape(12.dp),
-            enabled = selectedTags.isNotEmpty() || reviewText.isNotBlank()
-        ) {
-            Text("Submit Review", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .pointerInput(Unit) {
+                                        detectTapGestures(
+                                            onDoubleTap = {
+                                                if (scale > 1.05f) {
+                                                    scale = 1f
+                                                    offset = Offset.Zero
+                                                } else {
+                                                    scale = 2.5f
+                                                }
+                                            }
+                                        )
+                                    }
+                                    // 👇 The Smart Zoom/Pan logic!
+                                    .pointerInput(Unit) {
+                                        awaitEachGesture {
+                                            awaitFirstDown()
+                                            do {
+                                                val event = awaitPointerEvent()
+                                                val zoom = event.calculateZoom()
+                                                val pan = event.calculatePan()
+
+                                                // 🚦 Traffic Cop: Only intercept if zoomed in OR pinching!
+                                                if (scale > 1.05f || event.changes.size > 1) {
+                                                    event.changes.forEach { it.consume() } // Lock the Pager
+
+                                                    scale = (scale * zoom).coerceIn(1f, 5f)
+
+                                                    val maxPanX = (size.width * (scale - 1)) / 2
+                                                    val maxPanY = (size.height * (scale - 1)) / 2
+
+                                                    offset = Offset(
+                                                        (offset.x + pan.x).coerceIn(-maxPanX, maxPanX),
+                                                        (offset.y + pan.y).coerceIn(-maxPanY, maxPanY)
+                                                    )
+                                                }
+                                            } while (event.changes.any { it.pressed })
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AsyncImage(
+                                    model = image.url,
+                                    contentDescription = "Full Screen Image",
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer {
+                                            scaleX = scale
+                                            scaleY = scale
+                                            translationX = offset.x
+                                            translationY = offset.y
+                                        },
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
+                        }
+
+                        // Top UI: Counter and Close button in separate solid pills
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 48.dp, start = 16.dp, end = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(color = Color.Black, shape = CircleShape) {
+                                Text(
+                                    text = "${pagerState.currentPage + 1} of ${allGalleryImages.size}",
+                                    color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+
+                            Surface(color = Color.Black, shape = CircleShape) {
+                                IconButton(
+                                    onClick = { fullScreenInitialPage = null },
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                        }
+
+                        // Bottom UI: The Attribution Badge
+                        val currentImage = allGalleryImages[pagerState.currentPage]
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .background(androidx.compose.ui.graphics.Brush.verticalGradient(
+                                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))
+                                ))
+                                .padding(bottom = 48.dp, top = 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Surface(color = Color.Black.copy(alpha = 0.6f), shape = RoundedCornerShape(20.dp)) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("📸", fontSize = 16.sp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Uploaded by ${currentImage.authorName}",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -821,22 +1265,44 @@ fun ClubCard(club: TTClub, cardBg: Color, brandOrange: Color, onClick: () -> Uni
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun AddTableFullScreen(brandOrange: Color, cardBg: Color, systemNavHeight: Dp, onClose: () -> Unit) {
+fun AddTableFullScreen(
+    brandOrange: Color,
+    cardBg: Color,
+    systemNavHeight: Dp,
+    lat: Double,
+    lng: Double,
+    viewModel: LocationViewModel,
+    onClose: () -> Unit
+) {
     var isIndoor by remember { mutableStateOf(false) }
     var tableCount by remember { mutableStateOf(1) }
     var isFree by remember { mutableStateOf(true) }
     var notesText by remember { mutableStateOf("") }
+    var isSubmitting by remember { mutableStateOf(false) }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = AppColors.Background // Uses the main app background
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
-        ) {
-            // HEADER
+    // State to hold the raw image bytes!
+    var selectedImages by remember { mutableStateOf<List<ByteArray>>(emptyList()) }
+    val scope = rememberCoroutineScope()
+
+    // The FileKit Launcher
+    val mediaLauncher = rememberFilePickerLauncher(
+        type = PickerType.Image,
+        mode = PickerMode.Multiple(maxItems = 5),
+        title = "Select Table Photos"
+    ) { files ->
+        if (files != null) {
+            scope.launch {
+                // Read bytes in background and update UI instantly!
+                val newBytes = files.mapNotNull { it.readBytes() }
+                selectedImages = (selectedImages + newBytes).take(5) // Cap at 5 images
+            }
+        }
+    }
+
+    Surface(modifier = Modifier.fillMaxSize(), color = AppColors.Background) {
+        Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))) {
+
+            // --- HEADER ---
             Row(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -847,26 +1313,53 @@ fun AddTableFullScreen(brandOrange: Color, cardBg: Color, systemNavHeight: Dp, o
                 }
             }
 
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-            ) {
-                // PHOTO SECTION (Big and inviting)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(160.dp)
-                        .background(cardBg, RoundedCornerShape(16.dp))
-                        .clickable { /* TODO: Launch Image Picker */ },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.CameraAlt, contentDescription = "Add Photo", tint = brandOrange, modifier = Modifier.size(40.dp))
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Add Table Photos", color = brandOrange, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        Text("Optional, but highly recommended!", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+            Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+
+                // --- DYNAMIC PHOTO SECTION ---
+                if (selectedImages.isEmpty()) {
+                    // Show the big empty placeholder
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth().height(160.dp)
+                            .background(cardBg, RoundedCornerShape(16.dp))
+                            .clickable { mediaLauncher.launch() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.CameraAlt, contentDescription = "Add Photo", tint = brandOrange, modifier = Modifier.size(40.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Add Table Photos", color = brandOrange, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text("Optional, but highly recommended!", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                        }
+                    }
+                } else {
+                    // Show the instant preview row!
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth().height(160.dp)
+                    ) {
+                        items(selectedImages) { imageBytes ->
+                            Box(modifier = Modifier.size(160.dp).clip(RoundedCornerShape(16.dp))) {
+                                // Coil natively supports ByteArray!
+                                AsyncImage(
+                                    model = imageBytes,
+                                    contentDescription = "Selected Image",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                        }
+                        // Add a smaller button at the end to add more if under limit
+                        if (selectedImages.size < 5) {
+                            item {
+                                Box(
+                                    modifier = Modifier.size(160.dp).background(cardBg, RoundedCornerShape(16.dp)).clickable { mediaLauncher.launch() },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = "Add More", tint = brandOrange, modifier = Modifier.size(32.dp))
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -874,7 +1367,7 @@ fun AddTableFullScreen(brandOrange: Color, cardBg: Color, systemNavHeight: Dp, o
                 Text("Table Details", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // TYPE TOGGLE
+                // --- TYPE TOGGLE ---
                 Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("Type", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
@@ -887,7 +1380,7 @@ fun AddTableFullScreen(brandOrange: Color, cardBg: Color, systemNavHeight: Dp, o
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // COUNT STEPPER
+                // --- COUNT STEPPER ---
                 Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("Number of Tables", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
@@ -909,7 +1402,7 @@ fun AddTableFullScreen(brandOrange: Color, cardBg: Color, systemNavHeight: Dp, o
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // COST TOGGLE
+                // --- COST TOGGLE ---
                 Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("Cost", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
@@ -924,7 +1417,7 @@ fun AddTableFullScreen(brandOrange: Color, cardBg: Color, systemNavHeight: Dp, o
                 Text("Notes (Optional)", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // NOTES
+                // --- NOTES ---
                 OutlinedTextField(
                     value = notesText,
                     onValueChange = { notesText = it },
@@ -945,21 +1438,26 @@ fun AddTableFullScreen(brandOrange: Color, cardBg: Color, systemNavHeight: Dp, o
                 Spacer(modifier = Modifier.height(80.dp + systemNavHeight))
             }
 
-            // SUBMIT BUTTON (Pinned to bottom)
-            Surface(
-                color = AppColors.Background.copy(alpha = 0.9f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            // --- SUBMIT BUTTON ---
+            Surface(color = AppColors.Background.copy(alpha = 0.9f), modifier = Modifier.fillMaxWidth()) {
                 Button(
-                    onClick = { /* TODO: Submit to backend */ onClose() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp + systemNavHeight)
-                        .height(56.dp),
+                    onClick = {
+                        if (!isSubmitting) {
+                            isSubmitting = true
+                            viewModel.submitNewTable(
+                                lat = lat, lng = lng, isIndoor = isIndoor, count = tableCount, isFree = isFree, notes = notesText,
+                                images = selectedImages, // Passed to ViewModel!
+                                onSuccess = { onClose() }
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp + systemNavHeight).height(56.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = brandOrange),
-                    shape = RoundedCornerShape(16.dp)
+                    shape = RoundedCornerShape(16.dp),
+                    enabled = !isSubmitting
                 ) {
-                    Text("Submit Table", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    if (isSubmitting) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                    else Text("Submit Table", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 }
             }
         }
