@@ -75,6 +75,8 @@ kotlin {
 
             // Optional but recommended: The core library to ensure version alignment
             implementation("io.coil-kt.coil3:coil:3.0.4")
+
+            implementation("org.jetbrains.androidx.navigationevent:navigationevent-compose:1.0.0")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
