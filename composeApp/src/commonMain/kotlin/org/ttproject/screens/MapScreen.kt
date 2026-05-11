@@ -1,6 +1,7 @@
 package org.ttproject.screens
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.Spring
@@ -45,6 +46,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.ttproject.AppColors
@@ -65,6 +67,7 @@ import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -80,7 +83,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.Velocity
-import androidx.navigationevent.NavigationEventHandler
 import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import androidx.navigationevent.NavigationEventInfo
@@ -104,7 +106,7 @@ import kotlin.math.absoluteValue
 data class TTClub(
     val id: String, val name: String, val distance: String, val tables: Int,
     val rating: Double, val lat: Double, val lng: Double, val tags: List<String>, val type: LocationType,
-    val createdBy: String = "Anonymous", // 👇 Added this!
+    val createdBy: String = "Anonymous",
     val imageUrls: List<String> = emptyList()
 )
 
@@ -150,7 +152,7 @@ fun MapScreen(
                     lng = loc.longitude,
                     tags = listOf(loc.type.name, if (loc.isFree) "Free" else "Paid"),
                     type = loc.type,
-                    createdBy = loc.createdBy ?: "Anonymous", // 👇 Pass it here!
+                    createdBy = loc.createdBy ?: "Anonymous",
                     imageUrls = loc.imageUrls
                 )
             }
@@ -172,6 +174,10 @@ fun MapScreen(
     var selectedClub by remember { mutableStateOf<TTClub?>(null) }
     var isDetailsExpanded by remember { mutableStateOf(false) }
 
+    val detailsOffsetAnimatable = remember { Animatable(0f) }
+    // 👇 Add this lock to strictly block touches during automated animations
+    var isCardAnimating by remember { mutableStateOf(false) }
+
     var isAddingTable by remember { mutableStateOf(false) }
     var isPickingLocation by remember { mutableStateOf(false) }
 
@@ -187,6 +193,10 @@ fun MapScreen(
                 isAddingTable -> isAddingTable = false
                 isDetailsExpanded -> {
                     isDetailsExpanded = false
+                    coroutineScope.launch {
+                        // 👇 Snap instantly so it doesn't fight AnimatedContent
+                        detailsOffsetAnimatable.snapTo(0f)
+                    }
                 }
                 selectedClub != null -> {
                     selectedClub = null
@@ -268,12 +278,16 @@ fun MapScreen(
         coroutineScope.launch {
             if (sheetState.currentValue != SheetState.Collapsed) sheetState.animateTo(SheetState.Collapsed)
             isDetailsExpanded = false
+            detailsOffsetAnimatable.snapTo(0f) // 👇 Guarantee reset
             selectedClub = clickedClub
         }
     }
 
+
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val screenHeight = this.maxHeight
+        val screenHeightPx = with(LocalDensity.current) { screenHeight.toPx() }
         val screenWidth = this.maxWidth
         val layoutHeightPx = constraints.maxHeight.toFloat()
         val layoutWidthPx = constraints.maxWidth.toFloat()
@@ -364,18 +378,15 @@ fun MapScreen(
             }
         }
 
-        // 👇 1. Calculate exactly how far up the sheet is currently covering the screen
         val sheetOffsetYRaw = if (sheetState.offset.isNaN()) (layoutHeightPx - peekHeightPx) else sheetState.offset
         val sheetVisibleHeightDp = with(density) { (layoutHeightPx - sheetOffsetYRaw).coerceAtLeast(0f).toDp() }
 
-        // 👇 HIGH-VISIBILITY BOTTOM INSTRUCTION PANEL
         AnimatedVisibility(
             visible = isPickingLocation,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(), // Slides up from bottom
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                // Sits at the exact same height as the FABs, leaving 80dp on the right so the FABs aren't covered!
                 .padding(bottom = sheetVisibleHeightDp + 16.dp, start = 16.dp, end = 80.dp)
                 .fillMaxWidth()
                 .zIndex(19f)
@@ -384,13 +395,11 @@ fun MapScreen(
                 shape = RoundedCornerShape(16.dp),
                 color = cardBg,
                 shadowElevation = 8.dp,
-                // 👇 1. THE EXACT HEIGHT MATH: 48dp + 12dp + 48dp = 108.dp
                 modifier = Modifier.height(108.dp)
             ) {
                 Column(
                     modifier = Modifier.fillMaxSize().padding(16.dp)
                 ) {
-                    // 👇 2. Removed the title, made the description the primary focus
                     Text(
                         text = "Drag the map to place the crosshair exactly over the table.",
                         color = AppColors.TextPrimary,
@@ -399,7 +408,6 @@ fun MapScreen(
                         lineHeight = 20.sp
                     )
 
-                    // This pushes the Cancel button perfectly to the bottom of the 108dp box
                     Spacer(modifier = Modifier.weight(1f))
 
                     TextButton(
@@ -413,25 +421,23 @@ fun MapScreen(
             }
         }
 
-        // 👇 CENTER CROSSHAIR
         AnimatedVisibility(
             visible = isPickingLocation,
             enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy)) + fadeIn(),
             exit = scaleOut() + fadeOut(),
             modifier = Modifier
                 .align(Alignment.Center)
-                .offset(y = -mapBottomPadding / 2) // Perfectly aligns with the shifted Google Maps camera center!
+                .offset(y = -mapBottomPadding / 2)
                 .zIndex(10f)
         ) {
             Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black.copy(alpha = 0.5f), modifier = Modifier.size(36.dp).offset(y = 2.dp)) // Drop shadow
+                Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black.copy(alpha = 0.5f), modifier = Modifier.size(36.dp).offset(y = 2.dp))
                 Icon(Icons.Default.Add, contentDescription = null, tint = brandOrange, modifier = Modifier.size(36.dp))
             }
         }
 
-        // 👇 2. "CENTER ON ME" BUTTON
         AnimatedVisibility(
-            visible = showFloatingElements && isActive, // Hides when adding table
+            visible = showFloatingElements && isActive,
             enter = slideInHorizontally(initialOffsetX = { it }, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)) + fadeIn(),
             exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
             modifier = Modifier
@@ -443,7 +449,6 @@ fun MapScreen(
                 containerColor = cardBg,
                 contentColor = brandOrange,
                 modifier = Modifier.size(48.dp),
-                // 👇 Lock the standard FAB to 16.dp radius and 8.dp shadow to match our custom button
                 shape = RoundedCornerShape(16.dp),
                 elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 8.dp)
             ) {
@@ -451,7 +456,6 @@ fun MapScreen(
             }
         }
 
-        // 👇 3. THE MORPHING "ADD TABLE" BUTTON
         val expandProgress by animateFloatAsState(
             targetValue = if (isAddingTable) 1f else 0f,
             animationSpec = tween(350, easing = FastOutSlowInEasing),
@@ -462,7 +466,6 @@ fun MapScreen(
         val currentBottomPadding = restingBottomPadding * (1f - expandProgress)
         val currentEndPadding = 16.dp * (1f - expandProgress)
 
-        // 👇 THE FIX: Changed from 24.dp to 16.dp so it perfectly matches the FAB above it!
         val currentRadius = 16.dp * (1f - expandProgress)
         val currentElevation = 8.dp * (1f - expandProgress)
 
@@ -481,7 +484,7 @@ fun MapScreen(
             modifier = Modifier.align(Alignment.BottomEnd).zIndex(20f)
         ) {
             Surface(
-                shape = RoundedCornerShape(currentRadius), // Will now be 16.dp when resting!
+                shape = RoundedCornerShape(currentRadius),
                 color = formBgColor,
                 shadowElevation = currentElevation,
                 modifier = Modifier
@@ -490,26 +493,22 @@ fun MapScreen(
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
 
-                    // BUTTON STATE (Fades out as it grows)
                     if (expandProgress < 1f) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .alpha(1f - expandProgress)
                                 .clickable {
-                                    // 👇 1. Intercept the click!
                                     if (!isPickingLocation) {
                                         isPickingLocation = true
-                                        // Auto-collapse the sheet so they have room to drag the map
                                         coroutineScope.launch { sheetState.animateTo(SheetState.Collapsed) }
                                     } else {
                                         isPickingLocation = false
-                                        isAddingTable = true // Trigger the giant morph!
+                                        isAddingTable = true
                                     }
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            // 👇 2. Smoothly crossfade the icon from Add to Checkmark!
                             AnimatedContent(targetState = isPickingLocation, label = "IconMorph") { picking ->
                                 if (picking) {
                                     Icon(Icons.Default.Check, contentDescription = "Confirm", tint = brandOrange)
@@ -520,12 +519,9 @@ fun MapScreen(
                         }
                     }
 
-                    // FULL SCREEN STATE (Fades in as it grows)
                     if (expandProgress > 0f) {
                         Box(modifier = Modifier.fillMaxSize().alpha(expandProgress)) {
                             Box(modifier = Modifier.requiredSize(screenWidth, screenHeight)) {
-
-                                // 👇 Calculate exact center from the map bounds
                                 val centerLat = mapBounds?.let { (it.north + it.south) / 2 } ?: 0.0
                                 val centerLng = mapBounds?.let { (it.east + it.west) / 2 } ?: 0.0
 
@@ -533,7 +529,7 @@ fun MapScreen(
                                     brandOrange = brandOrange,
                                     cardBg = cardBg,
                                     systemNavHeight = systemNavHeight,
-                                    lat = centerLat, // 👇 Pass coordinates
+                                    lat = centerLat,
                                     lng = centerLng,
                                     viewModel = viewModel,
                                     onClose = { isAddingTable = false }
@@ -572,7 +568,6 @@ fun MapScreen(
                     fadeIn(tween(300)).togetherWith(fadeOut(tween(300))).using(SizeTransform(clip = false))
                 }
             },
-            // 👇 1. Added BottomCenter alignment here to keep the master block symmetrical
             contentAlignment = Alignment.BottomCenter,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -584,9 +579,11 @@ fun MapScreen(
             if (currentClub != null) {
                 Surface(
                     shape = RoundedCornerShape(cardCornerRadius),
-                    color = cardBg,
+                    color = AppColors.Background,
                     shadowElevation = 8.dp,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .offset { IntOffset(0, detailsOffsetAnimatable.value.roundToInt()) }
                 ) {
                     AnimatedContent(
                         targetState = isDetailsExpanded,
@@ -595,18 +592,14 @@ fun MapScreen(
                                 spring(stiffness = Spring.StiffnessLow)
                             }
                         },
-                        // 👇 2. Force TopCenter alignment during morphing to stop the left-edge snap!
                         contentAlignment = Alignment.TopCenter,
                         modifier = Modifier.fillMaxWidth(),
                         label = "DetailsMorph"
                     ) { expanded ->
                         if (expanded) {
-                            // 👇 Fetch reviews when the screen expands!
                             LaunchedEffect(currentClub.id) {
                                 viewModel.loadReviewsForClub(currentClub.id)
                             }
-
-                            // Get the ID from your existing tokenStorage
                             val currentUserId = tokenStorage.getUserId() ?: ""
 
                             ClubDetailsFullScreen(
@@ -614,15 +607,53 @@ fun MapScreen(
                                 brandOrange = brandOrange,
                                 systemNavHeight = systemNavHeight,
                                 viewModel = viewModel,
-                                currentUserId = currentUserId, // 👇 Pass this down!
-                                onClose = { isDetailsExpanded = false }
+                                currentUserId = currentUserId,
+                                onClose = {
+                                    isDetailsExpanded = false
+                                    coroutineScope.launch {
+                                        detailsOffsetAnimatable.snapTo(0f)
+                                    }
+                                },
+                                currentOffset = detailsOffsetAnimatable.value,
+                                onDragDelta = { delta ->
+                                    coroutineScope.launch {
+                                        detailsOffsetAnimatable.snapTo((detailsOffsetAnimatable.value + delta).coerceAtLeast(0f))
+                                    }
+                                },
+                                onDragStopped = { velocity ->
+                                    coroutineScope.launch {
+                                        val currentOffset = detailsOffsetAnimatable.value
+
+                                        val distanceThreshold = screenHeightPx / 3f // Your 1/3 rule!
+                                        val velocityThreshold = 300f // A healthy flick
+
+                                        val shouldDismiss = currentOffset > distanceThreshold || velocity > velocityThreshold
+
+                                        if (shouldDismiss) {
+                                            isDetailsExpanded = false
+                                            detailsOffsetAnimatable.animateTo(
+                                                targetValue = 0f,
+                                                animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                            )
+                                        } else {
+                                            // Force it back to the top if the drag was microscopic
+                                            detailsOffsetAnimatable.animateTo(
+                                                targetValue = 0f,
+                                                animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                                            )
+                                        }
+                                    }
+                                }
                             )
                         } else {
                             ClubCardCompact(
                                 club = currentClub,
                                 brandOrange = brandOrange,
                                 tokenStorage = tokenStorage,
-                                onExpand = { isDetailsExpanded = true },
+                                onExpand = {
+                                    isDetailsExpanded = true
+                                    coroutineScope.launch { detailsOffsetAnimatable.snapTo(0f) }
+                                },
                                 onClose = { selectedClub = null }
                             )
                         }
@@ -674,7 +705,6 @@ fun ClubCardCompact(
     var showMapChoice by remember { mutableStateOf(false) }
     val buttonHeight = 36.dp
 
-    // 👇 3. Force fillMaxWidth here so the width matches the expanded view perfectly
     Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
         Row(verticalAlignment = Alignment.Top) {
             Column(modifier = Modifier.weight(1f)) {
@@ -726,7 +756,7 @@ fun ClubCardCompact(
                 Button(
                     onClick = onExpand,
                     modifier = Modifier.weight(1f).height(buttonHeight),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333947)),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.SurfaceDark),
                     shape = RoundedCornerShape(10.dp),
                     contentPadding = PaddingValues(0.dp)
                 ) {
@@ -807,11 +837,9 @@ fun AddTableFullScreen(
     var notesText by remember { mutableStateOf("") }
     var isSubmitting by remember { mutableStateOf(false) }
 
-    // State to hold the raw image bytes!
     var selectedImages by remember { mutableStateOf<List<ByteArray>>(emptyList()) }
     val scope = rememberCoroutineScope()
 
-    // The FileKit Launcher
     val mediaLauncher = rememberFilePickerLauncher(
         type = PickerType.Image,
         mode = PickerMode.Multiple(maxItems = 5),
@@ -819,9 +847,8 @@ fun AddTableFullScreen(
     ) { files ->
         if (files != null) {
             scope.launch {
-                // Read bytes in background and update UI instantly!
                 val newBytes = files.mapNotNull { it.readBytes() }
-                selectedImages = (selectedImages + newBytes).take(5) // Cap at 5 images
+                selectedImages = (selectedImages + newBytes).take(5)
             }
         }
     }
@@ -829,7 +856,6 @@ fun AddTableFullScreen(
     Surface(modifier = Modifier.fillMaxSize(), color = AppColors.Background) {
         Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))) {
 
-            // --- HEADER ---
             Row(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -842,9 +868,7 @@ fun AddTableFullScreen(
 
             Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
 
-                // --- DYNAMIC PHOTO SECTION ---
                 if (selectedImages.isEmpty()) {
-                    // Show the big empty placeholder
                     Box(
                         modifier = Modifier
                             .fillMaxWidth().height(160.dp)
@@ -860,14 +884,12 @@ fun AddTableFullScreen(
                         }
                     }
                 } else {
-                    // Show the instant preview row!
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxWidth().height(160.dp)
                     ) {
                         items(selectedImages) { imageBytes ->
                             Box(modifier = Modifier.size(160.dp).clip(RoundedCornerShape(16.dp))) {
-                                // Coil natively supports ByteArray!
                                 AsyncImage(
                                     model = imageBytes,
                                     contentDescription = "Selected Image",
@@ -876,7 +898,6 @@ fun AddTableFullScreen(
                                 )
                             }
                         }
-                        // Add a smaller button at the end to add more if under limit
                         if (selectedImages.size < 5) {
                             item {
                                 Box(
@@ -894,27 +915,25 @@ fun AddTableFullScreen(
                 Text("Table Details", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // --- TYPE TOGGLE ---
                 Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("Type", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(text = "Outdoor", isSelected = !isIndoor, activeColor = brandOrange, inactiveColor = Color(0xFF333947)) { isIndoor = false }
-                            FilterChip(text = "Indoor", isSelected = isIndoor, activeColor = brandOrange, inactiveColor = Color(0xFF333947)) { isIndoor = true }
+                            FilterChip(text = "Outdoor", isSelected = !isIndoor, activeColor = brandOrange, inactiveColor = cardBg) { isIndoor = false }
+                            FilterChip(text = "Indoor", isSelected = isIndoor, activeColor = brandOrange, inactiveColor = cardBg) { isIndoor = true }
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // --- COUNT STEPPER ---
                 Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("Number of Tables", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             IconButton(
                                 onClick = { if (tableCount > 1) tableCount-- },
-                                modifier = Modifier.size(36.dp).background(Color(0xFF333947), CircleShape)
+                                modifier = Modifier.size(36.dp).background(AppColors.Background, CircleShape)
                             ) { Text("-", color = Color.White, fontWeight = FontWeight.Bold) }
 
                             Text("$tableCount", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -929,13 +948,12 @@ fun AddTableFullScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // --- COST TOGGLE ---
                 Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("Cost", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(text = "Free", isSelected = isFree, activeColor = brandOrange, inactiveColor = Color(0xFF333947)) { isFree = true }
-                            FilterChip(text = "Paid", isSelected = !isFree, activeColor = brandOrange, inactiveColor = Color(0xFF333947)) { isFree = false }
+                            FilterChip(text = "Free", isSelected = isFree, activeColor = brandOrange, inactiveColor = cardBg) { isFree = true }
+                            FilterChip(text = "Paid", isSelected = !isFree, activeColor = brandOrange, inactiveColor = cardBg) { isFree = false }
                         }
                     }
                 }
@@ -944,7 +962,6 @@ fun AddTableFullScreen(
                 Text("Notes (Optional)", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // --- NOTES ---
                 OutlinedTextField(
                     value = notesText,
                     onValueChange = { notesText = it },
@@ -961,11 +978,9 @@ fun AddTableFullScreen(
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                // Extra spacer so content isn't hidden behind the submit button
                 Spacer(modifier = Modifier.height(80.dp + systemNavHeight))
             }
 
-            // --- SUBMIT BUTTON ---
             Surface(color = AppColors.Background.copy(alpha = 0.9f), modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = {
@@ -973,7 +988,7 @@ fun AddTableFullScreen(
                             isSubmitting = true
                             viewModel.submitNewTable(
                                 lat = lat, lng = lng, isIndoor = isIndoor, count = tableCount, isFree = isFree, notes = notesText,
-                                images = selectedImages, // Passed to ViewModel!
+                                images = selectedImages,
                                 onSuccess = { onClose() }
                             )
                         }
@@ -1003,20 +1018,38 @@ fun AddReviewFullScreen(
     onSubmit: (tags: List<String>, text: String, images: List<ByteArray>, onSuccess: () -> Unit) -> Unit,
     onClose: () -> Unit
 ) {
+    val equipmentTags = listOf("Good Condition", "Damaged Table", "Good Net", "Bring Own Net", "Smooth Surface")
+    val vibeTags = listOf("Active Community", "Fun Vibe", "Friendly Vibe", "Often Crowded", "Open Late")
+
+    var selectedTags by remember { mutableStateOf(setOf<String>()) }
+    var reviewText by remember { mutableStateOf("") }
+    var isSubmitting by remember { mutableStateOf(false) }
+    var reviewImages by remember { mutableStateOf<List<ByteArray>>(emptyList()) }
+
+    val hasUnsavedChanges = selectedTags.isNotEmpty() || reviewText.isNotBlank() || reviewImages.isNotEmpty()
+    var showExitConfirmation by remember { mutableStateOf(false) }
+
+    val scope = rememberCoroutineScope()
+    val offsetY = remember { Animatable(0f) }
+    val scrollState = rememberScrollState()
+
+    val attemptClose: () -> Unit = {
+        if (hasUnsavedChanges && !isSubmitting) {
+            showExitConfirmation = true
+            scope.launch { offsetY.animateTo(0f, spring()) }
+        } else {
+            onClose()
+        }
+    }
+
+    val currentAttemptClose by rememberUpdatedState(attemptClose)
+
     val reviewNavState = rememberNavigationEventState(NavigationEventInfo.None)
     NavigationBackHandler(
         state = reviewNavState,
         isBackEnabled = true,
-        onBackCompleted = { onClose() }
+        onBackCompleted = { currentAttemptClose() }
     )
-
-    val tags = listOf("Good Condition", "Active Community", "Fun Vibe", "Good Net", "Net Quality", "Open Late", "Friendly Vibe")
-    var selectedTags by remember { mutableStateOf(setOf<String>()) }
-    var reviewText by remember { mutableStateOf("") }
-    var isSubmitting by remember { mutableStateOf(false) }
-
-    var reviewImages by remember { mutableStateOf<List<ByteArray>>(emptyList()) }
-    val scope = rememberCoroutineScope()
 
     val reviewMediaLauncher = rememberFilePickerLauncher(
         type = PickerType.Image,
@@ -1030,142 +1063,252 @@ fun AddReviewFullScreen(
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = AppColors.Background) {
-        Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))) {
+    // 👇 1. Use BoxWithConstraints to safely get cross-platform screen dimensions
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val screenHeightPx = with(density) { maxHeight.toPx() }
 
-            // --- HEADER ---
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onClose) {
-                    Icon(Icons.Default.Close, contentDescription = "Close", tint = AppColors.TextPrimary, modifier = Modifier.size(28.dp))
+        // 1/3 of the screen for distance, 300 for a solid flick
+        val distanceThreshold = screenHeightPx / 3f
+        val velocityThreshold = 300f
+
+        val nestedScrollConnection = remember(distanceThreshold, velocityThreshold) {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    if (available.y < 0 && offsetY.value > 0f && source == NestedScrollSource.UserInput) {
+                        val newOffset = (offsetY.value + available.y).coerceAtLeast(0f)
+                        val consumed = newOffset - offsetY.value
+                        scope.launch { offsetY.snapTo(newOffset) }
+                        return Offset(0f, consumed)
+                    }
+                    return Offset.Zero
                 }
 
-                // Top Submit Pill (Now using brandOrange)
-                Button(
-                    onClick = {
-                        if (!isSubmitting) {
-                            isSubmitting = true
-                            onSubmit(selectedTags.toList(), reviewText, reviewImages) { isSubmitting = false; onClose() }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = brandOrange),
-                    shape = RoundedCornerShape(20.dp),
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 0.dp),
-                    modifier = Modifier.height(36.dp),
-                    enabled = (selectedTags.isNotEmpty() || reviewText.isNotBlank() || reviewImages.isNotEmpty()) && !isSubmitting
-                ) {
-                    if (isSubmitting) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                    else Text("Submit", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                    if (available.y > 0 && source == NestedScrollSource.UserInput) {
+                        scope.launch { offsetY.snapTo(offsetY.value + available.y) }
+                        return Offset(0f, available.y)
+                    }
+                    return Offset.Zero
+                }
+
+                override suspend fun onPreFling(available: Velocity): Velocity {
+                    // 👇 2. Implement the Distance OR Velocity rule
+                    val shouldDismiss = offsetY.value > distanceThreshold ||
+                            (offsetY.value > 10f && available.y > velocityThreshold)
+
+                    if (shouldDismiss) {
+                        currentAttemptClose()
+                        return available
+                    } else if (offsetY.value > 0f) {
+                        // Spring back to the top if they didn't flick hard enough or drag far enough
+                        scope.launch { offsetY.animateTo(0f, spring()) }
+                        return available
+                    }
+                    return Velocity.Zero
                 }
             }
+        }
 
-            Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Color.Black.copy(alpha = 0.6f)
+        ) {
+            val topPadding = WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 40.dp
 
-                Text(clubName, color = Color.Gray, fontSize = 14.sp, modifier = Modifier.padding(bottom = 4.dp))
-                Text("Write Your Review", color = AppColors.TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(bottom = 24.dp))
-
-                // --- ADD PHOTOS TILE UI ---
-                Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Add Photos", color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Text("${reviewImages.size} / 5", color = Color.Gray, fontSize = 14.sp)
-                }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = topPadding)
+                    .offset { IntOffset(0, offsetY.value.toInt()) }
+                    .nestedScroll(nestedScrollConnection)
+                    .background(AppColors.Background, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+            ) {
 
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 32.dp)
-                ) {
-                    for (i in 0 until 5) {
-                        if (i < reviewImages.size) {
-                            Box(modifier = Modifier.size(72.dp).clip(RoundedCornerShape(12.dp))) {
-                                AsyncImage(
-                                    model = reviewImages[i], contentDescription = "Preview",
-                                    modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop
-                                )
-                                IconButton(
-                                    onClick = {
-                                        val mutableList = reviewImages.toMutableList()
-                                        mutableList.removeAt(i)
-                                        reviewImages = mutableList
-                                    },
-                                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(20.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                                ) {
-                                    Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color.White, modifier = Modifier.size(12.dp))
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .pointerInput(Unit) {
+                            detectVerticalDragGestures(
+                                onVerticalDrag = { _, dragAmount ->
+                                    if (dragAmount > 0 || offsetY.value > 0f) {
+                                        scope.launch { offsetY.snapTo((offsetY.value + dragAmount).coerceAtLeast(0f)) }
+                                    }
+                                },
+                                onDragEnd = {
+                                    // 👇 3. Apply the 1/3 distance rule for slow drags on the Top Bar
+                                    if (offsetY.value > distanceThreshold) {
+                                        currentAttemptClose()
+                                    } else {
+                                        scope.launch { offsetY.animateTo(0f, spring()) }
+                                    }
                                 }
-                            }
-                        } else if (i == reviewImages.size) {
-                            Box(
-                                modifier = Modifier
-                                    .size(72.dp)
-                                    .background(Color(0xFF333947).copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                                    .border(1.dp, Color.Gray.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                                    .clickable { reviewMediaLauncher.launch() },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.CameraAlt, contentDescription = "Add Photo", tint = Color.Gray, modifier = Modifier.size(28.dp))
-                            }
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(72.dp)
-                                    .background(Color.Transparent, RoundedCornerShape(12.dp))
-                                    .border(1.dp, Color.Gray.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
                             )
                         }
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(color = Color.Black.copy(alpha = 0.5f), shape = CircleShape) {
+                        IconButton(onClick = { currentAttemptClose() }, modifier = Modifier.size(40.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            if (!isSubmitting) {
+                                isSubmitting = true
+                                onSubmit(selectedTags.toList(), reviewText, reviewImages) { isSubmitting = false; onClose() }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = brandOrange),
+                        shape = RoundedCornerShape(20.dp),
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 0.dp),
+                        modifier = Modifier.height(36.dp),
+                        enabled = hasUnsavedChanges && !isSubmitting
+                    ) {
+                        if (isSubmitting) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        else Text("Submit", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 }
 
-                // --- TAGS (Now using brandOrange) ---
-                Text("Select Tags", color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
-                FlowRow(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    tags.forEach { tag ->
-                        val isSelected = selectedTags.contains(tag)
-                        FilterChip(text = tag, isSelected = isSelected, activeColor = brandOrange, inactiveColor = Color(0xFF2A2D34), onClick = { selectedTags = if (isSelected) selectedTags - tag else selectedTags + tag })
+                Column(modifier = Modifier.weight(1f).verticalScroll(scrollState).padding(horizontal = 24.dp)) {
+
+                    Text(clubName, color = Color.Gray, fontSize = 14.sp, modifier = Modifier.padding(bottom = 4.dp))
+                    Text("Write Your Review", color = AppColors.TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(bottom = 24.dp))
+
+                    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Add Photos", color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text("${reviewImages.size} / 5", color = Color.Gray, fontSize = 14.sp)
                     }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 32.dp)
+                    ) {
+                        for (i in 0 until 5) {
+                            if (i < reviewImages.size) {
+                                Box(modifier = Modifier.size(100.dp).clip(RoundedCornerShape(12.dp))) {
+                                    AsyncImage(
+                                        model = reviewImages[i], contentDescription = "Preview",
+                                        modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop
+                                    )
+                                    IconButton(
+                                        onClick = {
+                                            val mutableList = reviewImages.toMutableList()
+                                            mutableList.removeAt(i)
+                                            reviewImages = mutableList
+                                        },
+                                        modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(20.dp).background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                                    ) {
+                                        Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color.White, modifier = Modifier.size(12.dp))
+                                    }
+                                }
+                            } else if (i == reviewImages.size) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(100.dp)
+                                        .background(cardBg, RoundedCornerShape(12.dp))
+                                        .border(1.dp, Color.Gray.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                        .clickable { reviewMediaLauncher.launch() },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.CameraAlt, contentDescription = "Add Photo", tint = Color.Gray, modifier = Modifier.size(28.dp))
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(100.dp)
+                                        .background(Color.Transparent, RoundedCornerShape(12.dp))
+                                        .border(1.dp, Color.Gray.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                                )
+                            }
+                        }
+                    }
+
+                    Text("Surface & Equipment", color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+                    FlowRow(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        equipmentTags.forEach { tag ->
+                            val isSelected = selectedTags.contains(tag)
+                            FilterChip(text = tag, isSelected = isSelected, activeColor = brandOrange, inactiveColor = cardBg, onClick = { selectedTags = if (isSelected) selectedTags - tag else selectedTags + tag })
+                        }
+                    }
+
+                    Text("Vibe & Community", color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+                    FlowRow(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        vibeTags.forEach { tag ->
+                            val isSelected = selectedTags.contains(tag)
+                            FilterChip(text = tag, isSelected = isSelected, activeColor = brandOrange, inactiveColor = cardBg, onClick = { selectedTags = if (isSelected) selectedTags - tag else selectedTags + tag })
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = reviewText,
+                        onValueChange = { if (it.length <= 500) reviewText = it },
+                        placeholder = { Text("Describe your experience... (optional)", color = Color.Gray) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = cardBg, unfocusedContainerColor = cardBg,
+                            focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+                            focusedTextColor = AppColors.TextPrimary, unfocusedTextColor = AppColors.TextPrimary
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        supportingText = {
+                            Text("${reviewText.length} / 500", color = Color.Gray, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(100.dp + systemNavHeight))
                 }
 
-                // --- TEXT FIELD ---
-                OutlinedTextField(
-                    value = reviewText,
-                    onValueChange = { if (it.length <= 500) reviewText = it },
-                    placeholder = { Text("Describe your experience... (optional)", color = Color.Gray) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color(0xFF2A2D34), unfocusedContainerColor = Color(0xFF2A2D34),
-                        focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                        focusedTextColor = AppColors.TextPrimary, unfocusedTextColor = AppColors.TextPrimary
-                    ),
-                    shape = RoundedCornerShape(16.dp),
-                    supportingText = {
-                        Text("${reviewText.length} / 500", color = Color.Gray, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                Surface(
+                    color = AppColors.Background.copy(alpha = 0.95f),
+                    modifier = Modifier.fillMaxWidth().align(Alignment.CenterHorizontally)
+                ) {
+                    Button(
+                        onClick = {
+                            if (!isSubmitting) {
+                                isSubmitting = true
+                                onSubmit(selectedTags.toList(), reviewText, reviewImages) { isSubmitting = false; onClose() }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp + systemNavHeight).height(56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = brandOrange),
+                        shape = RoundedCornerShape(28.dp),
+                        enabled = hasUnsavedChanges && !isSubmitting
+                    ) {
+                        if (isSubmitting) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                        else Text("Submit Review", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     }
-                )
-
-                Spacer(modifier = Modifier.height(100.dp + systemNavHeight))
+                }
             }
 
-            // --- BOTTOM SUBMIT BUTTON (Now using brandOrange) ---
-            Surface(
-                color = AppColors.Background.copy(alpha = 0.95f),
-                modifier = Modifier.fillMaxWidth().align(Alignment.CenterHorizontally)
-            ) {
-                Button(
-                    onClick = {
-                        if (!isSubmitting) {
-                            isSubmitting = true
-                            onSubmit(selectedTags.toList(), reviewText, reviewImages) { isSubmitting = false; onClose() }
+            if (showExitConfirmation) {
+                AlertDialog(
+                    onDismissRequest = { showExitConfirmation = false },
+                    containerColor = cardBg,
+                    title = {
+                        Text("Discard Review?", fontWeight = FontWeight.Bold, color = AppColors.TextPrimary)
+                    },
+                    text = {
+                        Text("You have unsaved changes. Are you sure you want to discard this review?", color = Color.LightGray)
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showExitConfirmation = false
+                            onClose()
+                        }) {
+                            Text("Discard", color = Color(0xFFE57373), fontWeight = FontWeight.Bold)
                         }
                     },
-                    modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp + systemNavHeight).height(56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = brandOrange),
-                    shape = RoundedCornerShape(28.dp),
-                    enabled = (selectedTags.isNotEmpty() || reviewText.isNotBlank() || reviewImages.isNotEmpty()) && !isSubmitting
-                ) {
-                    if (isSubmitting) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                    else Text("Submit Review", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                }
+                    dismissButton = {
+                        TextButton(onClick = { showExitConfirmation = false }) {
+                            Text("Keep Editing", color = brandOrange, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                )
             }
         }
     }
@@ -1177,7 +1320,10 @@ fun AddReviewFullScreen(
 @Composable
 fun ClubDetailsFullScreen(
     club: TTClub, brandOrange: Color, systemNavHeight: Dp,
-    viewModel: LocationViewModel, currentUserId: String, onClose: () -> Unit
+    viewModel: LocationViewModel, currentUserId: String, onClose: () -> Unit,
+    currentOffset: Float,
+    onDragDelta: (Float) -> Unit,
+    onDragStopped: (Float) -> Unit
 ) {
     val reviews by viewModel.clubReviews.collectAsState()
     val hasReviewed = remember(reviews, currentUserId) { reviews.any { it.userId == currentUserId } }
@@ -1213,46 +1359,87 @@ fun ClubDetailsFullScreen(
 
     val aggregatedTags = remember(reviews) { reviews.flatMap { it.tags }.groupingBy { it }.eachCount() }
 
-    // --- SCROLL & ANIMATION MATH ---
     val scrollState = rememberScrollState()
     val density = LocalDensity.current
     val headerHeightDp = 320.dp
     val headerHeightPx = with(density) { headerHeightDp.toPx() }
     val topInsetPx = WindowInsets.systemBars.getTop(density).toFloat()
 
-    // Title Alignment Math
     val titleStartY = headerHeightPx
-    val titleFinalY = topInsetPx + with(density) { 18.dp.toPx() }
-    val pinDistance = titleStartY - titleFinalY
+    val titleEndY = topInsetPx + with(density) { 16.dp.toPx() }
+    val pinDistance = titleStartY - titleEndY
 
-    // Progress 0f (card) to 1f (top bar)
     val progress = if (pinDistance > 0) (scrollState.value.toFloat() / pinDistance).coerceIn(0f, 1f) else 1f
 
-    // Title smooth scaling instead of font-size popping
     val targetScale = 20f / 26f
     val currentScale = 1f - ((1f - targetScale) * progress)
 
-    val titleXOffsetDp = androidx.compose.ui.unit.lerp(24.dp, 64.dp, progress)
-    val titleYOffsetPx = maxOf(titleFinalY, titleStartY - scrollState.value)
+    val startX = with(density) { 24.dp.toPx() }
+    val endX = with(density) { 56.dp.toPx() }
 
-    Box(modifier = Modifier.fillMaxSize().background(AppColors.SurfaceDark)) {
+    // 👇 Wrapped captured Float/Lambdas in rememberUpdatedState to ensure the Connection does not lock onto initial states!
+    val currentOffsetState = rememberUpdatedState(currentOffset)
+    val currentOnDragDelta = rememberUpdatedState(onDragDelta)
+    val currentOnDragStopped = rememberUpdatedState(onDragStopped)
 
-        // --- LAYER 1: MAIN SCROLLABLE CONTENT ---
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // Read from State correctly!
+                if (available.y < 0 && currentOffsetState.value > 0f && source == NestedScrollSource.UserInput) {
+                    currentOnDragDelta.value(available.y)
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (available.y > 0 && source == NestedScrollSource.UserInput) {
+                    currentOnDragDelta.value(available.y)
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (currentOffsetState.value > 5f || (available.y > 200f && scrollState.value == 0)) {
+                    currentOnDragStopped.value(available.y)
+                    return available
+                }
+                return Velocity.Zero
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                if (currentOffsetState.value > 0f) {
+                    currentOnDragStopped.value(available.y)
+                }
+                return Velocity.Zero
+            }
+        }
+    }
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+        // 👇 REMOVED the root nested scroll connection here. Wrapping it broadly caused the parent container
+        // to unconditionally absorb down-swipes from child compose panels (like AddReviewFullScreen).
+    ) {
+        val maxTextWidth = maxWidth - 80.dp
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // 👇 MOVED the connection specifically to the target column so sibling layers don't propagate gesture events.
+                .nestedScroll(nestedScrollConnection)
                 .verticalScroll(scrollState)
                 .padding(bottom = 100.dp + systemNavHeight)
         ) {
-            // HERO IMAGE PAGER
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(headerHeightDp)
-                    .graphicsLayer {
-                        translationY = scrollState.value * 0.5f
-                        alpha = (1f - (scrollState.value.toFloat() / (headerHeightPx * 0.7f))).coerceIn(0f, 1f)
-                    }
+                modifier = Modifier.fillMaxWidth().height(headerHeightDp).graphicsLayer {
+                    val scrollOffset = scrollState.value.toFloat()
+                    alpha = (1f - (scrollOffset / (headerHeightPx * 0.8f))).coerceIn(0f, 1f)
+                    translationY = scrollOffset * 0.5f
+                }
             ) {
                 val pagerState = rememberPagerState(pageCount = { maxOf(1, allGalleryImages.size) })
                 if (allGalleryImages.isNotEmpty()) {
@@ -1276,23 +1463,15 @@ fun ClubDetailsFullScreen(
                 }
             }
 
-            // DETAILS CARD
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .offset(y = (-24).dp)
-                    .background(AppColors.SurfaceDark, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .padding(24.dp)
+                modifier = Modifier.fillMaxWidth().offset(y = (-24).dp).background(AppColors.Background, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).padding(24.dp)
             ) {
                 Spacer(modifier = Modifier.height(34.dp))
                 Spacer(modifier = Modifier.height(8.dp))
-
                 val locationTypeStr = club.type.name.lowercase().replaceFirstChar { it.uppercase() }
                 Text("Distance: ${club.distance}", color = Color.LightGray, fontSize = 14.sp)
                 Text("Type: $locationTypeStr • ${club.tables} Tables", color = brandOrange, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
-
                 Spacer(modifier = Modifier.height(24.dp))
-
                 Text("What People Say", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
                 if (aggregatedTags.isNotEmpty()) {
                     FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1303,9 +1482,7 @@ fun ClubDetailsFullScreen(
                         }
                     }
                 }
-
                 Spacer(modifier = Modifier.height(32.dp))
-
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("Community Reviews (${reviews.size})", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     if (!hasReviewed) {
@@ -1314,9 +1491,7 @@ fun ClubDetailsFullScreen(
                         }
                     }
                 }
-
                 Spacer(modifier = Modifier.height(16.dp))
-
                 if (reviews.isEmpty()) {
                     Text("No reviews yet. Be the first to review!", color = Color.Gray)
                 } else {
@@ -1359,80 +1534,63 @@ fun ClubDetailsFullScreen(
             }
         }
 
-        // --- LAYER 2: STICKY TOP BAR (Buttons Background) ---
         val topBarBgAlpha = progress.coerceIn(0f, 1f)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(AppColors.SurfaceDark.copy(alpha = topBarBgAlpha))
+                .background(AppColors.Background.copy(alpha = topBarBgAlpha))
                 .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragCancel = { currentOnDragStopped.value(0f) },
+                        onVerticalDrag = { _, dragAmount ->
+                            if (dragAmount > 0 || currentOffsetState.value > 0f) {
+                                currentOnDragDelta.value(dragAmount)
+                            }
+                        },
+                        onDragEnd = {
+                            currentOnDragStopped.value(0f)
+                        }
+                    )
+                }
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(
-                onClick = onClose,
-                modifier = Modifier.background(Color.Black.copy(alpha = 0.5f * (1f - topBarBgAlpha)), CircleShape).size(40.dp)
-            ) {
-                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+            Surface(color = Color.Black.copy(alpha = 0.5f * (1f - topBarBgAlpha)), shape = CircleShape) {
+                IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
+                }
             }
             Spacer(modifier = Modifier.weight(1f))
             if (hasReviewed) {
-                IconButton(
-                    onClick = { galleryLauncher.launch() },
-                    modifier = Modifier.background(brandOrange, CircleShape).size(40.dp)
-                ) {
-                    if (isUploadingGallery) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Default.CameraAlt, contentDescription = "Add Photo", tint = Color.White, modifier = Modifier.size(20.dp))
+                Surface(color = brandOrange, shape = CircleShape) {
+                    IconButton(onClick = { galleryLauncher.launch() }, modifier = Modifier.size(40.dp)) {
+                        if (isUploadingGallery) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        else Icon(Icons.Default.CameraAlt, contentDescription = "Add Photo", tint = Color.White, modifier = Modifier.size(20.dp))
+                    }
                 }
-            } else {
-                Spacer(modifier = Modifier.size(40.dp))
-            }
+            } else { Spacer(modifier = Modifier.size(40.dp)) }
         }
 
-        // --- LAYER 3: THE MAGIC FLOATING TITLE ---
         Text(
-            text = club.name,
-            color = AppColors.TextPrimary,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.ExtraBold,
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            modifier = Modifier
-                .padding(start = titleXOffsetDp, end = 64.dp)
-                .offset { IntOffset(0, titleYOffsetPx.roundToInt()) }
-                .graphicsLayer {
-                    scaleX = currentScale
-                    scaleY = currentScale
-                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
-                }
+            text = club.name, color = AppColors.TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.width(maxTextWidth).graphicsLayer {
+                translationX = startX + (endX - startX) * progress
+                translationY = maxOf(titleEndY, titleStartY - scrollState.value)
+                scaleX = currentScale
+                scaleY = currentScale
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+            }
         )
 
-        // --- LAYER 4: STICKY BOTTOM BAR ---
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, AppColors.SurfaceDark.copy(alpha = 0.9f), AppColors.SurfaceDark)))
-                .padding(horizontal = 24.dp, vertical = 16.dp)
-                .padding(bottom = systemNavHeight)
-        ) {
+        Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.Transparent, AppColors.Background.copy(alpha = 0.9f), AppColors.Background))).padding(horizontal = 24.dp, vertical = 16.dp).padding(bottom = systemNavHeight)) {
             if (!hasReviewed) {
-                Button(
-                    onClick = { isWritingReview = true },
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = brandOrange),
-                    shape = RoundedCornerShape(28.dp)
-                ) {
+                Button(onClick = { isWritingReview = true }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = brandOrange), shape = RoundedCornerShape(28.dp)) {
                     Text("Add Your Review", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
-            } else {
-                Text("Thanks for reviewing! 🎉", color = brandOrange, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Center))
-            }
+            } else { Text("Thanks for reviewing! 🎉", color = brandOrange, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.Center)) }
         }
 
-        // --- OVERLAYS ---
-
-        // 1. Add Review Overlay
         AnimatedVisibility(
             visible = isWritingReview,
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
@@ -1446,104 +1604,167 @@ fun ClubDetailsFullScreen(
             )
         }
 
-        // 2. 👇 NEW EDGE-TO-EDGE GALLERY OVERLAY (Replaces Dialog)
-        AnimatedVisibility(
-            visible = fullScreenInitialPage != null,
-            enter = fadeIn(tween(300)) + scaleIn(initialScale = 0.9f, animationSpec = tween(300)),
-            exit = fadeOut(tween(300)) + scaleOut(targetScale = 0.9f),
-            modifier = Modifier.fillMaxSize().zIndex(200f)
-        ) {
-            if (fullScreenInitialPage != null && allGalleryImages.isNotEmpty()) {
-                val pagerState = rememberPagerState(initialPage = fullScreenInitialPage!!, pageCount = { allGalleryImages.size })
+        if (fullScreenInitialPage != null && allGalleryImages.isNotEmpty()) {
+            androidx.compose.ui.window.Popup(
+                alignment = Alignment.Center,
+                onDismissRequest = { fullScreenInitialPage = null },
+                properties = androidx.compose.ui.window.PopupProperties(
+                    focusable = true,
+                    dismissOnBackPress = true,
+                    dismissOnClickOutside = true,
+                    clippingEnabled = false
+                )
+            ) {
+                BoxWithConstraints {
+                    val popupWidth = maxWidth
+                    val popupHeight = maxHeight
+                    val popupHeightPx = with(LocalDensity.current) { popupHeight.toPx() }
 
-                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.95f))) {
-                    HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-                        val image = allGalleryImages[page]
-                        var scale by remember { mutableFloatStateOf(1f) }
-                        var offset by remember { mutableStateOf(Offset.Zero) }
+                    val transitionState = remember { MutableTransitionState(false).apply { targetState = true } }
 
-                        LaunchedEffect(pagerState.currentPage) {
-                            if (pagerState.currentPage != page) { scale = 1f; offset = Offset.Zero }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .pointerInput(Unit) {
-                                    detectTapGestures(
-                                        onDoubleTap = {
-                                            if (scale > 1.05f) { scale = 1f; offset = Offset.Zero }
-                                            else { scale = 2.5f }
-                                        }
-                                    )
-                                }
-                                .pointerInput(Unit) {
-                                    awaitEachGesture {
-                                        awaitFirstDown()
-                                        do {
-                                            val event = awaitPointerEvent()
-                                            val zoom = event.calculateZoom()
-                                            val pan = event.calculatePan()
-
-                                            if (scale > 1.05f || event.changes.size > 1) {
-                                                event.changes.forEach { it.consume() }
-                                                scale = (scale * zoom).coerceIn(1f, 5f)
-
-                                                val maxPanX = (size.width * (scale - 1)) / 2
-                                                val maxPanY = (size.height * (scale - 1)) / 2
-
-                                                offset = Offset(
-                                                    (offset.x + pan.x).coerceIn(-maxPanX, maxPanX),
-                                                    (offset.y + pan.y).coerceIn(-maxPanY, maxPanY)
-                                                )
-                                            }
-                                        } while (event.changes.any { it.pressed })
-                                    }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            AsyncImage(
-                                model = image.url,
-                                contentDescription = "Full Screen Image",
-                                modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y },
-                                contentScale = ContentScale.Fit
-                            )
-                        }
-                    }
-
-                    // Top UI: Edge-to-edge aware Close Button & Counter
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top)) // Draws under status bar but stays visible
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    AnimatedVisibility(
+                        visibleState = transitionState,
+                        enter = fadeIn(tween(300)) + scaleIn(initialScale = 0.9f, animationSpec = tween(300)),
+                        exit = fadeOut(tween(300)) + scaleOut(targetScale = 0.9f),
+                        modifier = Modifier.size(popupWidth, popupHeight)
                     ) {
-                        Surface(color = Color.Black, shape = CircleShape) {
-                            IconButton(onClick = { fullScreenInitialPage = null }, modifier = Modifier.size(40.dp)) {
-                                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
+                        val galleryOffsetY = remember { Animatable(0f) }
+                        var isGalleryZoomed by remember { mutableStateOf(false) }
+
+                        val handleDragEnd = {
+                            if (galleryOffsetY.value.absoluteValue > 150f) {
+                                scope.launch {
+                                    val target = if (galleryOffsetY.value > 0) popupHeightPx else -popupHeightPx
+                                    launch { galleryOffsetY.animateTo(target, tween(250)) }
+                                    transitionState.targetState = false
+                                    delay(250)
+                                    fullScreenInitialPage = null
+                                }
+                            } else {
+                                scope.launch { galleryOffsetY.animateTo(0f, spring()) }
                             }
                         }
-                        Surface(color = Color.Black, shape = CircleShape) {
-                            Text(text = "${pagerState.currentPage + 1} of ${allGalleryImages.size}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                        }
-                    }
 
-                    val currentImage = allGalleryImages[pagerState.currentPage]
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .background(androidx.compose.ui.graphics.Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))))
-                            .padding(bottom = 48.dp + systemNavHeight, top = 24.dp), // Aware of system navigation
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Surface(color = Color.Black.copy(alpha = 0.6f), shape = RoundedCornerShape(20.dp)) {
-                            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text("📸", fontSize = 16.sp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(text = "Uploaded by ${currentImage.authorName}", color = Color.White, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(
+                                        alpha = 0.95f * (1f - (galleryOffsetY.value.absoluteValue / (popupHeightPx / 2)).coerceIn(0f, 1f))
+                                    ))
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .offset { IntOffset(0, galleryOffsetY.value.toInt()) }
+                                    .pointerInput(isGalleryZoomed) {
+                                        if (!isGalleryZoomed) {
+                                            detectVerticalDragGestures(
+                                                onDragEnd = { handleDragEnd() },
+                                                onVerticalDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    scope.launch { galleryOffsetY.snapTo(galleryOffsetY.value + dragAmount) }
+                                                }
+                                            )
+                                        }
+                                    }
+                            ) {
+                                val pagerState = rememberPagerState(initialPage = fullScreenInitialPage!!, pageCount = { allGalleryImages.size })
+
+                                HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                                    val image = allGalleryImages[page]
+                                    var scale by remember { mutableFloatStateOf(1f) }
+                                    var offset by remember { mutableStateOf(Offset.Zero) }
+
+                                    LaunchedEffect(pagerState.currentPage) {
+                                        if (pagerState.currentPage != page) { scale = 1f; offset = Offset.Zero }
+                                    }
+
+                                    LaunchedEffect(scale) {
+                                        isGalleryZoomed = scale > 1.05f
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .pointerInput(Unit) {
+                                                detectTapGestures(
+                                                    onDoubleTap = {
+                                                        if (scale > 1.05f) { scale = 1f; offset = Offset.Zero }
+                                                        else { scale = 2.5f }
+                                                    }
+                                                )
+                                            }
+                                            .pointerInput(Unit) {
+                                                awaitEachGesture {
+                                                    awaitFirstDown()
+                                                    do {
+                                                        val event = awaitPointerEvent()
+                                                        val zoom = event.calculateZoom()
+                                                        val pan = event.calculatePan()
+
+                                                        if (scale > 1.05f || event.changes.size > 1) {
+                                                            event.changes.forEach { it.consume() }
+                                                            scale = (scale * zoom).coerceIn(1f, 5f)
+
+                                                            val maxPanX = (size.width * (scale - 1)) / 2
+                                                            val maxPanY = (size.height * (scale - 1)) / 2
+
+                                                            offset = Offset(
+                                                                (offset.x + pan.x).coerceIn(-maxPanX, maxPanX),
+                                                                (offset.y + pan.y).coerceIn(-maxPanY, maxPanY)
+                                                            )
+                                                        }
+                                                    } while (event.changes.any { it.pressed })
+                                                }
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        AsyncImage(
+                                            model = image.url,
+                                            contentDescription = "Full Screen Image",
+                                            modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y },
+                                            contentScale = ContentScale.Fit
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(color = Color.Black.copy(alpha = 0.5f), shape = CircleShape) {
+                                        IconButton(onClick = { fullScreenInitialPage = null }, modifier = Modifier.size(40.dp)) {
+                                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
+                                        }
+                                    }
+                                    Surface(color = Color.Black.copy(alpha = 0.5f), shape = CircleShape) {
+                                        Text(text = "${pagerState.currentPage + 1} of ${allGalleryImages.size}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                                    }
+                                }
+
+                                val currentImage = allGalleryImages[pagerState.currentPage]
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .fillMaxWidth()
+                                        .background(androidx.compose.ui.graphics.Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))))
+                                        .padding(bottom = 48.dp + systemNavHeight, top = 24.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Surface(color = Color.Black.copy(alpha = 0.6f), shape = RoundedCornerShape(20.dp)) {
+                                        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Text("📸", fontSize = 16.sp)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(text = "Uploaded by ${currentImage.authorName}", color = Color.White, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
