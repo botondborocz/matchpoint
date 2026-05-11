@@ -18,4 +18,6 @@ interface TokenStorage {
     fun clearMapChoice()
     fun saveAppTheme(theme: String)
     fun getAppTheme(): String?
+    fun saveAppIcon(iconAlias: String)
+    fun getAppIcon(): String?
 }

@@ -7,4 +7,5 @@ import org.ttproject.data.TokenStorage
 
 actual val platformModule: Module = module {
     single<TokenStorage> { IosTokenStorage() }
+    single<AppIconManager> { IosAppIconManager() }
 }

@@ -38,6 +38,8 @@ import org.ttproject.components.DesktopSidebar
 import org.ttproject.components.MobileBottomNavPill
 import org.ttproject.components.MobileTopBar
 import org.ttproject.data.TokenStorage
+import org.ttproject.icon.AppIconManager
+import org.ttproject.icon.PremiumAppIcon
 import org.ttproject.screens.AiHubScreen
 import org.ttproject.screens.ChatDetailScreen
 import org.ttproject.screens.DummyAiChatPlayground
@@ -68,6 +70,7 @@ fun App(
     onChatConsumed: () -> Unit = {}
 ) {
     val tokenStorage: TokenStorage = koinInject()
+    val appIconManager: AppIconManager = koinInject()
     val rootNavController = rememberNavController()
 
     // 👇 1. ADDED: State to track if the Map's floating buttons are visible
@@ -139,7 +142,14 @@ fun App(
                 else -> AppThemeStyle.DEFAULT
             }
         )
-    } // Ide jön majd a mentett érték betöltése
+    }
+
+    // 👇 NEW: Load the saved AppIcon from storage, defaulting to DEFAULT
+    var currentAppIcon by remember {
+        mutableStateOf(
+            PremiumAppIcon.entries.find { it.alias == tokenStorage.getAppIcon() } ?: PremiumAppIcon.DEFAULT
+        )
+    }
 
     val isSystemDark = isSystemInDarkTheme()
     val isCurrentlyDark = when (currentThemeMode) {
@@ -274,6 +284,7 @@ fun App(
                                                             ProfileScreen(
                                                                 currentLanguage = currentLanguage,
                                                                 currentThemeMode = currentThemeMode,
+                                                                currentAppIcon = currentAppIcon,
                                                                 onLogoutClick = {
                                                                     tokenStorage.clearToken()
                                                                     tokenStorage.clearLanguage()
@@ -312,6 +323,11 @@ fun App(
                                                                     )
                                                                     currentThemeStyle = newStyle
                                                                     // Itt még el is mentheted a választást, ha szeretnéd
+                                                                },
+                                                                onChangeAppIcon = { newIcon ->
+                                                                    tokenStorage.saveAppIcon(newIcon.alias)
+                                                                    currentAppIcon = newIcon
+                                                                    appIconManager.changeIcon(newIcon) // Triggers the OS level change
                                                                 }
                                                             )
                                                         } else {

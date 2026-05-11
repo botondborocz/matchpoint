@@ -6,7 +6,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.ttproject.data.TokenStorage
 import org.ttproject.data.UserBadgeMetricsDto
+import org.ttproject.icon.AppIconManager
+import org.ttproject.icon.PremiumAppIcon
 import org.ttproject.repository.UserRepository
 
 sealed class ProfileState {
@@ -38,8 +41,10 @@ sealed class UpdateState {
 }
 
 class ProfileViewModel(
-    private val userRepository: UserRepository
-) : ViewModel() {
+    private val userRepository: UserRepository,
+    private val appIconManager: AppIconManager,
+    private val tokenStorage: TokenStorage
+    ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ProfileState>(ProfileState.Loading)
     val uiState: StateFlow<ProfileState> = _uiState
@@ -139,5 +144,27 @@ class ProfileViewModel(
 
     fun resetState() {
         _updateState.value = UpdateState.Idle
+    }
+
+    fun changeAppIcon(icon: PremiumAppIcon, isUserPremium: Boolean) {
+        // Double-check premium status just in case
+        if (icon.isPremium && !isUserPremium) {
+            _updateState.value = UpdateState.Error("Ez egy prémium ikon!")
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                // 1. Tell the OS to change the icon (Android / iOS native code)
+                appIconManager.changeIcon(icon)
+
+                // 2. Save it to local storage so the app remembers it on next boot
+                tokenStorage.saveAppIcon(icon.alias)
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _updateState.value = UpdateState.Error("Nem sikerült megváltoztatni az ikont.")
+            }
+        }
     }
 }

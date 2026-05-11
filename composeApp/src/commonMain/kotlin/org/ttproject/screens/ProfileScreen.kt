@@ -98,9 +98,11 @@ import org.ttproject.AppThemeStyle
 import org.ttproject.LocalAppThemeStyle
 import org.ttproject.components.NativeDatePickerField
 import org.ttproject.components.NativeDropdownField
+import org.ttproject.components.PremiumAppIconSelector
 import org.ttproject.components.PremiumThemeSelector
 import org.ttproject.data.BadgeData
 import org.ttproject.data.TokenStorage
+import org.ttproject.icon.PremiumAppIcon
 import org.ttproject.isIosPlatform
 import ttproject.composeapp.generated.resources.Res as AppRes
 
@@ -108,12 +110,14 @@ import ttproject.composeapp.generated.resources.Res as AppRes
 fun ProfileScreen(
     currentLanguage: String = "en",
     currentAppThemeStyle: AppThemeStyle = LocalAppThemeStyle.current, // 👈 ÚJ
+    currentAppIcon: PremiumAppIcon = PremiumAppIcon.DEFAULT, // 👈 ÚJ
     isUserPremium: Boolean = true, // 👈 ÚJ: Később kösd be a ProfileState-ből
     currentThemeMode: ThemeMode = ThemeMode.System,
     onLogoutClick: () -> Unit = {},
     onChangeLanguage: (String) -> Unit = {},
     onChangeTheme: (ThemeMode) -> Unit = {},
     onChangeAppThemeStyle: (AppThemeStyle) -> Unit = {},
+    onChangeAppIcon: (PremiumAppIcon) -> Unit = {},
     viewModel: ProfileViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -356,11 +360,13 @@ fun ProfileScreen(
                                 currentLanguage = currentLanguage,
                                 currentThemeMode = currentThemeMode,
                                 currentAppThemeStyle = currentAppThemeStyle, // 👈 ÚJ
+                                currentAppIcon = currentAppIcon,
                                 isUserPremium = isUserPremium, // 👈 ÚJ
                                 onLogoutClick = { viewModel.clearProfile(); onLogoutClick() },
                                 onChangeLanguage = onChangeLanguage,
                                 onChangeTheme = onChangeTheme,
                                 onChangeAppThemeStyle = onChangeAppThemeStyle, // 👈 ÚJ
+                                onChangeAppIcon = onChangeAppIcon,
                                 viewModel = viewModel,
                                 snackbarHostState = snackbarHostState
                             )
@@ -930,11 +936,13 @@ private fun SettingsAndLogout(
     currentLanguage: String,
     currentThemeMode: ThemeMode,
     currentAppThemeStyle: AppThemeStyle,
+    currentAppIcon: PremiumAppIcon,
     isUserPremium: Boolean,
     onLogoutClick: () -> Unit,
     onChangeLanguage: (String) -> Unit,
     onChangeTheme: (ThemeMode) -> Unit,
     onChangeAppThemeStyle: (AppThemeStyle) -> Unit,
+    onChangeAppIcon: (PremiumAppIcon) -> Unit,
     viewModel: ProfileViewModel,
     snackbarHostState: SnackbarHostState, // 👈 Accept the state
     tokenStorage: TokenStorage = koinInject()
@@ -951,6 +959,17 @@ private fun SettingsAndLogout(
                 scope.launch {
                     snackbarHostState.showSnackbar("Ez egy prémium téma! Oldd fel az előfizetéssel.")
                 }
+            }
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        PremiumAppIconSelector(
+            currentAppIcon = currentAppIcon,
+            isUserPremium = isUserPremium,
+            onIconSelected = onChangeAppIcon,
+            onPremiumLockedClick = {
+                scope.launch { snackbarHostState.showSnackbar("Ez egy prémium ikon! Oldd fel az előfizetéssel.") }
             }
         )
 

@@ -81,6 +81,8 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.Velocity
 import androidx.navigationevent.compose.NavigationBackHandler
@@ -1010,7 +1012,8 @@ fun AddTableFullScreen(
     ExperimentalComposeUiApi::class
 )
 @Composable
-fun AddReviewFullScreen(
+// 👇 1. Add AnimatedVisibilityScope here!
+fun AnimatedVisibilityScope.AddReviewFullScreen(
     clubName: String,
     brandOrange: Color,
     cardBg: Color,
@@ -1110,6 +1113,7 @@ fun AddReviewFullScreen(
             }
         }
 
+        // The Dark Overlay (This will just gracefully Fade In from the parent)
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = Color.Black.copy(alpha = 0.6f)
@@ -1119,13 +1123,24 @@ fun AddReviewFullScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    // 👇 2. Tell the sheet to Slide Up/Down independently of the fade!
+                    .animateEnterExit(
+                        enter = slideInVertically(
+                            initialOffsetY = { it },
+                            animationSpec = tween(350, easing = FastOutSlowInEasing)
+                        ),
+                        exit = slideOutVertically(
+                            targetOffsetY = { it },
+                            animationSpec = tween(250)
+                        )
+                    )
+                    // Ensure padding and offset come AFTER the animateEnterExit
                     .padding(top = topPadding)
                     .offset { IntOffset(0, offsetY.value.toInt()) }
                     .nestedScroll(nestedScrollConnection)
                     .background(AppColors.Background, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
             ) {
-
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1365,8 +1380,14 @@ fun ClubDetailsFullScreen(
     val headerHeightPx = with(density) { headerHeightDp.toPx() }
     val topInsetPx = WindowInsets.systemBars.getTop(density).toFloat()
 
+    // 👇 1. TRACK OVERSCROLL: We use these to catch the iOS native rubber-band effect!
+    var overscrollAmount by remember { mutableFloatStateOf(0f) }
+    var initialSpacerY by remember { mutableFloatStateOf(Float.NaN) }
+
     val titleStartY = headerHeightPx
-    val titleEndY = topInsetPx + with(density) { 16.dp.toPx() }
+
+    // 👇 2. PERFECT ALIGNMENT: 20.dp pushes the text center to perfectly match the 40.dp close button center!
+    val titleEndY = topInsetPx + with(density) { 20.dp.toPx() }
     val pinDistance = titleStartY - titleEndY
 
     val progress = if (pinDistance > 0) (scrollState.value.toFloat() / pinDistance).coerceIn(0f, 1f) else 1f
@@ -1375,9 +1396,8 @@ fun ClubDetailsFullScreen(
     val currentScale = 1f - ((1f - targetScale) * progress)
 
     val startX = with(density) { 24.dp.toPx() }
-    val endX = with(density) { 56.dp.toPx() }
+    val endX = with(density) { 66.dp.toPx() }
 
-    // 👇 Wrapped captured Float/Lambdas in rememberUpdatedState to ensure the Connection does not lock onto initial states!
     val currentOffsetState = rememberUpdatedState(currentOffset)
     val currentOnDragDelta = rememberUpdatedState(onDragDelta)
     val currentOnDragStopped = rememberUpdatedState(onDragStopped)
@@ -1385,7 +1405,6 @@ fun ClubDetailsFullScreen(
     val nestedScrollConnection = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                // Read from State correctly!
                 if (available.y < 0 && currentOffsetState.value > 0f && source == NestedScrollSource.UserInput) {
                     currentOnDragDelta.value(available.y)
                     return Offset(0f, available.y)
@@ -1419,26 +1438,37 @@ fun ClubDetailsFullScreen(
     }
 
     BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-        // 👇 REMOVED the root nested scroll connection here. Wrapping it broadly caused the parent container
-        // to unconditionally absorb down-swipes from child compose panels (like AddReviewFullScreen).
+        modifier = Modifier.fillMaxSize()
     ) {
         val maxTextWidth = maxWidth - 80.dp
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                // 👇 MOVED the connection specifically to the target column so sibling layers don't propagate gesture events.
                 .nestedScroll(nestedScrollConnection)
                 .verticalScroll(scrollState)
                 .padding(bottom = 100.dp + systemNavHeight)
         ) {
+            // 👇 3. THE GHOST TRACKER: This 0dp Spacer catches the physical iOS bounce perfectly without causing math loops!
+            Spacer(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(0.dp)
+                    .onGloballyPositioned { coords ->
+                        val y = coords.boundsInRoot().top
+                        if (initialSpacerY.isNaN()) {
+                            initialSpacerY = y
+                        } else {
+                            overscrollAmount = maxOf(0f, y - initialSpacerY)
+                        }
+                    }
+            )
+
             Box(
                 modifier = Modifier.fillMaxWidth().height(headerHeightDp).graphicsLayer {
                     val scrollOffset = scrollState.value.toFloat()
                     alpha = (1f - (scrollOffset / (headerHeightPx * 0.8f))).coerceIn(0f, 1f)
-                    translationY = scrollOffset * 0.5f
+                    translationY = scrollOffset * 0.5f // Standard parallax
                 }
             ) {
                 val pagerState = rememberPagerState(pageCount = { maxOf(1, allGalleryImages.size) })
@@ -1556,7 +1586,7 @@ fun ClubDetailsFullScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(color = Color.Black.copy(alpha = 0.5f * (1f - topBarBgAlpha)), shape = CircleShape) {
+            Surface(color = Color.Black.copy(alpha = 0.5f), shape = CircleShape) {
                 IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
                 }
@@ -1576,7 +1606,8 @@ fun ClubDetailsFullScreen(
             text = club.name, color = AppColors.TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             modifier = Modifier.width(maxTextWidth).graphicsLayer {
                 translationX = startX + (endX - startX) * progress
-                translationY = maxOf(titleEndY, titleStartY - scrollState.value)
+                // 👇 4. Combines hyper-fast scrollState for going up, with overscrollAmount for bouncing down!
+                translationY = maxOf(titleEndY, titleStartY - scrollState.value) + overscrollAmount
                 scaleX = currentScale
                 scaleY = currentScale
                 transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
@@ -1593,8 +1624,8 @@ fun ClubDetailsFullScreen(
 
         AnimatedVisibility(
             visible = isWritingReview,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            enter = fadeIn(animationSpec = tween(300)),
+            exit = fadeOut(animationSpec = tween(200)),
             modifier = Modifier.zIndex(100f)
         ) {
             AddReviewFullScreen(
@@ -1604,165 +1635,171 @@ fun ClubDetailsFullScreen(
             )
         }
 
-        if (fullScreenInitialPage != null && allGalleryImages.isNotEmpty()) {
-            androidx.compose.ui.window.Popup(
-                alignment = Alignment.Center,
-                onDismissRequest = { fullScreenInitialPage = null },
-                properties = androidx.compose.ui.window.PopupProperties(
-                    focusable = true,
-                    dismissOnBackPress = true,
-                    dismissOnClickOutside = true,
-                    clippingEnabled = false
+        var activeImages by remember { mutableStateOf<List<GalleryImage>>(emptyList()) }
+        LaunchedEffect(fullScreenInitialPage) {
+            if (fullScreenInitialPage != null) {
+                activeImages = allGalleryImages
+            }
+        }
+
+        val galleryFullState = rememberNavigationEventState(NavigationEventInfo.None)
+        NavigationBackHandler(
+            state = galleryFullState,
+            isBackEnabled = fullScreenInitialPage != null,
+            onBackCompleted = { fullScreenInitialPage = null }
+        )
+
+        AnimatedVisibility(
+            visible = fullScreenInitialPage != null,
+            enter = fadeIn(tween(300)) + scaleIn(initialScale = 0.9f, animationSpec = tween(300)),
+            exit = fadeOut(tween(300)) + scaleOut(targetScale = 0.9f),
+            modifier = Modifier.zIndex(1000f)
+        ) {
+            if (activeImages.isNotEmpty()) {
+                val safePage = fullScreenInitialPage ?: 0
+                val pagerState = rememberPagerState(
+                    initialPage = safePage,
+                    pageCount = { activeImages.size }
                 )
-            ) {
-                BoxWithConstraints {
-                    val popupWidth = maxWidth
-                    val popupHeight = maxHeight
-                    val popupHeightPx = with(LocalDensity.current) { popupHeight.toPx() }
 
-                    val transitionState = remember { MutableTransitionState(false).apply { targetState = true } }
+                val galleryOffsetY = remember { Animatable(0f) }
+                var isGalleryZoomed by remember { mutableStateOf(false) }
 
-                    AnimatedVisibility(
-                        visibleState = transitionState,
-                        enter = fadeIn(tween(300)) + scaleIn(initialScale = 0.9f, animationSpec = tween(300)),
-                        exit = fadeOut(tween(300)) + scaleOut(targetScale = 0.9f),
-                        modifier = Modifier.size(popupWidth, popupHeight)
-                    ) {
-                        val galleryOffsetY = remember { Animatable(0f) }
-                        var isGalleryZoomed by remember { mutableStateOf(false) }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(
+                            alpha = 0.95f * (1f - (galleryOffsetY.value.absoluteValue / 1500f).coerceIn(0f, 1f))
+                        ))
+                ) {
+                    val handleDragEnd = {
+                        if (galleryOffsetY.value.absoluteValue > 150f) {
+                            scope.launch {
+                                val target = if (galleryOffsetY.value > 0) 2000f else -2000f
+                                launch { galleryOffsetY.animateTo(target, tween(250)) }
+                                delay(100)
+                                fullScreenInitialPage = null
+                            }
+                        } else {
+                            scope.launch { galleryOffsetY.animateTo(0f, spring()) }
+                        }
+                    }
 
-                        val handleDragEnd = {
-                            if (galleryOffsetY.value.absoluteValue > 150f) {
-                                scope.launch {
-                                    val target = if (galleryOffsetY.value > 0) popupHeightPx else -popupHeightPx
-                                    launch { galleryOffsetY.animateTo(target, tween(250)) }
-                                    transitionState.targetState = false
-                                    delay(250)
-                                    fullScreenInitialPage = null
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .offset { IntOffset(0, galleryOffsetY.value.toInt()) }
+                            .pointerInput(isGalleryZoomed) {
+                                if (!isGalleryZoomed) {
+                                    detectVerticalDragGestures(
+                                        onDragEnd = { handleDragEnd() },
+                                        onVerticalDrag = { change, dragAmount ->
+                                            change.consume()
+                                            scope.launch { galleryOffsetY.snapTo(galleryOffsetY.value + dragAmount) }
+                                        }
+                                    )
                                 }
-                            } else {
-                                scope.launch { galleryOffsetY.animateTo(0f, spring()) }
+                            }
+                    ) {
+                        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                            val image = activeImages[page]
+                            var scale by remember { mutableFloatStateOf(1f) }
+                            var offset by remember { mutableStateOf(Offset.Zero) }
+
+                            LaunchedEffect(pagerState.currentPage) {
+                                if (pagerState.currentPage != page) { scale = 1f; offset = Offset.Zero }
+                            }
+
+                            LaunchedEffect(scale) {
+                                isGalleryZoomed = scale > 1.05f
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .pointerInput(Unit) {
+                                        detectTapGestures(
+                                            onDoubleTap = {
+                                                if (scale > 1.05f) { scale = 1f; offset = Offset.Zero }
+                                                else { scale = 2.5f }
+                                            },
+                                            onTap = { if (scale == 1f) fullScreenInitialPage = null }
+                                        )
+                                    }
+                                    .pointerInput(Unit) {
+                                        awaitEachGesture {
+                                            awaitFirstDown()
+                                            do {
+                                                val event = awaitPointerEvent()
+                                                val zoom = event.calculateZoom()
+                                                val pan = event.calculatePan()
+
+                                                if (scale > 1.05f || event.changes.size > 1) {
+                                                    event.changes.forEach { it.consume() }
+                                                    scale = (scale * zoom).coerceIn(1f, 5f)
+
+                                                    val maxPanX = (size.width * (scale - 1)) / 2
+                                                    val maxPanY = (size.height * (scale - 1)) / 2
+
+                                                    offset = Offset(
+                                                        (offset.x + pan.x).coerceIn(-maxPanX, maxPanX),
+                                                        (offset.y + pan.y).coerceIn(-maxPanY, maxPanY)
+                                                    )
+                                                }
+                                            } while (event.changes.any { it.pressed })
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AsyncImage(
+                                    model = image.url,
+                                    contentDescription = "Full Screen Image",
+                                    modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y },
+                                    contentScale = ContentScale.Fit
+                                )
                             }
                         }
 
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color.Black.copy(
-                                        alpha = 0.95f * (1f - (galleryOffsetY.value.absoluteValue / (popupHeightPx / 2)).coerceIn(0f, 1f))
-                                    ))
-                            )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(color = Color.Black.copy(alpha = 0.5f), shape = CircleShape) {
+                                IconButton(onClick = { fullScreenInitialPage = null }, modifier = Modifier.size(40.dp)) {
+                                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                            Surface(color = Color.Black.copy(alpha = 0.5f), shape = CircleShape) {
+                                Text(
+                                    text = "${pagerState.currentPage + 1} of ${activeImages.size}",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
 
+                        val currentImage = activeImages.getOrNull(pagerState.currentPage)
+                        if (currentImage != null) {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .offset { IntOffset(0, galleryOffsetY.value.toInt()) }
-                                    .pointerInput(isGalleryZoomed) {
-                                        if (!isGalleryZoomed) {
-                                            detectVerticalDragGestures(
-                                                onDragEnd = { handleDragEnd() },
-                                                onVerticalDrag = { change, dragAmount ->
-                                                    change.consume()
-                                                    scope.launch { galleryOffsetY.snapTo(galleryOffsetY.value + dragAmount) }
-                                                }
-                                            )
-                                        }
-                                    }
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth()
+                                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))))
+                                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Bottom))
+                                    .padding(bottom = 24.dp, top = 24.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                val pagerState = rememberPagerState(initialPage = fullScreenInitialPage!!, pageCount = { allGalleryImages.size })
-
-                                HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-                                    val image = allGalleryImages[page]
-                                    var scale by remember { mutableFloatStateOf(1f) }
-                                    var offset by remember { mutableStateOf(Offset.Zero) }
-
-                                    LaunchedEffect(pagerState.currentPage) {
-                                        if (pagerState.currentPage != page) { scale = 1f; offset = Offset.Zero }
-                                    }
-
-                                    LaunchedEffect(scale) {
-                                        isGalleryZoomed = scale > 1.05f
-                                    }
-
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .pointerInput(Unit) {
-                                                detectTapGestures(
-                                                    onDoubleTap = {
-                                                        if (scale > 1.05f) { scale = 1f; offset = Offset.Zero }
-                                                        else { scale = 2.5f }
-                                                    }
-                                                )
-                                            }
-                                            .pointerInput(Unit) {
-                                                awaitEachGesture {
-                                                    awaitFirstDown()
-                                                    do {
-                                                        val event = awaitPointerEvent()
-                                                        val zoom = event.calculateZoom()
-                                                        val pan = event.calculatePan()
-
-                                                        if (scale > 1.05f || event.changes.size > 1) {
-                                                            event.changes.forEach { it.consume() }
-                                                            scale = (scale * zoom).coerceIn(1f, 5f)
-
-                                                            val maxPanX = (size.width * (scale - 1)) / 2
-                                                            val maxPanY = (size.height * (scale - 1)) / 2
-
-                                                            offset = Offset(
-                                                                (offset.x + pan.x).coerceIn(-maxPanX, maxPanX),
-                                                                (offset.y + pan.y).coerceIn(-maxPanY, maxPanY)
-                                                            )
-                                                        }
-                                                    } while (event.changes.any { it.pressed })
-                                                }
-                                            },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        AsyncImage(
-                                            model = image.url,
-                                            contentDescription = "Full Screen Image",
-                                            modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y },
-                                            contentScale = ContentScale.Fit
-                                        )
-                                    }
-                                }
-
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
-                                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Surface(color = Color.Black.copy(alpha = 0.5f), shape = CircleShape) {
-                                        IconButton(onClick = { fullScreenInitialPage = null }, modifier = Modifier.size(40.dp)) {
-                                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
-                                        }
-                                    }
-                                    Surface(color = Color.Black.copy(alpha = 0.5f), shape = CircleShape) {
-                                        Text(text = "${pagerState.currentPage + 1} of ${allGalleryImages.size}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                                    }
-                                }
-
-                                val currentImage = allGalleryImages[pagerState.currentPage]
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .fillMaxWidth()
-                                        .background(androidx.compose.ui.graphics.Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))))
-                                        .padding(bottom = 48.dp + systemNavHeight, top = 24.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Surface(color = Color.Black.copy(alpha = 0.6f), shape = RoundedCornerShape(20.dp)) {
-                                        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                            Text("📸", fontSize = 16.sp)
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(text = "Uploaded by ${currentImage.authorName}", color = Color.White, fontWeight = FontWeight.Medium, fontSize = 14.sp)
-                                        }
+                                Surface(color = Color.Black.copy(alpha = 0.6f), shape = RoundedCornerShape(20.dp)) {
+                                    Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Text("📸", fontSize = 16.sp)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(text = "Uploaded by ${currentImage.authorName}", color = Color.White, fontWeight = FontWeight.Medium, fontSize = 14.sp)
                                     }
                                 }
                             }
