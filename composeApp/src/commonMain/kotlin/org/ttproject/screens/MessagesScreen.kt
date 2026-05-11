@@ -170,15 +170,7 @@ fun MessagesScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val isLoading by viewModel.isLoading.collectAsState()
 
-    // 👇 1. Just remember the state, no need to manually check isRefreshing anymore!
     val pullToRefreshState = rememberPullToRefreshState()
-
-    // Refresh when returning from ChatDetailScreen (or opening for the first time)
-//    LaunchedEffect(Unit) {
-//        if (chatThreads.isEmpty()) {
-//            viewModel.loadConnections()
-//        }
-//    }
 
     PushNotificationManager { fcmToken ->
         viewModel.savePushToken(fcmToken)
@@ -191,7 +183,6 @@ fun MessagesScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-//            .background(AppColors.Background)
             .padding(bottom = bottomNavPadding + 0.dp)
     ) {
         MobileTopBar(
@@ -199,23 +190,15 @@ fun MessagesScreen(
             onSearchClick = { isSearchExpanded = true }
         )
 
-        // ONLY show the center spinner if we have absolutely no data yet.
         if (isLoading && chatThreads.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = AppColors.AccentOrange)
             }
         } else {
-//            AdaptivePullToRefresh(
-//                isRefreshing = isLoading,
-//                onRefresh = { viewModel.loadConnections() },
-//                modifier = Modifier.fillMaxSize()
-//            ) {
-            // 👇 ONE single LazyColumn for everything!
             LazyColumn(
                 contentPadding = PaddingValues(top = 0.dp, bottom = 10.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-
                 // --- ALWAYS RENDER THE SEARCH BAR ---
                 item {
                     AnimatedVisibility(
@@ -259,7 +242,7 @@ fun MessagesScreen(
                                     trailingIcon = {
                                         IconButton(onClick = {
                                             isSearchExpanded = false
-                                            viewModel.updateSearchQuery("") // Clear the list when closing
+                                            viewModel.updateSearchQuery("")
                                         }) {
                                             Icon(
                                                 imageVector = Icons.Default.Close,
@@ -278,7 +261,6 @@ fun MessagesScreen(
                 // --- CONDITIONALLY RENDER THE LIST OR EMPTY STATES ---
                 if (chatThreads.isEmpty()) {
                     item {
-                        // 👇 Differentiate between an empty search vs a totally empty inbox!
                         if (searchQuery.isNotBlank()) {
                             EmptySearchState(searchQuery)
                         } else {
@@ -326,7 +308,6 @@ fun ChatDetailScreen(
     }
 
     val otherUserProfile by viewModel.otherUserProfile.collectAsState()
-
     val messages by viewModel.messages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
@@ -357,8 +338,6 @@ fun ChatDetailScreen(
     val themeSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var selectedReactionMessageId by remember { mutableStateOf<String?>(null) }
-    val imeInsets = if (isIosPlatform()) WindowInsets.ime else WindowInsets.ime
-    val bottomNavInset = remember(bottomNavPadding) { WindowInsets(bottom = bottomNavPadding + 10.dp) }
     val focusManager = LocalFocusManager.current
     val tokenStorage: TokenStorage = koinInject()
 
@@ -373,17 +352,14 @@ fun ChatDetailScreen(
     }
 
     val scope = rememberCoroutineScope()
-    // 👇 The new FileKit Launcher!
     val mediaLauncher = rememberFilePickerLauncher(
-        type = PickerType.ImageAndVideo, // 👈 Explicitly allows both!
+        type = PickerType.ImageAndVideo,
         mode = PickerMode.Multiple(maxItems = 5),
         title = "Select Media"
     ) { files ->
         if (files != null && files.isNotEmpty()) {
             scope.launch {
-                // FileKit safely reads the bytes in the background
                 val byteArrays = files.mapNotNull { it.readBytes() }
-
                 if (byteArrays.isNotEmpty()) {
                     viewModel.sendImagesMessage(chatId, byteArrays, replyingToMessageId)
                     replyingToMessageId = null
@@ -394,7 +370,6 @@ fun ChatDetailScreen(
 
     val videoLauncher = rememberVideoLauncher { videoBytes ->
         if (videoBytes != null) {
-            // 👇 Call the new dedicated Video function!
             viewModel.sendVideoMessage(chatId, videoBytes, replyingToMessageId)
             replyingToMessageId = null
         }
@@ -402,7 +377,6 @@ fun ChatDetailScreen(
 
     val cameraLauncher = rememberCameraLauncher { imageBytes ->
         if (imageBytes != null) {
-            // 👇 Wrap the single image in a list to reuse our bulk-upload endpoint!
             viewModel.sendImagesMessage(chatId, listOf(imageBytes), replyingToMessageId)
             replyingToMessageId = null
         }
@@ -449,7 +423,6 @@ fun ChatDetailScreen(
     var isRecordingVoice by remember { mutableStateOf(false) }
     var recordingDuration by remember { mutableStateOf(0L) }
 
-    // Timer Coroutine
     LaunchedEffect(isRecordingVoice) {
         if (isRecordingVoice) {
             recordingDuration = 0L
@@ -464,11 +437,10 @@ fun ChatDetailScreen(
     var currentlyPlayingUrl by remember { mutableStateOf<String?>(null) }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(bottomNavInset.union(imeInsets))
+        // 👇 FIX 1: Removed windowInsetsPadding so the theme background goes edge-to-edge
+        modifier = Modifier.fillMaxSize()
     ) {
-        // 👇 Render Image if it exists, otherwise render Gradient
+        // Render Image or Gradient Background spanning full screen
         if (currentTheme.backgroundImage != null) {
             Image(
                 painter = painterResource(currentTheme.backgroundImage as org.jetbrains.compose.resources.DrawableResource),
@@ -476,14 +448,17 @@ fun ChatDetailScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
             )
-            // Tint overlay to make text readable
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)))
         } else {
             Box(modifier = Modifier.fillMaxSize().background(currentTheme.backgroundBrush))
         }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // 👇 THE FIX: Unites Keyboard (IME) and System Navigation Bars (Buttons or Gesture bars)
+                // This automatically adapts to iOS/Android and different device settings!
+                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
                 .pointerInput(Unit) {
                     detectTapGestures(onTap = { focusManager.clearFocus() })
                 }
@@ -496,7 +471,7 @@ fun ChatDetailScreen(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .clickable { isUserProfileSheetOpen = true }
-                            .padding(end = 8.dp, top = 4.dp, bottom = 4.dp) // Subtle padding for the touch target
+                            .padding(end = 8.dp, top = 4.dp, bottom = 4.dp)
                     ) {
                         Box(
                             modifier = Modifier.size(36.dp).clip(CircleShape).background(AppColors.SurfaceDark),
@@ -524,7 +499,6 @@ fun ChatDetailScreen(
                         )
                     }
                 },
-                // 👇 3. ADD THE THEME PALETTE ICON HERE
                 actions = {
                     IconButton(onClick = { isThemeSheetOpen = true }) {
                         Icon(
@@ -534,7 +508,6 @@ fun ChatDetailScreen(
                         )
                     }
                 },
-                // 👇 4. Make it transparent so the gradient flows behind it!
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
 
@@ -548,7 +521,6 @@ fun ChatDetailScreen(
                 isInitialBatchProcessed = true
             }
 
-            // 👇 1. Wrap the LazyColumn in a Box so we can overlay the FAB
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 LazyColumn(
                     state = listState,
@@ -604,8 +576,8 @@ fun ChatDetailScreen(
                                 repliedText = repliedText,
                                 repliedSender = repliedSender,
                                 reactions = msg.reactions,
-                                myBubbleColor = currentTheme.myBubbleColor,       // 👈 Pass Theme Color
-                                otherBubbleColor = currentTheme.otherBubbleColor, // 👈 Pass Theme Color
+                                myBubbleColor = currentTheme.myBubbleColor,
+                                otherBubbleColor = currentTheme.otherBubbleColor,
                                 isHighlighted = msg.id == highlightedMessageId,
                                 onQuoteClick = {
                                     msg.replyToMessageId?.let { targetId ->
@@ -613,20 +585,12 @@ fun ChatDetailScreen(
 
                                         if (targetIndex != -1) {
                                             coroutineScope.launch {
-                                                // 👇 1. Ask the list exactly how tall its visible area is
                                                 val viewportHeight = listState.layoutInfo.viewportSize.height
-
-                                                // 👇 2. Scroll to the item, but offset it by half the screen height!
-                                                // (We use a negative number to pull the item away from the starting edge)
                                                 listState.animateScrollToItem(
                                                     index = targetIndex,
                                                     scrollOffset = -(viewportHeight / 4)
                                                 )
-
-                                                // 3. Trigger the pop animation!
                                                 highlightedMessageId = targetId
-
-                                                // 4. Reset the state after a second
                                                 kotlinx.coroutines.delay(1000)
                                                 if (highlightedMessageId == targetId) highlightedMessageId = null
                                             }
@@ -634,11 +598,9 @@ fun ChatDetailScreen(
                                     }
                                 },
                                 onClick = {
-                                    // 👇 Only toggles the timestamp now!
                                     selectedMessageId = if (isSelected) null else msg.id
                                 },
                                 onImageClick = { index, urls ->
-                                    // 👇 Opens the full screen viewer!
                                     fullScreenImages = urls
                                     fullScreenInitialPage = index
                                 },
@@ -667,7 +629,6 @@ fun ChatDetailScreen(
                                             val targetMsg = messages.find { it.id == msgId }
                                             val currentUserId = tokenStorage.getUserId() ?: ""
 
-                                            // 👇 Check if they already have this exact reaction
                                             val hasReacted =
                                                 targetMsg?.reactions?.any { it.userId == currentUserId && it.emoji == selectedEmoji } == true
 
@@ -684,19 +645,17 @@ fun ChatDetailScreen(
                                         activeReactionDragPosition = null
                                     }
                                 },
-                                currentlyPlayingUrl = currentlyPlayingUrl,        // 👈 PASS STATE
-                                isAudioPlaying = audioPlayer.isPlaying,           // 👈 PASS STATE
+                                currentlyPlayingUrl = currentlyPlayingUrl,
+                                isAudioPlaying = audioPlayer.isPlaying,
                                 audioPlayer = audioPlayer,
                                 onVoiceClick = { voiceUrl ->
                                     if (currentlyPlayingUrl == voiceUrl) {
-                                        // If it's the same message, toggle play/pause
                                         if (audioPlayer.isPlaying) {
                                             audioPlayer.pause()
                                         } else {
                                             audioPlayer.resume()
                                         }
                                     } else {
-                                        // If it's a new message, stop the old one and start fresh
                                         audioPlayer.stop()
                                         audioPlayer.play(voiceUrl)
                                         currentlyPlayingUrl = voiceUrl
@@ -708,7 +667,6 @@ fun ChatDetailScreen(
                     }
                 }
 
-                // 👇 2. THE SCROLL TO BOTTOM BUTTON
                 val showScrollToBottom by remember {
                     derivedStateOf {
                         listState.firstVisibleItemIndex > 1 || listState.firstVisibleItemScrollOffset > 300
@@ -717,50 +675,48 @@ fun ChatDetailScreen(
 
                 Box(
                     modifier = Modifier
-                        .align(Alignment.BottomEnd) // 👈 1. Moved to Bottom Right
-                        .padding(bottom = 8.dp, end = 12.dp) // 👈 2. Added right-side padding to align with the input field
+                        .align(Alignment.BottomEnd)
+                        .padding(bottom = 8.dp, end = 12.dp)
                 ) {
                     androidx.compose.animation.AnimatedVisibility(
                         visible = showScrollToBottom,
                         enter = fadeIn() + androidx.compose.animation.scaleIn(),
                         exit = fadeOut() + androidx.compose.animation.scaleOut()
                     ) {
-                        // A sleek circular button that matches the other user's theme
                         Box(
                             modifier = Modifier
                                 .size(36.dp)
-                                .shadow(4.dp, CircleShape) // 👈 Added a shadow so it pops off the background
+                                .shadow(4.dp, CircleShape)
                                 .clip(CircleShape)
-                                .background(currentTheme.otherBubbleColor) // 👈 3. Uses the other user's bubble color
+                                .background(currentTheme.otherBubbleColor)
                                 .clickable {
                                     coroutineScope.launch {
-                                        // Smoothly glide back down to the newest message
                                         listState.animateScrollToItem(0)
                                     }
                                 },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.KeyboardArrowDown, // 👈 4. iOS-style chevron arrow
+                                imageVector = Icons.Default.KeyboardArrowDown,
                                 contentDescription = "Scroll to newest",
-                                tint = AppColors.TextPrimary, // 👈 Ensures visibility against the usually lighter "other" bubble color
+                                tint = AppColors.TextPrimary,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
                     }
                 }
-            } // 👈 End of the Box wrapper
+            }
 
-            // --- THE KEYBOARD-AWARE INPUT AREA (UNIFIED FLOATING ISLAND) ---
+            // --- THE KEYBOARD-AWARE INPUT AREA ---
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 12.dp, end = 12.dp, bottom = 16.dp)
-                    // 👇 1. The entire container is now one big rounded bubble!
+                    // 👇 FIX 3: Exactly 10dp of spacing from the bottom nav bar
+                    .padding(start = 12.dp, end = 12.dp, bottom = 10.dp)
                     .clip(RoundedCornerShape(24.dp))
                     .background(if (org.ttproject.isDark) Color.Black.copy(alpha = 0.25f) else Color.Black.copy(alpha = 0.05f))
                     .border(1.dp, currentTheme.myBubbleColor.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
-                    .animateContentSize() // Smoothly expands when reply pops up
+                    .animateContentSize()
             ) {
                 AnimatedVisibility(
                     visible = replyingToMessage != null,
@@ -776,7 +732,6 @@ fun ChatDetailScreen(
                     }
                 }
 
-                // 👇 2. The Input Row (Background and border removed since the parent handles it now)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -784,7 +739,6 @@ fun ChatDetailScreen(
                     verticalAlignment = Alignment.Bottom
                 ) {
                     if (isRecordingVoice) {
-                        // --- ACTIVE RECORDING UI ---
                         IconButton(
                             onClick = { isRecordingVoice = false; voiceRecorder.cancelRecording() },
                             modifier = Modifier.size(36.dp)
@@ -808,7 +762,6 @@ fun ChatDetailScreen(
                             Text(text = "${minutes}:${seconds.toString().padStart(2, '0')}", color = currentTheme.myBubbleColor, fontWeight = FontWeight.Bold)
                         }
 
-                        // 👇 3. FIX: Dedicated SEND button for Voice Recording (No more `hasText` check here!)
                         Box(
                             modifier = Modifier
                                 .size(38.dp)
@@ -832,10 +785,8 @@ fun ChatDetailScreen(
                             )
                         }
                     } else {
-                        // --- STANDARD UI ---
                         val showMediaIcons = messageText.text.isBlank() || forceShowIcons
 
-                        // 1. The Expand Arrow
                         androidx.compose.animation.AnimatedVisibility(
                             visible = !showMediaIcons,
                             enter = androidx.compose.animation.expandHorizontally() + fadeIn(),
@@ -846,7 +797,6 @@ fun ChatDetailScreen(
                             }
                         }
 
-                        // 2. The Media Icons (Camera, Video, Gallery - Mic removed from here)
                         androidx.compose.animation.AnimatedVisibility(
                             visible = showMediaIcons,
                             enter = androidx.compose.animation.expandHorizontally() + fadeIn(),
@@ -868,7 +818,6 @@ fun ChatDetailScreen(
                             }
                         }
 
-                        // 3. Text Input Field
                         BasicTextField(
                             value = messageText,
                             onValueChange = { messageText = it; forceShowIcons = false },
@@ -897,7 +846,6 @@ fun ChatDetailScreen(
                             }
                         )
 
-                        // 4. Dynamic Send / Mic Button (Now at the end!)
                         val hasText = messageText.text.isNotBlank()
                         Box(
                             modifier = Modifier
@@ -936,7 +884,6 @@ fun ChatDetailScreen(
             }
         }
 
-        // 👇 6. THEME SELECTION BOTTOM SHEET
         if (isThemeSheetOpen) {
             ModalBottomSheet(
                 onDismissRequest = { isThemeSheetOpen = false },
@@ -974,7 +921,6 @@ fun ChatDetailScreen(
                                     .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Theme preview circle
                                 Box(
                                     modifier = Modifier
                                         .size(40.dp)
@@ -1000,11 +946,10 @@ fun ChatDetailScreen(
             }
         }
 
-        // 👇 TRIGGER THE USER PROFILE SHEET
         if (isUserProfileSheetOpen) {
             OtherUserProfileSheet(
                 username = otherUsername,
-                imageUrl = otherUserProfile?.imageUrl ?: otherUserImageUrl, // Use the fresh one if available
+                imageUrl = otherUserProfile?.imageUrl ?: otherUserImageUrl,
                 bio = otherUserProfile?.bio,
                 age = otherUserProfile?.age,
                 skillLevel = otherUserProfile?.skillLevel,
@@ -1016,25 +961,17 @@ fun ChatDetailScreen(
             )
         }
 
-        // 👇 3. THE REACTION BOTTOM SHEET
         if (reactionSheetMessageId != null) {
             ModalBottomSheet(
                 onDismissRequest = { reactionSheetMessageId = null },
                 sheetState = sheetState,
                 containerColor = AppColors.Background
             ) {
-                // Find the specific message so we know what reactions to show
                 val targetMessage = messages.find { it.id == reactionSheetMessageId }
-
-                // 👇 Check if the list is not empty!
                 if (targetMessage != null && targetMessage.reactions.isNotEmpty()) {
-
                     val currentUserId = tokenStorage.getUserId() ?: ""
-
-                    // 👇 Map the real server data to your UI data class!
                     val realReactionsList = targetMessage.reactions.map { dto ->
                         val isMyReaction = dto.userId == currentUserId
-
                         ReactionDetail(
                             userId = dto.userId,
                             username = if (isMyReaction) "You" else otherUsername,
@@ -1045,12 +982,9 @@ fun ChatDetailScreen(
                     }
 
                     ReactionsBottomSheet(
-                        reactions = realReactionsList, // 👈 Pass the real list!
+                        reactions = realReactionsList,
                         onRemoveReaction = { reaction ->
-                            // 1. Tell ViewModel to delete it
                             viewModel.removeReaction(targetMessage.id)
-
-                            // 2. Smoothly hide the sheet
                             coroutineScope.launch {
                                 sheetState.hide()
                                 reactionSheetMessageId = null
@@ -1061,7 +995,6 @@ fun ChatDetailScreen(
             }
         }
 
-        // 👇 4. THE MAGIC HIGHLIGHT OVERLAY
         AnimatedVisibility(
             visible = reactionMenuData != null,
             enter = fadeIn(tween(200)),
@@ -1082,7 +1015,6 @@ fun ChatDetailScreen(
                             overlaySize = coordinates.size
                         }
                 ) {
-                    // --- THE SCRIM (WITH A HOLE CUT OUT) ---
                     androidx.compose.foundation.Canvas(
                         modifier = Modifier
                             .fillMaxSize()
@@ -1102,11 +1034,9 @@ fun ChatDetailScreen(
                                     bottomLeft = CornerRadius(state.bottomStart.toPx())
                                 )
                             )
-                            // 👇 2. NEW: The Reaction Badge Cutout
                             state.reactionBounds?.let { rBounds ->
                                 val localReactionBounds = rBounds.translate(-overlayBounds)
-                                val badgeRadius = with(density) { 14.dp.toPx() } // Standard 14.dp you used for the badge
-
+                                val badgeRadius = with(density) { 14.dp.toPx() }
                                 addRoundRect(
                                     RoundRect(
                                         rect = localReactionBounds,
@@ -1121,8 +1051,6 @@ fun ChatDetailScreen(
                         }
                     }
 
-                    // --- THE REACTION PILL ---
-                    // 1. Lock in the dimensions to calculate boundaries perfectly
                     val menuWidthDp = 270.dp
                     val menuHeightDp = 56.dp
                     val menuWidthPx = with(density) { menuWidthDp.toPx() }
@@ -1131,10 +1059,7 @@ fun ChatDetailScreen(
                     val screenWidthPx = overlaySize.width.toFloat()
                     val localBounds = state.bounds.translate(-overlayBounds)
 
-                    // 2. The Clipping Fix! Hard clamp the X value between safe screen margins
                     val safeMarginPx = with(density) { 16.dp.toPx() }
-
-                    // 👇 THE FIX: Use maxOf() to guarantee maxMenuX never drops below safeMarginPx
                     val minMenuX = safeMarginPx
                     val maxMenuX = maxOf(minMenuX, screenWidthPx - menuWidthPx - safeMarginPx)
 
@@ -1150,7 +1075,6 @@ fun ChatDetailScreen(
                         TransformOrigin(0f, if (isSpaceAbove) 1f else 0f)
                     }
 
-                    // 3. Dynamic Hover Calculation!
                     LaunchedEffect(activeReactionDragPosition, menuX, menuY) {
                         if (activeReactionDragPosition != null && reactionMenuData != null) {
                             val dragPos = activeReactionDragPosition!!
@@ -1158,13 +1082,12 @@ fun ChatDetailScreen(
 
                             val isSpaceAbove = localBounds.top > menuHeightPx + 50f
                             val dragDistanceY = dragPos.y - initialPos.y
-                            val swipeThreshold = with(density) { 10.dp.toPx() } // ~30 pixels
+                            val swipeThreshold = with(density) { 10.dp.toPx() }
 
-                            // Require them to drag 20dp towards the menu before activating
                             val hasSwipedTowardsMenu = if (isSpaceAbove) {
-                                dragDistanceY < -swipeThreshold // Swiped UP
+                                dragDistanceY < -swipeThreshold
                             } else {
-                                dragDistanceY > swipeThreshold  // Swiped DOWN
+                                dragDistanceY > swipeThreshold
                             }
 
                             if (hasSwipedTowardsMenu) {
@@ -1177,7 +1100,7 @@ fun ChatDetailScreen(
                                     hoveredReactionIndex = -1
                                 }
                             } else {
-                                hoveredReactionIndex = -1 // Finger hasn't moved enough yet
+                                hoveredReactionIndex = -1
                             }
                         }
                     }
@@ -1194,9 +1117,6 @@ fun ChatDetailScreen(
                             )
                             .width(menuWidthDp)
                             .height(menuHeightDp)
-//                            .clip(RoundedCornerShape(32.dp))
-//                            .background(AppColors.SurfaceDark)
-                            // 4. Fallback for manual taps (if user just lifted finger without dragging)
                             .pointerInput(Unit) {
                                 awaitEachGesture {
                                     val down = awaitFirstDown()
@@ -1219,8 +1139,6 @@ fun ChatDetailScreen(
                                         } else {
                                             isTracking = false
                                             if (hoveredReactionIndex != -1 && hoveredReactionIndex in emojis.indices) {
-
-                                                // 👇 1. Tap Toggle Logic
                                                 val selectedEmoji = emojis[hoveredReactionIndex]
                                                 val targetMsg = messages.find { it.id == state.messageId }
                                                 val currentUserId = tokenStorage.getUserId() ?: ""
@@ -1239,15 +1157,11 @@ fun ChatDetailScreen(
                                 }
                             }
                     ) {
-                        // 👇 2. THE BACKGROUND LAYER
-                        // This stays perfectly rounded and sits behind the emojis.
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(AppColors.SurfaceDark, RoundedCornerShape(32.dp))
                         )
-                        // 👇 3. THE FOREGROUND LAYER (Emojis)
-                        // Because the parent isn't clipped, these can grow over the edges!
                         val targetMessage = messages.find { it.id == state.messageId }
                         val currentUserId = tokenStorage.getUserId() ?: ""
 
@@ -1268,7 +1182,6 @@ fun ChatDetailScreen(
                                     label = "emojiScale"
                                 )
 
-                                // 👇 1. Add the bounce-up animation!
                                 val offsetY by animateFloatAsState(
                                     targetValue = if (isHovered) -15f else 0f,
                                     animationSpec = androidx.compose.animation.core.spring(
@@ -1278,10 +1191,8 @@ fun ChatDetailScreen(
                                     label = "emojiOffset"
                                 )
 
-                                // 👇 2. Check if the current user already selected this emoji
                                 val hasReacted = targetMessage?.reactions?.any { it.userId == currentUserId && it.emoji == emoji } == true
 
-                                // Use a Box so the dot stays cleanly at the bottom without shifting the text
                                 Box(
                                     modifier = Modifier.fillMaxHeight().width(40.dp),
                                     contentAlignment = Alignment.Center
@@ -1292,11 +1203,10 @@ fun ChatDetailScreen(
                                         modifier = Modifier.graphicsLayer {
                                             scaleX = scale
                                             scaleY = scale
-                                            translationY = offsetY // Apply the upward bounce
+                                            translationY = offsetY
                                         }
                                     )
 
-                                    // 👇 3. The Active Indicator Dot (Matches Chat Theme!)
                                     Box(
                                         modifier = Modifier
                                             .align(Alignment.BottomCenter)
@@ -1312,8 +1222,7 @@ fun ChatDetailScreen(
                 }
             }
         }
-        // 👇 THE FULL-SCREEN PAGER VIEWER
-        // 1. SHADOW STATE FIX: This keeps the list alive in memory while the Dialog animates closed, preventing crashes!
+
         var activeImages by remember { mutableStateOf<List<String>>(emptyList()) }
         LaunchedEffect(fullScreenImages) {
             if (fullScreenImages != null) {
@@ -1324,7 +1233,7 @@ fun ChatDetailScreen(
         if (fullScreenImages != null && activeImages.isNotEmpty()) {
             val pagerState = rememberPagerState(
                 initialPage = fullScreenInitialPage,
-                pageCount = { activeImages.size } // 👈 Uses the shadow state!
+                pageCount = { activeImages.size }
             )
 
             androidx.compose.ui.window.Dialog(
@@ -1371,7 +1280,6 @@ fun ChatDetailScreen(
                                         awaitFirstDown()
                                         do {
                                             val event = awaitPointerEvent()
-                                            // Only consume the touch if 2 fingers are down, OR if we are zoomed in!
                                             if (event.changes.size > 1 || scale > 1f) {
                                                 val zoomChange = event.calculateZoom()
                                                 val panChange = event.calculatePan()
@@ -1391,19 +1299,15 @@ fun ChatDetailScreen(
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-
-                            // 👇 Uses activeImages safely!
                             val url = activeImages.getOrNull(page) ?: ""
                             val isVideo = url.contains(".mp4")
 
                             if (isVideo) {
-                                // Render the Native Video Player!
                                 VideoPlayer(
                                     modifier = Modifier.fillMaxSize(),
                                     url = url
                                 )
                             } else {
-                                // Render the zoomable Image!
                                 AsyncImage(
                                     model = url,
                                     contentDescription = "Image $page",
@@ -1421,7 +1325,6 @@ fun ChatDetailScreen(
                         }
                     }
 
-                    // Floating Close Button
                     IconButton(
                         onClick = { fullScreenImages = null },
                         modifier = Modifier.align(Alignment.TopEnd).padding(top = 48.dp, end = 16.dp)
@@ -1429,7 +1332,6 @@ fun ChatDetailScreen(
                         Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
                     }
 
-                    // Page Indicator
                     if (activeImages.size > 1) {
                         Text(
                             text = "${pagerState.currentPage + 1} / ${activeImages.size}",
