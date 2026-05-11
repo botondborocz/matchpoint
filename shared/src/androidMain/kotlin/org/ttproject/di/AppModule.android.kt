@@ -2,7 +2,7 @@ package org.ttproject.di
 
 import org.koin.core.module.Module
 import org.koin.dsl.module
-import org.ttproject.AndroidAppIconManager
+import org.ttproject.icon.AndroidAppIconManager
 import org.ttproject.data.AndroidTokenStorage
 import org.ttproject.data.TokenStorage
 import org.ttproject.icon.AppIconManager

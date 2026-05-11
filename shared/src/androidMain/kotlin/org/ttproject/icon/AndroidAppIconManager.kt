@@ -1,10 +1,8 @@
-package org.ttproject
+package org.ttproject.icon
 
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
-import org.ttproject.icon.AppIconManager
-import org.ttproject.icon.PremiumAppIcon
 
 class AndroidAppIconManager(private val context: Context) : AppIconManager {
 
