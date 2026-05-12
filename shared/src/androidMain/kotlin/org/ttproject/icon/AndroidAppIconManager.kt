@@ -10,7 +10,7 @@ class AndroidAppIconManager(private val context: Context) : AppIconManager {
         val packageManager = context.packageManager
         val packageName = context.packageName
 
-        PremiumAppIcon.entries.forEach { appIcon ->
+        availableAppIcons.forEach { appIcon ->
             // The ComponentName matches the android:name in the manifest
             val componentName = ComponentName(packageName, "$packageName.${appIcon.alias}")
 

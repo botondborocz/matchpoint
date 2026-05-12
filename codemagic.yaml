@@ -39,7 +39,7 @@ workflows:
           target = project.targets.find { |t| t.name == 'iosApp' } || project.targets.first
           
           # Define the exact names of your .appiconset folders (without the extension)
-          alternate_icons = 'GoldIcon IceIcon'
+          alternate_icons = 'AdrenalinIcon Custom1Icon Custom2Icon Custom3Icon CyberIcon GoldIcon IceIcon LightIcon StealthIcon SynthwaveIcon'
           
           target.build_configurations.each do |config|
             # Tell Xcode to compile these as alternate icons

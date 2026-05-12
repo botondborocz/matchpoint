@@ -21,8 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.ManageSearch
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -42,13 +40,11 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
@@ -73,27 +69,13 @@ import org.ttproject.util.ThemeMode
 import org.ttproject.shared.resources.Res as SharedRes
 import coil3.compose.AsyncImage
 import org.ttproject.shared.resources.cancel
-import org.ttproject.shared.resources.edit_profile
 import org.ttproject.shared.resources.save
 import org.ttproject.shared.resources.username
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.DropdownMenuItem
 import com.preat.peekaboo.image.picker.SelectionMode
 import com.preat.peekaboo.image.picker.rememberImagePickerLauncher
-import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
-import io.github.vinceglb.filekit.core.PickerMode
-import io.github.vinceglb.filekit.core.PickerType
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 import mapMetricsToBadges
 import org.koin.compose.koinInject
-import org.ttproject.AppIcon
 import org.ttproject.AppThemeStyle
 import org.ttproject.LocalAppThemeStyle
 import org.ttproject.components.NativeDatePickerField
@@ -104,7 +86,6 @@ import org.ttproject.data.BadgeData
 import org.ttproject.data.TokenStorage
 import org.ttproject.icon.PremiumAppIcon
 import org.ttproject.isIosPlatform
-import ttproject.composeapp.generated.resources.Res as AppRes
 
 @Composable
 fun ProfileScreen(

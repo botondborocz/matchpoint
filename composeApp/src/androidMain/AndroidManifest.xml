@@ -73,8 +73,22 @@
             android:name=".GoldIcon"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/logo_square_medium_custom1"
-            android:roundIcon="@mipmap/logo_square_medium_custom1"
+            android:icon="@mipmap/logo_square_medium_custom1_light"
+            android:roundIcon="@mipmap/logo_square_medium_custom1_light"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Gold Icon Dark (Disabled by default) -->
+        <activity-alias
+            android:name=".GoldIconDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/logo_square_medium_custom1_dark"
+            android:roundIcon="@mipmap/logo_square_medium_custom1_dark"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -87,8 +101,22 @@
             android:name=".StealthIcon"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/logo_square_medium_custom2"
-            android:roundIcon="@mipmap/logo_square_medium_custom2"
+            android:icon="@mipmap/logo_square_medium_custom2_light"
+            android:roundIcon="@mipmap/logo_square_medium_custom2_light"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Stealth Icon Dark (Disabled by default) -->
+        <activity-alias
+            android:name=".StealthIconDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/logo_square_medium_custom2_dark"
+            android:roundIcon="@mipmap/logo_square_medium_custom2_dark"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -101,8 +129,22 @@
             android:name=".CyberIcon"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/logo_square_medium_custom3"
-            android:roundIcon="@mipmap/logo_square_medium_custom3"
+            android:icon="@mipmap/logo_square_medium_custom3_light"
+            android:roundIcon="@mipmap/logo_square_medium_custom3_light"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Cyber Icon Dark (Disabled by default) -->
+        <activity-alias
+            android:name=".CyberIconDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/logo_square_medium_custom3_dark"
+            android:roundIcon="@mipmap/logo_square_medium_custom3_dark"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -113,6 +155,34 @@
         <!-- Synthwave Icon (Disabled by default) -->
         <activity-alias
             android:name=".SynthwaveIcon"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/logo_square_medium_custom4_light"
+            android:roundIcon="@mipmap/logo_square_medium_custom4_light"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Synthwave Icon Dark (Disabled by default) -->
+        <activity-alias
+            android:name=".SynthwaveIconDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/logo_square_medium_custom4_dark"
+            android:roundIcon="@mipmap/logo_square_medium_custom4_dark"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Synthwave Icon Extra (Disabled by default) -->
+        <activity-alias
+            android:name=".SynthwaveIconExtra"
             android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/logo_square_medium_custom4"
@@ -127,6 +197,34 @@
         <!-- Ice Icon (Disabled by default) -->
         <activity-alias
             android:name=".IceIcon"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/logo_square_medium_custom5_light"
+            android:roundIcon="@mipmap/logo_square_medium_custom5_light"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Ice Icon Dark (Disabled by default) -->
+        <activity-alias
+            android:name=".IceIconDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/logo_square_medium_custom5_dark"
+            android:roundIcon="@mipmap/logo_square_medium_custom5_dark"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Ice Icon Extra (Disabled by default) -->
+        <activity-alias
+            android:name=".IceIconExtra"
             android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/logo_square_medium_custom5"
@@ -152,13 +250,13 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- Carbon Icon (Disabled by default) -->
+        <!-- Championship Icon Dark (Disabled by default) -->
         <activity-alias
-            android:name=".CarbonIcon"
+            android:name=".ChampionshipIconDark"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/logo_square_medium_custom7"
-            android:roundIcon="@mipmap/logo_square_medium_custom7"
+            android:icon="@mipmap/logo_square_medium_custom6_dark"
+            android:roundIcon="@mipmap/logo_square_medium_custom6_dark"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -166,13 +264,41 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- Carbon Icon (Disabled by default) -->
+<!--        <activity-alias-->
+<!--            android:name=".CarbonIcon"-->
+<!--            android:enabled="false"-->
+<!--            android:exported="true"-->
+<!--            android:icon="@mipmap/logo_square_medium_custom7"-->
+<!--            android:roundIcon="@mipmap/logo_square_medium_custom7"-->
+<!--            android:targetActivity=".MainActivity">-->
+<!--            <intent-filter>-->
+<!--                <action android:name="android.intent.action.MAIN" />-->
+<!--                <category android:name="android.intent.category.LAUNCHER" />-->
+<!--            </intent-filter>-->
+<!--        </activity-alias>-->
+
         <!-- Adrenalin Icon (Disabled by default) -->
         <activity-alias
             android:name=".AdrenalinIcon"
             android:enabled="false"
             android:exported="true"
-            android:icon="@mipmap/logo_square_medium_custom8"
-            android:roundIcon="@mipmap/logo_square_medium_custom8"
+            android:icon="@mipmap/logo_square_medium_custom8_light"
+            android:roundIcon="@mipmap/logo_square_medium_custom8_light"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Adrenalin Icon Dark (Disabled by default) -->
+        <activity-alias
+            android:name=".AdrenalinIconDark"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/logo_square_medium_custom8_dark"
+            android:roundIcon="@mipmap/logo_square_medium_custom8_dark"
             android:targetActivity=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
