@@ -27,6 +27,50 @@ workflows:
           echo "kotlin.native.cacheKind=none" >> gradle.properties
           echo "org.gradle.daemon=false" >> gradle.properties
 
+
+      - name: Link iOS Alternate Icons to Xcode Project
+        script: |
+          gem install xcodeproj
+          ruby -e "
+          require 'xcodeproj'
+          
+          # 1. Open the Xcode project
+          project_path = 'iosApp/iosApp.xcodeproj'
+          project = Xcodeproj::Project.open(project_path)
+          
+          # 2. Find the main app target and the folder group
+          target = project.targets.find { |t| t.name == 'iosApp' } || project.targets.first
+          group = project.main_group.find_subpath('iosApp', true)
+          
+          # 3. Define the exact names of your icon files
+          icons = [
+            'GoldIcon.png', 'StealthIcon.png', 'CyberIcon.png', 
+            'SynthwaveIcon.png', 'IceIcon.png', 'ChampionshipIcon.png', 
+            'CarbonIcon.png', 'AdrenalinIcon.png'
+          ]
+          
+          # 4. Loop through and link them to the project
+          icons.each do |icon|
+            file_path = 'iosApp/iosApp/' + icon
+            if File.exist?(file_path)
+              # Create a reference to the file
+              file_ref = group.find_file_by_path(icon) || group.new_reference(icon)
+          
+              # Add it to the 'Copy Bundle Resources' build phase so it gets packed into the app
+              if target.resources_build_phase.files.none? { |f| f.file_ref == file_ref }
+                target.resources_build_phase.add_file_reference(file_ref)
+                puts 'Successfully linked: ' + icon
+              end
+            else
+              puts 'WARNING: Could not find ' + file_path
+            end
+          end
+          
+          # 5. Save the modified Xcode project
+          project.save
+          puts 'Xcode project updated successfully!'
+          "
+
       - name: Build Unsigned iOS App
         script: |
           set -e 
