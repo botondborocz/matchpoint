@@ -6,7 +6,8 @@ import androidx.compose.ui.Modifier
 @Composable
 expect fun NativeImageActionMenu(
     isMine: Boolean,
+    isTransitioning: Boolean = false, // 👇 Added parameter
     modifier: Modifier = Modifier,
     onDelete: () -> Unit,
-    onReport: (String) -> Unit // 👇 Now accepts the selected reason!
+    onReport: (String) -> Unit
 )

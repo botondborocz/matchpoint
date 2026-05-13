@@ -25,6 +25,7 @@ import org.ttproject.AppColors
 @Composable
 actual fun NativeImageActionMenu(
     isMine: Boolean,
+    isTransitioning: Boolean,
     modifier: Modifier,
     onDelete: () -> Unit,
     onReport: (String) -> Unit

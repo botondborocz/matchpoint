@@ -1,12 +1,12 @@
 package org.ttproject.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreHoriz
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,13 +16,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.interop.UIKitView
 import androidx.compose.ui.unit.dp
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.coroutines.delay
 import platform.UIKit.*
 
 @OptIn(ExperimentalForeignApi::class)
 @Composable
 actual fun NativeImageActionMenu(
     isMine: Boolean,
+    isTransitioning: Boolean, // 👇 Now controlled by the parent!
     modifier: Modifier,
     onDelete: () -> Unit,
     onReport: (String) -> Unit
@@ -35,43 +35,33 @@ actual fun NativeImageActionMenu(
         "Other"
     )
 
-    // The Seamless Swap Trick: Show a native Compose button during the 350ms
-    // gallery entrance animation so it scales and fades smoothly, then swap it!
-    var isTransitioning by remember { mutableStateOf(true) }
-
-    LaunchedEffect(Unit) {
-        delay(350)
-        isTransitioning = false
-    }
-
     Box(modifier = modifier.size(40.dp)) {
         if (isTransitioning) {
-            // Pure Compose dummy button
+            // 👇 The pure Compose dummy button
             Surface(
-                color = Color(0xFF262626), // Exact match for UIColor(white = 0.15)
+                color = Color(0xFF262626), // Exact match for iOS dark grey
                 shape = CircleShape,
                 modifier = Modifier.fillMaxSize()
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.MoreHoriz,
-                        contentDescription = "Menu",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    // 👇 CUSTOM DOTS: This matches the iOS 'ellipsis' perfectly! No more popping!
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(3.5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(modifier = Modifier.size(4.5.dp).background(Color.White, CircleShape))
+                        Box(modifier = Modifier.size(4.5.dp).background(Color.White, CircleShape))
+                        Box(modifier = Modifier.size(4.5.dp).background(Color.White, CircleShape))
+                    }
                 }
             }
         } else {
-            // The actual iOS Button
             UIKitView<UIView>(
                 factory = {
-                    // 👇 The Black Shield (No cornerRadius!)
                     val container = UIView().apply {
                         backgroundColor = UIColor.blackColor
-                        // By leaving it square, we prevent sub-pixel fighting at the edges.
                     }
 
-                    // 👇 The Grey Button (No cornerRadius!)
                     val button = UIButton.buttonWithType(UIButtonTypeCustom).apply {
                         backgroundColor = UIColor(white = 0.15, alpha = 1.0)
 
@@ -88,7 +78,6 @@ actual fun NativeImageActionMenu(
                     }
 
                     container.addSubview(button)
-
                     button.leadingAnchor.constraintEqualToAnchor(container.leadingAnchor).active = true
                     button.trailingAnchor.constraintEqualToAnchor(container.trailingAnchor).active = true
                     button.topAnchor.constraintEqualToAnchor(container.topAnchor).active = true
@@ -129,15 +118,9 @@ actual fun NativeImageActionMenu(
                                         }
                                     )
                                 }
+                                alert.addAction(UIAlertAction.actionWithTitle("Cancel", UIAlertActionStyleCancel, null))
 
-                                alert.addAction(
-                                    UIAlertAction.actionWithTitle("Cancel", UIAlertActionStyleCancel, null)
-                                )
-
-                                val window = UIApplication.sharedApplication.windows.firstOrNull {
-                                    (it as UIWindow).isKeyWindow()
-                                } as? UIWindow
-
+                                val window = UIApplication.sharedApplication.windows.firstOrNull { (it as UIWindow).isKeyWindow() } as? UIWindow
                                 window?.rootViewController?.presentViewController(alert, animated = true, completion = null)
                             }
                         )
@@ -146,7 +129,6 @@ actual fun NativeImageActionMenu(
 
                     button.menu = UIMenu.menuWithTitle(title = "", children = actions)
                 },
-                // 👇 Compose handles 100% of the circular clipping right here!
                 modifier = Modifier.fillMaxSize().clip(CircleShape)
             )
         }

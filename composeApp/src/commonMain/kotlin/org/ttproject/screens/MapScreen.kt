@@ -1680,9 +1680,22 @@ fun ClubDetailsFullScreen(
                 val galleryOffsetY = remember { Animatable(0f) }
                 var isGalleryZoomed by remember { mutableStateOf(false) }
 
+                var isMenuReady by remember { mutableStateOf(false) }
+
+                // This handles the Enter animation delay automatically
+                LaunchedEffect(fullScreenInitialPage) {
+                    if (fullScreenInitialPage != null) {
+                        isMenuReady = false
+                        delay(350)
+                        isMenuReady = true
+                    }
+                }
+
                 // 👇 FIX 1: Detect if user is swiping down to dismiss, and lock the pager!
                 val isSwipingToDismiss = galleryOffsetY.value.absoluteValue > 5f
                 val isPagingEnabled = !isGalleryZoomed && !isSwipingToDismiss
+
+                val isTransitioning = !isMenuReady || isGalleryZoomed || isSwipingToDismiss
 
                 Box(
                     modifier = Modifier
@@ -1850,7 +1863,17 @@ fun ClubDetailsFullScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Surface(color = Color(0xFF333333), shape = CircleShape) {
-                                    IconButton(onClick = { fullScreenInitialPage = null }, modifier = Modifier.size(40.dp)) {
+                                    IconButton(
+                                        onClick = {
+                                            // 👇 Delay by a tiny fraction so the swap happens!
+                                            scope.launch {
+                                                isMenuReady = false
+                                                delay(50)
+                                                fullScreenInitialPage = null
+                                            }
+                                        },
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
                                         Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
                                     }
                                 }
