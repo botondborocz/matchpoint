@@ -1691,7 +1691,6 @@ fun ClubDetailsFullScreen(
                     }
                 }
 
-                // 👇 FIX 1: Detect if user is swiping down to dismiss, and lock the pager!
                 val isSwipingToDismiss = galleryOffsetY.value.absoluteValue > 5f
                 val isPagingEnabled = !isGalleryZoomed && !isSwipingToDismiss
 
@@ -1705,10 +1704,8 @@ fun ClubDetailsFullScreen(
                         ))
                 ) {
                     val handleDragEnd = {
-                        // 👇 Only dismiss if they dragged DOWN more than 150 pixels
                         if (galleryOffsetY.value > 150f) {
                             scope.launch {
-                                // Always animate down off the screen
                                 launch { galleryOffsetY.animateTo(2000f, tween(250)) }
                                 delay(100)
                                 fullScreenInitialPage = null
@@ -1727,11 +1724,8 @@ fun ClubDetailsFullScreen(
                                     detectVerticalDragGestures(
                                         onDragEnd = { handleDragEnd() },
                                         onVerticalDrag = { change, dragAmount ->
-                                            // 👇 FIX: Only consume if we are pulling DOWN,
-                                            // or if we are already dragged down and are pushing it back up to 0.
                                             if (galleryOffsetY.value > 0f || dragAmount > 0f) {
                                                 change.consume()
-                                                // coerceAtLeast(0f) creates a hard floor so it never goes up!
                                                 val newOffset = (galleryOffsetY.value + dragAmount).coerceAtLeast(0f)
                                                 scope.launch { galleryOffsetY.snapTo(newOffset) }
                                             }
@@ -1771,7 +1765,6 @@ fun ClubDetailsFullScreen(
                                         detectTapGestures(
                                             onDoubleTap = { tapOffset ->
                                                 scope.launch {
-                                                    // 👇 FIX 2: Reset if zoomed in AT ALL
                                                     if (scaleAnim.value > 1f) {
                                                         launch { scaleAnim.animateTo(1f, tween(300, easing = FastOutSlowInEasing)) }
                                                         launch { offsetXAnim.animateTo(0f, tween(300, easing = FastOutSlowInEasing)) }
@@ -1795,7 +1788,8 @@ fun ClubDetailsFullScreen(
                                                     }
                                                 }
                                             },
-                                            onTap = { if (scaleAnim.value <= 1.0f) fullScreenInitialPage = null }
+                                            // 👇 FIX: Simply do nothing on onTap, so it doesn't close
+                                            onTap = { }
                                         )
                                     }
                                     .pointerInput(Unit) {
@@ -1807,9 +1801,6 @@ fun ClubDetailsFullScreen(
                                                 val pan = event.calculatePan()
 
                                                 if (scaleAnim.value > 1f || event.changes.size > 1) {
-                                                    // 👇 FIX 3: THE MAGIC FIX!
-                                                    // Only swallow the gestures if it is a multi-touch pinch!
-                                                    // Letting single-finger taps pass through unconsumed allows detectTapGestures to see them perfectly.
                                                     if (event.changes.size > 1) {
                                                         event.changes.forEach { it.consume() }
                                                     }
@@ -1865,7 +1856,7 @@ fun ClubDetailsFullScreen(
                                 Surface(color = Color(0xFF333333), shape = CircleShape) {
                                     IconButton(
                                         onClick = {
-                                            // 👇 Delay by a tiny fraction so the swap happens!
+                                            // Delay by a tiny fraction so the swap happens!
                                             scope.launch {
                                                 isMenuReady = false
                                                 delay(50)
@@ -1892,7 +1883,7 @@ fun ClubDetailsFullScreen(
 
                                 NativeImageActionMenu(
                                     isMine = currentImage?.isMine == true,
-                                    isTransitioning = isTransitioning, // 👇 Pass the state here!
+                                    isTransitioning = isTransitioning, // Pass the state here!
                                     modifier = Modifier,
                                     onDelete = {
                                         currentImage?.url?.let { url ->
