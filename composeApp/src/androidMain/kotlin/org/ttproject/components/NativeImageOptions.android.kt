@@ -43,7 +43,7 @@ actual fun NativeImageActionMenu(
     )
 
     Box(modifier = modifier) {
-        Surface(color = Color.Black.copy(alpha = 0.5f), shape = CircleShape, modifier = Modifier.size(40.dp)) {
+        Surface(color = Color(0xFF333333), shape = CircleShape, modifier = Modifier.size(40.dp)) {
             IconButton(onClick = { expanded = true }, modifier = Modifier.fillMaxSize()) {
                 Icon(Icons.Default.MoreVert, contentDescription = "More Options", tint = Color.White, modifier = Modifier.size(20.dp))
             }

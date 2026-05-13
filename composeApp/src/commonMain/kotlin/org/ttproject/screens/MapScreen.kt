@@ -116,7 +116,6 @@ data class TTClub(
     val imageUrls: List<String> = emptyList()
 )
 
-// 👇 Added `isMine` to track ownership for the Dropdown options
 data class GalleryImage(val url: String, val authorName: String, val isMine: Boolean = false)
 
 enum class SheetState { Expanded, HalfExpanded, Collapsed }
@@ -1380,7 +1379,7 @@ fun ClubDetailsFullScreen(
     var initialSpacerY by remember { mutableFloatStateOf(Float.NaN) }
 
     val titleStartY = headerHeightPx
-    val titleEndY = topInsetPx + with(density) { 20.dp.toPx() }
+    val titleEndY = topInsetPx + with(density) { 28.dp.toPx() }
     val pinDistance = titleStartY - titleEndY
 
     val progress = if (pinDistance > 0) (scrollState.value.toFloat() / pinDistance).coerceIn(0f, 1f) else 1f
@@ -1389,7 +1388,7 @@ fun ClubDetailsFullScreen(
     val currentScale = 1f - ((1f - targetScale) * progress)
 
     val startX = with(density) { 24.dp.toPx() }
-    val endX = with(density) { 66.dp.toPx() }
+    val endX = with(density) { 76.dp.toPx() }
 
     val currentOffsetState = rememberUpdatedState(currentOffset)
     val currentOnDragDelta = rememberUpdatedState(onDragDelta)
@@ -1438,7 +1437,6 @@ fun ClubDetailsFullScreen(
         InAppNotification(
             message = notificationMessage,
             onDismiss = { notificationMessage = null },
-            // Ensure it slides down below the status bar/notch
             modifier = Modifier.windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
         )
 
@@ -1536,7 +1534,6 @@ fun ClubDetailsFullScreen(
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                // 👇 Added Edit Button for user's own reviews
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1683,18 +1680,23 @@ fun ClubDetailsFullScreen(
                 val galleryOffsetY = remember { Animatable(0f) }
                 var isGalleryZoomed by remember { mutableStateOf(false) }
 
+                // 👇 FIX 1: Detect if user is swiping down to dismiss, and lock the pager!
+                val isSwipingToDismiss = galleryOffsetY.value.absoluteValue > 5f
+                val isPagingEnabled = !isGalleryZoomed && !isSwipingToDismiss
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black.copy(
-                            alpha = 0.95f * (1f - (galleryOffsetY.value.absoluteValue / 1500f).coerceIn(0f, 1f))
+                            alpha = (1f - (galleryOffsetY.value / 1500f)).coerceIn(0f, 1f)
                         ))
                 ) {
                     val handleDragEnd = {
-                        if (galleryOffsetY.value.absoluteValue > 150f) {
+                        // 👇 Only dismiss if they dragged DOWN more than 150 pixels
+                        if (galleryOffsetY.value > 150f) {
                             scope.launch {
-                                val target = if (galleryOffsetY.value > 0) 2000f else -2000f
-                                launch { galleryOffsetY.animateTo(target, tween(250)) }
+                                // Always animate down off the screen
+                                launch { galleryOffsetY.animateTo(2000f, tween(250)) }
                                 delay(100)
                                 fullScreenInitialPage = null
                             }
@@ -1712,24 +1714,41 @@ fun ClubDetailsFullScreen(
                                     detectVerticalDragGestures(
                                         onDragEnd = { handleDragEnd() },
                                         onVerticalDrag = { change, dragAmount ->
-                                            change.consume()
-                                            scope.launch { galleryOffsetY.snapTo(galleryOffsetY.value + dragAmount) }
+                                            // 👇 FIX: Only consume if we are pulling DOWN,
+                                            // or if we are already dragged down and are pushing it back up to 0.
+                                            if (galleryOffsetY.value > 0f || dragAmount > 0f) {
+                                                change.consume()
+                                                // coerceAtLeast(0f) creates a hard floor so it never goes up!
+                                                val newOffset = (galleryOffsetY.value + dragAmount).coerceAtLeast(0f)
+                                                scope.launch { galleryOffsetY.snapTo(newOffset) }
+                                            }
                                         }
                                     )
                                 }
                             }
                     ) {
-                        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                        // Apply the pager lock here
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize(),
+                            userScrollEnabled = isPagingEnabled
+                        ) { page ->
                             val image = activeImages[page]
-                            var scale by remember { mutableFloatStateOf(1f) }
-                            var offset by remember { mutableStateOf(Offset.Zero) }
+
+                            val scaleAnim = remember { Animatable(1f) }
+                            val offsetXAnim = remember { Animatable(0f) }
+                            val offsetYAnim = remember { Animatable(0f) }
 
                             LaunchedEffect(pagerState.currentPage) {
-                                if (pagerState.currentPage != page) { scale = 1f; offset = Offset.Zero }
+                                if (pagerState.currentPage != page) {
+                                    scaleAnim.snapTo(1f)
+                                    offsetXAnim.snapTo(0f)
+                                    offsetYAnim.snapTo(0f)
+                                }
                             }
 
-                            LaunchedEffect(scale) {
-                                isGalleryZoomed = scale > 1.05f
+                            LaunchedEffect(scaleAnim.value) {
+                                isGalleryZoomed = scaleAnim.value > 1.01f
                             }
 
                             Box(
@@ -1737,11 +1756,33 @@ fun ClubDetailsFullScreen(
                                     .fillMaxSize()
                                     .pointerInput(Unit) {
                                         detectTapGestures(
-                                            onDoubleTap = {
-                                                if (scale > 1.05f) { scale = 1f; offset = Offset.Zero }
-                                                else { scale = 2.5f }
+                                            onDoubleTap = { tapOffset ->
+                                                scope.launch {
+                                                    // 👇 FIX 2: Reset if zoomed in AT ALL
+                                                    if (scaleAnim.value > 1f) {
+                                                        launch { scaleAnim.animateTo(1f, tween(300, easing = FastOutSlowInEasing)) }
+                                                        launch { offsetXAnim.animateTo(0f, tween(300, easing = FastOutSlowInEasing)) }
+                                                        launch { offsetYAnim.animateTo(0f, tween(300, easing = FastOutSlowInEasing)) }
+                                                    } else {
+                                                        // Zoom In Smoothly to the Tap Location
+                                                        val targetScale = 2.5f
+                                                        val center = Offset(size.width / 2f, size.height / 2f)
+                                                        val targetX = (center.x - tapOffset.x) * targetScale
+                                                        val targetY = (center.y - tapOffset.y) * targetScale
+
+                                                        val maxPanX = (size.width * (targetScale - 1)) / 2
+                                                        val maxPanY = (size.height * (targetScale - 1)) / 2
+
+                                                        val clampedX = targetX.coerceIn(-maxPanX, maxPanX)
+                                                        val clampedY = targetY.coerceIn(-maxPanY, maxPanY)
+
+                                                        launch { scaleAnim.animateTo(targetScale, tween(300, easing = FastOutSlowInEasing)) }
+                                                        launch { offsetXAnim.animateTo(clampedX, tween(300, easing = FastOutSlowInEasing)) }
+                                                        launch { offsetYAnim.animateTo(clampedY, tween(300, easing = FastOutSlowInEasing)) }
+                                                    }
+                                                }
                                             },
-                                            onTap = { if (scale == 1f) fullScreenInitialPage = null }
+                                            onTap = { if (scaleAnim.value <= 1.0f) fullScreenInitialPage = null }
                                         )
                                     }
                                     .pointerInput(Unit) {
@@ -1752,17 +1793,27 @@ fun ClubDetailsFullScreen(
                                                 val zoom = event.calculateZoom()
                                                 val pan = event.calculatePan()
 
-                                                if (scale > 1.05f || event.changes.size > 1) {
-                                                    event.changes.forEach { it.consume() }
-                                                    scale = (scale * zoom).coerceIn(1f, 5f)
+                                                if (scaleAnim.value > 1f || event.changes.size > 1) {
+                                                    // 👇 FIX 3: THE MAGIC FIX!
+                                                    // Only swallow the gestures if it is a multi-touch pinch!
+                                                    // Letting single-finger taps pass through unconsumed allows detectTapGestures to see them perfectly.
+                                                    if (event.changes.size > 1) {
+                                                        event.changes.forEach { it.consume() }
+                                                    }
 
-                                                    val maxPanX = (size.width * (scale - 1)) / 2
-                                                    val maxPanY = (size.height * (scale - 1)) / 2
+                                                    val newScale = (scaleAnim.value * zoom).coerceIn(1f, 5f)
 
-                                                    offset = Offset(
-                                                        (offset.x + pan.x).coerceIn(-maxPanX, maxPanX),
-                                                        (offset.y + pan.y).coerceIn(-maxPanY, maxPanY)
-                                                    )
+                                                    val maxPanX = (size.width * (newScale - 1)) / 2
+                                                    val maxPanY = (size.height * (newScale - 1)) / 2
+
+                                                    val newX = (offsetXAnim.value + pan.x).coerceIn(-maxPanX, maxPanX)
+                                                    val newY = (offsetYAnim.value + pan.y).coerceIn(-maxPanY, maxPanY)
+
+                                                    scope.launch {
+                                                        scaleAnim.snapTo(newScale)
+                                                        offsetXAnim.snapTo(newX)
+                                                        offsetYAnim.snapTo(newY)
+                                                    }
                                                 }
                                             } while (event.changes.any { it.pressed })
                                         }
@@ -1772,77 +1823,95 @@ fun ClubDetailsFullScreen(
                                 AsyncImage(
                                     model = image.url,
                                     contentDescription = "Full Screen Image",
-                                    modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y },
+                                    modifier = Modifier.fillMaxSize().graphicsLayer {
+                                        scaleX = scaleAnim.value;
+                                        scaleY = scaleAnim.value;
+                                        translationX = offsetXAnim.value;
+                                        translationY = offsetYAnim.value
+                                    },
                                     contentScale = ContentScale.Fit
                                 )
                             }
                         }
 
-                        // 👇 Added the 3-dot dropdown menu beautifully matching the UI
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        // Floating Top UI Elements (Hidden when Zoomed)
+                        AnimatedVisibility(
+                            visible = !isGalleryZoomed,
+                            enter = fadeIn(tween(200)),
+                            exit = fadeOut(tween(200)),
+                            modifier = Modifier.align(Alignment.TopCenter)
                         ) {
-                            Surface(color = Color.Black.copy(alpha = 0.5f), shape = CircleShape) {
-                                IconButton(onClick = { fullScreenInitialPage = null }, modifier = Modifier.size(40.dp)) {
-                                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(color = Color(0xFF333333), shape = CircleShape) {
+                                    IconButton(onClick = { fullScreenInitialPage = null }, modifier = Modifier.size(40.dp)) {
+                                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
+                                    }
                                 }
-                            }
 
-                            Surface(color = Color.Black.copy(alpha = 0.5f), shape = CircleShape) {
-                                Text(
-                                    text = "${pagerState.currentPage + 1} of ${activeImages.size}",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 15.sp,
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                Surface(color = Color(0xFF333333), shape = CircleShape) {
+                                    Text(
+                                        text = "${pagerState.currentPage + 1} of ${activeImages.size}",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                    )
+                                }
+
+                                val currentImage = activeImages.getOrNull(pagerState.currentPage)
+
+                                NativeImageActionMenu(
+                                    isMine = currentImage?.isMine == true,
+                                    modifier = Modifier,
+                                    onDelete = {
+                                        currentImage?.url?.let { url ->
+                                            viewModel.deleteImage(locationId = club.id, imageUrl = url) {
+                                                fullScreenInitialPage = null
+                                                notificationMessage = "Photo deleted successfully"
+                                            }
+                                        }
+                                    },
+                                    onReport = { reason ->
+                                        currentImage?.url?.let { url ->
+                                            viewModel.reportImage(locationId = club.id, imageUrl = url, reason = reason) {
+                                                notificationMessage = "Photo reported for review"
+                                            }
+                                        }
+                                    }
                                 )
                             }
-
-                            // 👇 3. The new Native Menu Button!
-                            val currentImage = activeImages.getOrNull(pagerState.currentPage)
-
-                            NativeImageActionMenu(
-                                isMine = currentImage?.isMine == true,
-                                modifier = Modifier,
-                                onDelete = {
-                                    currentImage?.url?.let { url ->
-                                        viewModel.deleteImage(locationId = club.id, imageUrl = url) {
-                                            fullScreenInitialPage = null
-                                            notificationMessage = "Photo deleted successfully"
-                                        }
-                                    }
-                                },
-                                onReport = { reason ->
-                                    currentImage?.url?.let { url ->
-                                        viewModel.reportImage(locationId = club.id, imageUrl = url, reason = reason) {
-                                            notificationMessage = "Photo reported for review"
-                                        }
-                                    }
-                                }
-                            )
                         }
 
-                        val currentImage = activeImages.getOrNull(pagerState.currentPage)
-                        if (currentImage != null) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .fillMaxWidth()
-                                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))))
-                                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Bottom))
-                                    .padding(bottom = 24.dp, top = 24.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Surface(color = Color.Black.copy(alpha = 0.6f), shape = RoundedCornerShape(20.dp)) {
-                                    Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Text("📸", fontSize = 16.sp)
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(text = "Uploaded by ${currentImage.authorName}", color = Color.White, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                        // Bottom Author Bar (Hidden when Zoomed)
+                        AnimatedVisibility(
+                            visible = !isGalleryZoomed,
+                            enter = fadeIn(tween(200)),
+                            exit = fadeOut(tween(200)),
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        ) {
+                            val currentImage = activeImages.getOrNull(pagerState.currentPage)
+                            if (currentImage != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color.Black.copy(alpha = 0.5f))
+                                        .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Bottom))
+                                        .padding(bottom = 24.dp, top = 16.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Surface(color = Color(0xFF333333), shape = RoundedCornerShape(20.dp)) {
+                                        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Text("📸", fontSize = 16.sp)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(text = "Uploaded by ${currentImage.authorName}", color = Color.White, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                        }
                                     }
                                 }
                             }
