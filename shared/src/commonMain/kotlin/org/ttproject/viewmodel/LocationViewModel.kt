@@ -119,4 +119,29 @@ class LocationViewModel(
             }
         }
     }
+
+    fun deleteImage(locationId: String, imageUrl: String, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            val result = repository.deleteImage(locationId, imageUrl)
+            if (result.isSuccess) {
+                // Refresh BOTH lists since the image could have belonged to the club itself or a review!
+                fetchNearbyLocations()
+                loadReviewsForClub(locationId)
+                onSuccess()
+            } else {
+                println("Error deleting image: ${result.exceptionOrNull()?.message}")
+            }
+        }
+    }
+
+    fun reportImage(locationId: String, imageUrl: String, reason: String, onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            val result = repository.reportImage(locationId, imageUrl, reason)
+            if (result.isSuccess) {
+                onSuccess()
+            } else {
+                println("Error reporting image: ${result.exceptionOrNull()?.message}")
+            }
+        }
+    }
 }

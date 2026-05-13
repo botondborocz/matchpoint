@@ -3,6 +3,7 @@ package org.ttproject.repository
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.bearerAuth
+import io.ktor.client.request.delete
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.get
@@ -29,6 +30,8 @@ interface LocationRepository {
     suspend fun addReview(locationId: String, request: AddReviewRequest): Result<Unit>
     suspend fun getReviews(locationId: String): Result<List<TTReview>>
     suspend fun addLocationImages(locationId: String, images: List<ByteArray>): Result<Unit>
+    suspend fun deleteImage(locationId: String, imageUrl: String): Result<Unit>
+    suspend fun reportImage(locationId: String, imageUrl: String, reason: String): Result<Unit>
 }
 
 class LocationRepositoryImpl(
@@ -177,6 +180,39 @@ class LocationRepositoryImpl(
             }
             if (response.status.isSuccess()) Result.success(Unit)
             else Result.failure(Exception("Failed to add images"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun deleteImage(locationId: String, imageUrl: String): Result<Unit> {
+        val token = tokenStorage.getToken() ?: return Result.failure(Exception("User not authenticated"))
+        return try {
+            val response = httpClient.delete("${SERVER_IP}/api/locations/$locationId/images") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+                url {
+                    parameters.append("url", imageUrl) // Pass URL as query parameter
+                }
+            }
+            if (response.status.isSuccess()) Result.success(Unit)
+            else Result.failure(Exception("Failed to delete image"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun reportImage(locationId: String, imageUrl: String, reason: String): Result<Unit> {
+        val token = tokenStorage.getToken() ?: return Result.failure(Exception("User not authenticated"))
+        return try {
+            val response = httpClient.post("${SERVER_IP}/api/locations/$locationId/images/report") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+                url {
+                    parameters.append("url", imageUrl) // Pass URL as query parameter
+                    parameters.append("reason", reason) // Pass reason as query parameter
+                }
+            }
+            if (response.status.isSuccess()) Result.success(Unit)
+            else Result.failure(Exception("Failed to report image"))
         } catch (e: Exception) {
             Result.failure(e)
         }

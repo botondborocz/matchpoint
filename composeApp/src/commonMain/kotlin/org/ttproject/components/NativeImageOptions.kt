@@ -8,5 +8,5 @@ expect fun NativeImageActionMenu(
     isMine: Boolean,
     modifier: Modifier = Modifier,
     onDelete: () -> Unit,
-    onReport: () -> Unit
+    onReport: (String) -> Unit // 👇 Now accepts the selected reason!
 )

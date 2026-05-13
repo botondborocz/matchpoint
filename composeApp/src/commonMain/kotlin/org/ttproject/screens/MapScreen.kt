@@ -97,6 +97,7 @@ import io.github.vinceglb.filekit.core.PickerType
 import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
+import org.ttproject.components.InAppNotification
 import org.ttproject.components.NativeImageActionMenu
 import org.ttproject.data.LocationType
 import org.ttproject.data.TokenStorage
@@ -1429,9 +1430,18 @@ fun ClubDetailsFullScreen(
         }
     }
 
+    var notificationMessage by remember { mutableStateOf<String?>(null) }
+
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize()
     ) {
+        InAppNotification(
+            message = notificationMessage,
+            onDismiss = { notificationMessage = null },
+            // Ensure it slides down below the status bar/notch
+            modifier = Modifier.windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+        )
+
         val maxTextWidth = maxWidth - 80.dp
 
         Column(
@@ -1798,13 +1808,21 @@ fun ClubDetailsFullScreen(
 
                             NativeImageActionMenu(
                                 isMine = currentImage?.isMine == true,
+                                modifier = Modifier,
                                 onDelete = {
-                                    // TODO: Delete logic
-                                    println("Delete image: ${currentImage?.url}")
+                                    currentImage?.url?.let { url ->
+                                        viewModel.deleteImage(locationId = club.id, imageUrl = url) {
+                                            fullScreenInitialPage = null
+                                            notificationMessage = "Photo deleted successfully"
+                                        }
+                                    }
                                 },
-                                onReport = {
-                                    // TODO: Report logic
-                                    println("Report image: ${currentImage?.url}")
+                                onReport = { reason ->
+                                    currentImage?.url?.let { url ->
+                                        viewModel.reportImage(locationId = club.id, imageUrl = url, reason = reason) {
+                                            notificationMessage = "Photo reported for review"
+                                        }
+                                    }
                                 }
                             )
                         }
