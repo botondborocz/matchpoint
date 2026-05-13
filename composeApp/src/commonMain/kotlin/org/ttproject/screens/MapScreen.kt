@@ -1892,6 +1892,7 @@ fun ClubDetailsFullScreen(
 
                                 NativeImageActionMenu(
                                     isMine = currentImage?.isMine == true,
+                                    isTransitioning = isTransitioning, // 👇 Pass the state here!
                                     modifier = Modifier,
                                     onDelete = {
                                         currentImage?.url?.let { url ->
