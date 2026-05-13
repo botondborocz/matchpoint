@@ -47,7 +47,7 @@ fun mapMetricsToBadges(metrics: UserBadgeMetricsDto?): List<BadgeData> {
                 BadgeTierDefinition(1, "fotó"), BadgeTierDefinition(10, "fotó"), BadgeTierDefinition(50, "fotó"), BadgeTierDefinition(150, "fotó")
             )),
         BadgeData(
-            "Helyi Kritikus", "Szöveges értékelések és vélemények írása az alkalmazásban található helyszínekről.",
+            "Helyi Szakértő", "Szöveges értékelések és vélemények írása az alkalmazásban található helyszínekről.",
             Icons.Default.RateReview, safeMetrics.writtenReviews, listOf(
                 BadgeTierDefinition(1, "értékelés"), BadgeTierDefinition(5, "értékelés"), BadgeTierDefinition(20, "értékelés"), BadgeTierDefinition(50, "értékelés")
             )),

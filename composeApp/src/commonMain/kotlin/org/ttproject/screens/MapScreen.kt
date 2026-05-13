@@ -3,6 +3,7 @@ package org.ttproject.screens
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -29,7 +30,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -57,6 +62,7 @@ import org.ttproject.util.ThemeMode
 import kotlin.math.roundToInt
 import org.ttproject.shared.resources.Res as SharedRes
 import androidx.compose.animation.core.exponentialDecay
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -91,6 +97,7 @@ import io.github.vinceglb.filekit.core.PickerType
 import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
+import org.ttproject.components.NativeImageActionMenu
 import org.ttproject.data.LocationType
 import org.ttproject.data.TokenStorage
 import org.ttproject.isIosPlatform
@@ -108,7 +115,8 @@ data class TTClub(
     val imageUrls: List<String> = emptyList()
 )
 
-data class GalleryImage(val url: String, val authorName: String)
+// 👇 Added `isMine` to track ownership for the Dropdown options
+data class GalleryImage(val url: String, val authorName: String, val isMine: Boolean = false)
 
 enum class SheetState { Expanded, HalfExpanded, Collapsed }
 
@@ -173,7 +181,6 @@ fun MapScreen(
     var isDetailsExpanded by remember { mutableStateOf(false) }
 
     val detailsOffsetAnimatable = remember { Animatable(0f) }
-    // 👇 Add this lock to strictly block touches during automated animations
     var isCardAnimating by remember { mutableStateOf(false) }
 
     var isAddingTable by remember { mutableStateOf(false) }
@@ -192,7 +199,6 @@ fun MapScreen(
                 isDetailsExpanded -> {
                     isDetailsExpanded = false
                     coroutineScope.launch {
-                        // 👇 Snap instantly so it doesn't fight AnimatedContent
                         detailsOffsetAnimatable.snapTo(0f)
                     }
                 }
@@ -276,12 +282,10 @@ fun MapScreen(
         coroutineScope.launch {
             if (sheetState.currentValue != SheetState.Collapsed) sheetState.animateTo(SheetState.Collapsed)
             isDetailsExpanded = false
-            detailsOffsetAnimatable.snapTo(0f) // 👇 Guarantee reset
+            detailsOffsetAnimatable.snapTo(0f)
             selectedClub = clickedClub
         }
     }
-
-
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val screenHeight = this.maxHeight
@@ -622,8 +626,8 @@ fun MapScreen(
                                     coroutineScope.launch {
                                         val currentOffset = detailsOffsetAnimatable.value
 
-                                        val distanceThreshold = screenHeightPx / 3f // Your 1/3 rule!
-                                        val velocityThreshold = 300f // A healthy flick
+                                        val distanceThreshold = screenHeightPx / 3f
+                                        val velocityThreshold = 300f
 
                                         val shouldDismiss = currentOffset > distanceThreshold || velocity > velocityThreshold
 
@@ -634,7 +638,6 @@ fun MapScreen(
                                                 animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
                                             )
                                         } else {
-                                            // Force it back to the top if the drag was microscopic
                                             detailsOffsetAnimatable.animateTo(
                                                 targetValue = 0f,
                                                 animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
@@ -1008,7 +1011,6 @@ fun AddTableFullScreen(
     ExperimentalComposeUiApi::class
 )
 @Composable
-// 👇 1. Add AnimatedVisibilityScope here!
 fun AnimatedVisibilityScope.AddReviewFullScreen(
     clubName: String,
     brandOrange: Color,
@@ -1062,12 +1064,10 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
         }
     }
 
-    // 👇 1. Use BoxWithConstraints to safely get cross-platform screen dimensions
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val density = LocalDensity.current
         val screenHeightPx = with(density) { maxHeight.toPx() }
 
-        // 1/3 of the screen for distance, 300 for a solid flick
         val distanceThreshold = screenHeightPx / 3f
         val velocityThreshold = 300f
 
@@ -1092,7 +1092,6 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                 }
 
                 override suspend fun onPreFling(available: Velocity): Velocity {
-                    // 👇 2. Implement the Distance OR Velocity rule
                     val shouldDismiss = offsetY.value > distanceThreshold ||
                             (offsetY.value > 10f && available.y > velocityThreshold)
 
@@ -1100,7 +1099,6 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                         currentAttemptClose()
                         return available
                     } else if (offsetY.value > 0f) {
-                        // Spring back to the top if they didn't flick hard enough or drag far enough
                         scope.launch { offsetY.animateTo(0f, spring()) }
                         return available
                     }
@@ -1109,7 +1107,6 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
             }
         }
 
-        // The Dark Overlay (This will just gracefully Fade In from the parent)
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = Color.Black.copy(alpha = 0.6f)
@@ -1119,7 +1116,6 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    // 👇 2. Tell the sheet to Slide Up/Down independently of the fade!
                     .animateEnterExit(
                         enter = slideInVertically(
                             initialOffsetY = { it },
@@ -1130,7 +1126,6 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                             animationSpec = tween(250)
                         )
                     )
-                    // Ensure padding and offset come AFTER the animateEnterExit
                     .padding(top = topPadding)
                     .offset { IntOffset(0, offsetY.value.toInt()) }
                     .nestedScroll(nestedScrollConnection)
@@ -1148,7 +1143,6 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                                     }
                                 },
                                 onDragEnd = {
-                                    // 👇 3. Apply the 1/3 distance rule for slow drags on the Top Bar
                                     if (offsetY.value > distanceThreshold) {
                                         currentAttemptClose()
                                     } else {
@@ -1339,10 +1333,15 @@ fun ClubDetailsFullScreen(
     val reviews by viewModel.clubReviews.collectAsState()
     val hasReviewed = remember(reviews, currentUserId) { reviews.any { it.userId == currentUserId } }
 
-    val allGalleryImages = remember(club.imageUrls, reviews, club.createdBy) {
+    // 👇 Updated to parse and assign `isMine` based on currentUserId
+    val allGalleryImages = remember(club.imageUrls, reviews, club.createdBy, currentUserId) {
         val list = mutableListOf<GalleryImage>()
-        club.imageUrls.forEach { url -> list.add(GalleryImage(url, club.createdBy)) }
-        reviews.forEach { review -> review.imageUrls.forEach { url -> list.add(GalleryImage(url, review.username)) } }
+        val isClubCreatorMe = club.createdBy == currentUserId
+        club.imageUrls.forEach { url -> list.add(GalleryImage(url, club.createdBy, isClubCreatorMe)) }
+        reviews.forEach { review ->
+            val isMine = review.userId == currentUserId
+            review.imageUrls.forEach { url -> list.add(GalleryImage(url, review.username, isMine)) }
+        }
         list.distinctBy { it.url }
     }
 
@@ -1376,13 +1375,10 @@ fun ClubDetailsFullScreen(
     val headerHeightPx = with(density) { headerHeightDp.toPx() }
     val topInsetPx = WindowInsets.systemBars.getTop(density).toFloat()
 
-    // 👇 1. TRACK OVERSCROLL: We use these to catch the iOS native rubber-band effect!
     var overscrollAmount by remember { mutableFloatStateOf(0f) }
     var initialSpacerY by remember { mutableFloatStateOf(Float.NaN) }
 
     val titleStartY = headerHeightPx
-
-    // 👇 2. PERFECT ALIGNMENT: 20.dp pushes the text center to perfectly match the 40.dp close button center!
     val titleEndY = topInsetPx + with(density) { 20.dp.toPx() }
     val pinDistance = titleStartY - titleEndY
 
@@ -1445,7 +1441,6 @@ fun ClubDetailsFullScreen(
                 .verticalScroll(scrollState)
                 .padding(bottom = 100.dp + systemNavHeight)
         ) {
-            // 👇 3. THE GHOST TRACKER: This 0dp Spacer catches the physical iOS bounce perfectly without causing math loops!
             Spacer(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1530,8 +1525,26 @@ fun ClubDetailsFullScreen(
                                 Text(displayName.firstOrNull()?.uppercase() ?: "?", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                             }
                             Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(text = displayName, color = AppColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                // 👇 Added Edit Button for user's own reviews
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(text = displayName, color = AppColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    if (review.userId == currentUserId) {
+                                        IconButton(
+                                            onClick = {
+                                                // TODO: Wire up to open an edit view / backend logic
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(Icons.Default.Edit, contentDescription = "Edit Review", tint = brandOrange, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                }
+
                                 if (!review.textContent.isNullOrBlank()) Text(review.textContent!!, color = Color.LightGray, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
                                 if (review.tags.isNotEmpty()) {
                                     FlowRow(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1582,7 +1595,7 @@ fun ClubDetailsFullScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(color = Color.Black.copy(alpha = 0.5f), shape = CircleShape) {
+            Surface(color = AppColors.SurfaceDark, shape = CircleShape) {
                 IconButton(onClick = onClose, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
                 }
@@ -1602,7 +1615,6 @@ fun ClubDetailsFullScreen(
             text = club.name, color = AppColors.TextPrimary, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             modifier = Modifier.width(maxTextWidth).graphicsLayer {
                 translationX = startX + (endX - startX) * progress
-                // 👇 4. Combines hyper-fast scrollState for going up, with overscrollAmount for bouncing down!
                 translationY = maxOf(titleEndY, titleStartY - scrollState.value) + overscrollAmount
                 scaleX = currentScale
                 scaleY = currentScale
@@ -1756,6 +1768,7 @@ fun ClubDetailsFullScreen(
                             }
                         }
 
+                        // 👇 Added the 3-dot dropdown menu beautifully matching the UI
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1769,6 +1782,7 @@ fun ClubDetailsFullScreen(
                                     Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
                                 }
                             }
+
                             Surface(color = Color.Black.copy(alpha = 0.5f), shape = CircleShape) {
                                 Text(
                                     text = "${pagerState.currentPage + 1} of ${activeImages.size}",
@@ -1778,6 +1792,21 @@ fun ClubDetailsFullScreen(
                                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                                 )
                             }
+
+                            // 👇 3. The new Native Menu Button!
+                            val currentImage = activeImages.getOrNull(pagerState.currentPage)
+
+                            NativeImageActionMenu(
+                                isMine = currentImage?.isMine == true,
+                                onDelete = {
+                                    // TODO: Delete logic
+                                    println("Delete image: ${currentImage?.url}")
+                                },
+                                onReport = {
+                                    // TODO: Report logic
+                                    println("Report image: ${currentImage?.url}")
+                                }
+                            )
                         }
 
                         val currentImage = activeImages.getOrNull(pagerState.currentPage)
