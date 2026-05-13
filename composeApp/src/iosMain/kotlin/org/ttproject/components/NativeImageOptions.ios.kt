@@ -1,8 +1,10 @@
 package org.ttproject.components
 
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.interop.UIKitView
 import androidx.compose.ui.unit.dp
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -18,12 +20,15 @@ actual fun NativeImageActionMenu(
 ) {
     UIKitView<UIButton>(
         factory = {
-            // 👇 FIX: Use the Kotlin/Native factory method instead of a constructor!
             val button = UIButton.buttonWithType(UIButtonTypeCustom)
 
             button.apply {
-                backgroundColor = UIColor(white = 0.0, alpha = 0.5)
+                // 👇 FIX 1: OPAQUE background.
+                // Translucency allows the hole-punch to reveal the Map underneath.
+                // This dark gray closely matches the translucent black of the other Compose buttons.
+                backgroundColor = UIColor(white = 0.15, alpha = 1.0)
                 layer.cornerRadius = 20.0
+                clipsToBounds = true
 
                 val imageConfig = UIImageSymbolConfiguration.configurationWithPointSize(
                     pointSize = 18.0,
@@ -36,7 +41,6 @@ actual fun NativeImageActionMenu(
                 showsMenuAsPrimaryAction = true
             }
 
-            // Return the button from the factory
             button
         },
         update = { button ->
@@ -49,6 +53,7 @@ actual fun NativeImageActionMenu(
                     identifier = null,
                     handler = { _ -> onDelete() }
                 )
+                // This makes the text and icon natively RED in iOS!
                 deleteAction.attributes = UIMenuElementAttributesDestructive
                 actions.add(deleteAction)
             } else {
@@ -63,6 +68,8 @@ actual fun NativeImageActionMenu(
 
             button.menu = UIMenu.menuWithTitle(title = "", children = actions)
         },
-        modifier = modifier.size(40.dp)
+        // 👇 FIX 2: Apply clip(CircleShape).
+        // This forces Compose to cut a perfectly circular hole instead of a square one!
+        modifier = modifier.size(40.dp).clip(CircleShape)
     )
 }
