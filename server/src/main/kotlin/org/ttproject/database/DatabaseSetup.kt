@@ -12,6 +12,7 @@ import org.ttproject.database.tables.Locations
 import org.ttproject.database.tables.Matches
 import org.ttproject.database.tables.MessageReactions
 import org.ttproject.database.tables.Messages
+import org.ttproject.database.tables.ReportedMedia
 import org.ttproject.database.tables.ReviewTags
 import org.ttproject.database.tables.Reviews
 import org.ttproject.database.tables.Swipes
@@ -54,7 +55,8 @@ fun initDatabase() {
     // 3. Automatically create the table if it doesn't exist yet
     transaction {
         SchemaUtils.createMissingTablesAndColumns(Users, Swipes, Locations, Reviews, ReviewTags, Matches, Connections, Messages,
-            MessageReactions, AiAnalyses, UserBadgeMetrics)
+            MessageReactions, AiAnalyses, UserBadgeMetrics,
+            ReportedMedia)
     }
 
     insertDummyData()

@@ -13,19 +13,28 @@ import io.ktor.server.request.receive
 import io.ktor.server.request.receiveMultipart
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import org.jetbrains.exposed.sql.Op
+import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.ttproject.database.tables.Users
 import org.ttproject.utils.calculateDistanceKm
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.select
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
 import org.ttproject.data.PlayerResponse
+import org.ttproject.data.ReportedMediaDto
 import org.ttproject.data.SwipeRequest
 import org.ttproject.data.SwipeResponse
 import org.ttproject.data.TokenResponse
 import org.ttproject.data.UpdateLanguageRequest
 import org.ttproject.data.UpdateProfileRequest
 import org.ttproject.data.UserProfile
+import org.ttproject.database.tables.Locations
+import org.ttproject.database.tables.ReportedMedia
+import org.ttproject.database.tables.Reviews
 import org.ttproject.database.tables.Swipes
 import org.ttproject.database.tables.UserBadgeMetrics
 import org.ttproject.services.BadgeService
@@ -402,6 +411,144 @@ fun Route.userRoutes(badgeService: BadgeService) {
                     }
                 } else {
                     call.respond(HttpStatusCode.BadRequest, "No image file provided")
+                }
+            }
+        }
+
+        route("/admin") {
+
+            // Helper function to check if the current user is an admin
+            suspend fun io.ktor.server.application.ApplicationCall.requireAdmin(): Boolean {
+                val principal = principal<JWTPrincipal>()
+                val userIdStr = principal?.payload?.getClaim("userId")?.asString() ?: return false
+                val userUuid = UUID.fromString(userIdStr)
+
+                val isAdmin = transaction {
+                    Users.selectAll().where { Users.id eq userUuid }.singleOrNull()?.get(Users.isAdmin) == true
+                }
+
+                if (!isAdmin) {
+                    respond(HttpStatusCode.Forbidden, "Admin access required")
+                }
+                return isAdmin
+            }
+
+            // 👇 1. GET ALL PENDING REPORTS
+            get("/reports") {
+                if (!call.requireAdmin()) return@get
+
+                try {
+                    val reports = transaction {
+                        (ReportedMedia innerJoin Users)
+                            .selectAll().where { ReportedMedia.status eq "PENDING" }
+                            .orderBy(ReportedMedia.createdAt to SortOrder.DESC)
+                            .map { row ->
+                                ReportedMediaDto(
+                                    id = row[ReportedMedia.id].toString(),
+                                    reporterId = row[ReportedMedia.reporterId].toString(),
+                                    reporterUsername = row[Users.username] ?: "Unknown",
+                                    locationId = row[ReportedMedia.locationId].toString(),
+                                    imageUrl = row[ReportedMedia.imageUrl],
+                                    reason = row[ReportedMedia.reason],
+                                    status = row[ReportedMedia.status],
+                                    createdAt = row[ReportedMedia.createdAt]
+                                )
+                            }
+                    }
+                    call.respond(HttpStatusCode.OK, reports)
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.InternalServerError, e.localizedMessage)
+                }
+            }
+
+            // 👇 2. RESOLVE REPORT: DELETE THE IMAGE
+            post("/reports/{id}/delete-image") {
+                if (!call.requireAdmin()) return@post
+
+                val reportIdStr = call.parameters["id"]
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing report ID")
+
+                val reportUuid = UUID.fromString(reportIdStr)
+
+                try {
+                    val isResolved = transaction {
+                        val report = ReportedMedia.select { ReportedMedia.id eq reportUuid }.singleOrNull()
+                        if (report == null) return@transaction false
+
+                        val targetImageUrl = report[ReportedMedia.imageUrl]
+                        val locationUuid = report[ReportedMedia.locationId]
+
+                        var imageRemoved = false
+
+                        // A. Try removing from the Location itself
+                        val location = Locations.selectAll().where { Locations.id eq locationUuid }.singleOrNull()
+                        if (location != null) {
+                            val urls = location[Locations.imageUrls].split(",").filter { it.isNotBlank() }.toMutableList()
+                            if (urls.remove(targetImageUrl)) {
+                                Locations.update({ Locations.id eq locationUuid }) {
+                                    it[imageUrls] = urls.joinToString(",")
+                                }
+                                imageRemoved = true
+                            }
+                        }
+
+                        // B. Try removing from ANY review at this location
+                        if (!imageRemoved) {
+                            val reviews = Reviews.selectAll()
+                                .where { Reviews.locationId eq locationUuid }
+                                .toList()
+                            for (row in reviews) {
+                                val reviewUrls = row[Reviews.imageUrls].split(",").filter { it.isNotBlank() }.toMutableList()
+                                if (reviewUrls.remove(targetImageUrl)) {
+                                    Reviews.update({ Reviews.id eq row[Reviews.id] }) {
+                                        it[imageUrls] = reviewUrls.joinToString(",")
+                                    }
+                                    imageRemoved = true
+                                    break
+                                }
+                            }
+                        }
+
+                        // C. Update the report status to DELETED
+                        if (imageRemoved) {
+                            ReportedMedia.update({ ReportedMedia.id eq reportUuid }) {
+                                it[status] = "DELETED"
+                            }
+
+                            // Optional: Actually delete the file from Firebase Storage here if you want to save space
+                        }
+
+                        imageRemoved
+                    }
+
+                    if (isResolved) {
+                        call.respond(HttpStatusCode.OK, "Image deleted and report resolved.")
+                    } else {
+                        call.respond(HttpStatusCode.NotFound, "Image could not be found to delete.")
+                    }
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.InternalServerError, e.localizedMessage)
+                }
+            }
+
+            // 👇 3. RESOLVE REPORT: DISMISS (Image was fine)
+            put("/reports/{id}/dismiss") {
+                if (!call.requireAdmin()) return@put
+
+                val reportIdStr = call.parameters["id"]
+                    ?: return@put call.respond(HttpStatusCode.BadRequest, "Missing report ID")
+
+                val reportUuid = UUID.fromString(reportIdStr)
+
+                try {
+                    transaction {
+                        ReportedMedia.update({ ReportedMedia.id eq reportUuid }) {
+                            it[status] = "DISMISSED"
+                        }
+                    }
+                    call.respond(HttpStatusCode.OK, "Report dismissed.")
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.InternalServerError, e.localizedMessage)
                 }
             }
         }

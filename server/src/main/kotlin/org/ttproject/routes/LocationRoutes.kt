@@ -11,12 +11,14 @@ import io.ktor.server.auth.principal
 import io.ktor.server.request.receiveMultipart
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
@@ -26,6 +28,7 @@ import org.ttproject.data.Location
 import org.ttproject.data.ReviewResponse
 import org.ttproject.database.tables.LocationType
 import org.ttproject.database.tables.Locations
+import org.ttproject.database.tables.ReportedMedia
 import org.ttproject.database.tables.ReviewTags
 import org.ttproject.database.tables.Reviews
 import org.ttproject.database.tables.Users
@@ -308,6 +311,112 @@ fun Route.locationRoutes() {
                         }
                     }
                     call.respond(HttpStatusCode.OK, "Images added successfully")
+
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    call.respond(HttpStatusCode.InternalServerError, "Database error: ${e.localizedMessage}")
+                }
+            }
+
+            // 👇 4. DELETE AN IMAGE
+            delete("/locations/{id}/images") {
+                val locationIdStr = call.parameters["id"]
+                    ?: return@delete call.respond(HttpStatusCode.BadRequest, "Missing location ID")
+                val imageUrl = call.request.queryParameters["url"]
+                    ?: return@delete call.respond(HttpStatusCode.BadRequest, "Missing image URL")
+
+                val principal = call.principal<JWTPrincipal>()
+                val userIdStr = principal?.payload?.getClaim("userId")?.asString()
+                    ?: return@delete call.respond(HttpStatusCode.Unauthorized, "Missing user claim")
+
+                val locationUuid = UUID.fromString(locationIdStr)
+                val userUuid = UUID.fromString(userIdStr)
+
+                try {
+                    // 👇 FIX: Capture the boolean result and return it out of the transaction block
+                    val isDeleted = transaction {
+                        var deleted = false
+
+                        // Step A: Check if the image belongs to the Location itself (created by this user)
+                        val location = Locations.select { Locations.id eq locationUuid }.singleOrNull()
+                        if (location != null && location[Locations.createdBy] == userUuid) {
+                            val urls = location[Locations.imageUrls].split(",").filter { it.isNotBlank() }.toMutableList()
+                            if (urls.remove(imageUrl)) {
+                                Locations.update({ Locations.id eq locationUuid }) {
+                                    it[imageUrls] = urls.joinToString(",")
+                                }
+                                deleted = true
+                            }
+                        }
+
+                        // Step B: If not deleted yet, check if it belongs to a Review by this user
+                        if (!deleted) {
+                            // Find any review by this user at this location that contains the image URL
+                            val review = Reviews.select {
+                                (Reviews.locationId eq locationUuid) and (Reviews.userId eq userUuid)
+                            }.firstOrNull { row ->
+                                row[Reviews.imageUrls].split(",").contains(imageUrl)
+                            }
+
+                            if (review != null) {
+                                val reviewId = review[Reviews.id]
+                                val urls = review[Reviews.imageUrls].split(",").filter { it.isNotBlank() }.toMutableList()
+                                if (urls.remove(imageUrl)) {
+                                    Reviews.update({ Reviews.id eq reviewId }) {
+                                        it[imageUrls] = urls.joinToString(",")
+                                    }
+                                    deleted = true
+                                }
+                            }
+                        }
+
+                        deleted // Return the result
+                    }
+
+                    // 👇 We are safely back in the Ktor coroutine context, so we can call.respond!
+                    if (isDeleted) {
+                        call.respond(HttpStatusCode.OK, "Image deleted successfully")
+                    } else {
+                        call.respond(HttpStatusCode.Forbidden, "Not authorized or image not found")
+                    }
+
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    call.respond(HttpStatusCode.InternalServerError, "Database error: ${e.localizedMessage}")
+                }
+            }
+
+            // 👇 5. REPORT AN IMAGE
+            post("/locations/{id}/images/report") {
+                val locationIdStr = call.parameters["id"]
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing location ID")
+
+                val imageUrl = call.request.queryParameters["url"]
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing image URL")
+
+                // Optional: Catch a reason if you decide to pass it from the UI later
+                val reason = call.request.queryParameters["reason"]
+
+                val principal = call.principal<JWTPrincipal>()
+                val userIdStr = principal?.payload?.getClaim("userId")?.asString()
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized, "Missing user claim")
+
+                val locationUuid = UUID.fromString(locationIdStr)
+                val userUuid = UUID.fromString(userIdStr)
+
+                try {
+                    transaction {
+                        ReportedMedia.insert {
+                            it[this.reporterId] = userUuid
+                            it[this.locationId] = locationUuid
+                            it[this.imageUrl] = imageUrl
+                            it[this.reason] = reason
+                            it[this.createdAt] = System.currentTimeMillis()
+                            it[this.status] = "PENDING"
+                        }
+                    }
+
+                    call.respond(HttpStatusCode.Created, "Image reported successfully")
 
                 } catch (e: Exception) {
                     e.printStackTrace()
