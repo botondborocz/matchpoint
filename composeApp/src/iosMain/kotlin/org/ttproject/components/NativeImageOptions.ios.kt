@@ -45,13 +45,14 @@ actual fun NativeImageActionMenu(
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     // 👇 CUSTOM DOTS: This matches the iOS 'ellipsis' perfectly! No more popping!
+                    // TODO test if it matches ios design completely, if not we can tweak the size and spacing until it does
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(3.2.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(modifier = Modifier.size(3.dp).background(Color.White, CircleShape))
-                        Box(modifier = Modifier.size(3.dp).background(Color.White, CircleShape))
-                        Box(modifier = Modifier.size(3.dp).background(Color.White, CircleShape))
+                        Box(modifier = Modifier.size(3.2.dp).background(Color.White, CircleShape))
+                        Box(modifier = Modifier.size(3.2.dp).background(Color.White, CircleShape))
+                        Box(modifier = Modifier.size(3.2.dp).background(Color.White, CircleShape))
                     }
                 }
             }
