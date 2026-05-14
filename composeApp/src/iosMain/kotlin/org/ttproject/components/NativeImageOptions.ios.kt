@@ -22,7 +22,7 @@ import platform.UIKit.*
 @Composable
 actual fun NativeImageActionMenu(
     isMine: Boolean,
-    isTransitioning: Boolean, // 👇 Now controlled by the parent!
+    isTransitioning: Boolean,
     modifier: Modifier,
     onDelete: () -> Unit,
     onReport: (String) -> Unit
@@ -36,16 +36,95 @@ actual fun NativeImageActionMenu(
     )
 
     Box(modifier = modifier.size(40.dp)) {
+
+        // 👇 1. ALWAYS keep the UIKitView in the tree so it doesn't have to be recreated!
+        UIKitView<UIView>(
+            factory = {
+                val container = UIView().apply {
+                    backgroundColor = UIColor.blackColor
+                }
+
+                val button = UIButton.buttonWithType(UIButtonTypeCustom).apply {
+                    backgroundColor = UIColor(white = 0.15, alpha = 1.0)
+
+                    val imageConfig = UIImageSymbolConfiguration.configurationWithPointSize(
+                        pointSize = 18.0,
+                        weight = UIImageSymbolWeightRegular
+                    )
+                    val icon = UIImage.systemImageNamed("ellipsis", withConfiguration = imageConfig)
+                    setImage(icon, forState = UIControlStateNormal)
+                    tintColor = UIColor.whiteColor
+
+                    showsMenuAsPrimaryAction = true
+                    translatesAutoresizingMaskIntoConstraints = false
+                }
+
+                container.addSubview(button)
+                button.leadingAnchor.constraintEqualToAnchor(container.leadingAnchor).active = true
+                button.trailingAnchor.constraintEqualToAnchor(container.trailingAnchor).active = true
+                button.topAnchor.constraintEqualToAnchor(container.topAnchor).active = true
+                button.bottomAnchor.constraintEqualToAnchor(container.bottomAnchor).active = true
+
+                container
+            },
+            update = { container ->
+                // 👇 2. Instantly hide/show the native view without destroying it
+                container.hidden = isTransitioning
+
+                val button = container.subviews.firstOrNull() as? UIButton ?: return@UIKitView
+
+                val actions = mutableListOf<UIMenuElement>()
+
+                if (isMine) {
+                    val deleteAction = UIAction.actionWithTitle(
+                        title = "Delete Photo",
+                        image = UIImage.systemImageNamed("trash"),
+                        identifier = null,
+                        handler = { _ -> onDelete() }
+                    )
+                    deleteAction.attributes = UIMenuElementAttributesDestructive
+                    actions.add(deleteAction)
+                } else {
+                    val reportAction = UIAction.actionWithTitle(
+                        title = "Report Photo",
+                        image = UIImage.systemImageNamed("flag"),
+                        identifier = null,
+                        handler = { _ ->
+                            val alert = UIAlertController.alertControllerWithTitle(
+                                title = "Report Photo",
+                                message = "Why are you reporting this photo?",
+                                preferredStyle = UIAlertControllerStyleActionSheet
+                            )
+
+                            reasons.forEach { reason ->
+                                alert.addAction(
+                                    UIAlertAction.actionWithTitle(reason, UIAlertActionStyleDefault) {
+                                        onReport(reason)
+                                    }
+                                )
+                            }
+                            alert.addAction(UIAlertAction.actionWithTitle("Cancel", UIAlertActionStyleCancel, null))
+
+                            val window = UIApplication.sharedApplication.windows.firstOrNull { (it as UIWindow).isKeyWindow() } as? UIWindow
+                            window?.rootViewController?.presentViewController(alert, animated = true, completion = null)
+                        }
+                    )
+                    actions.add(reportAction)
+                }
+
+                button.menu = UIMenu.menuWithTitle(title = "", children = actions)
+            },
+            modifier = Modifier.fillMaxSize().clip(CircleShape)
+        )
+
+        // 👇 3. Show the dummy pure-compose button ONLY when transitioning
         if (isTransitioning) {
-            // 👇 The pure Compose dummy button
             Surface(
-                color = Color(0xFF262626), // Exact match for iOS dark grey
+                color = Color(0xFF262626),
                 shape = CircleShape,
                 modifier = Modifier.fillMaxSize()
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    // 👇 CUSTOM DOTS: This matches the iOS 'ellipsis' perfectly! No more popping!
-                    // TODO test if it matches ios design completely, if not we can tweak the size and spacing until it does
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(3.2.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -56,82 +135,6 @@ actual fun NativeImageActionMenu(
                     }
                 }
             }
-        } else {
-            UIKitView<UIView>(
-                factory = {
-                    val container = UIView().apply {
-                        backgroundColor = UIColor.blackColor
-                    }
-
-                    val button = UIButton.buttonWithType(UIButtonTypeCustom).apply {
-                        backgroundColor = UIColor(white = 0.15, alpha = 1.0)
-
-                        val imageConfig = UIImageSymbolConfiguration.configurationWithPointSize(
-                            pointSize = 18.0,
-                            weight = UIImageSymbolWeightRegular
-                        )
-                        val icon = UIImage.systemImageNamed("ellipsis", withConfiguration = imageConfig)
-                        setImage(icon, forState = UIControlStateNormal)
-                        tintColor = UIColor.whiteColor
-
-                        showsMenuAsPrimaryAction = true
-                        translatesAutoresizingMaskIntoConstraints = false
-                    }
-
-                    container.addSubview(button)
-                    button.leadingAnchor.constraintEqualToAnchor(container.leadingAnchor).active = true
-                    button.trailingAnchor.constraintEqualToAnchor(container.trailingAnchor).active = true
-                    button.topAnchor.constraintEqualToAnchor(container.topAnchor).active = true
-                    button.bottomAnchor.constraintEqualToAnchor(container.bottomAnchor).active = true
-
-                    container
-                },
-                update = { container ->
-                    val button = container.subviews.firstOrNull() as? UIButton ?: return@UIKitView
-
-                    val actions = mutableListOf<UIMenuElement>()
-
-                    if (isMine) {
-                        val deleteAction = UIAction.actionWithTitle(
-                            title = "Delete Photo",
-                            image = UIImage.systemImageNamed("trash"),
-                            identifier = null,
-                            handler = { _ -> onDelete() }
-                        )
-                        deleteAction.attributes = UIMenuElementAttributesDestructive
-                        actions.add(deleteAction)
-                    } else {
-                        val reportAction = UIAction.actionWithTitle(
-                            title = "Report Photo",
-                            image = UIImage.systemImageNamed("flag"),
-                            identifier = null,
-                            handler = { _ ->
-                                val alert = UIAlertController.alertControllerWithTitle(
-                                    title = "Report Photo",
-                                    message = "Why are you reporting this photo?",
-                                    preferredStyle = UIAlertControllerStyleActionSheet
-                                )
-
-                                reasons.forEach { reason ->
-                                    alert.addAction(
-                                        UIAlertAction.actionWithTitle(reason, UIAlertActionStyleDefault) {
-                                            onReport(reason)
-                                        }
-                                    )
-                                }
-                                alert.addAction(UIAlertAction.actionWithTitle("Cancel", UIAlertActionStyleCancel, null))
-
-                                val window = UIApplication.sharedApplication.windows.firstOrNull { (it as UIWindow).isKeyWindow() } as? UIWindow
-                                window?.rootViewController?.presentViewController(alert, animated = true, completion = null)
-                            }
-                        )
-                        actions.add(reportAction)
-                    }
-
-                    button.menu = UIMenu.menuWithTitle(title = "", children = actions)
-                },
-                modifier = Modifier.fillMaxSize().clip(CircleShape)
-            )
         }
     }
 }

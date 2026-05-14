@@ -14,7 +14,8 @@ actual fun FullScreenDialog(
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             dismissOnBackPress = true,
-            dismissOnClickOutside = false
+            dismissOnClickOutside = false,
+            usePlatformInsets = false // 👇 This tells CMP to draw under the iOS Notch and Home Bar!
         ),
         content = content
     )

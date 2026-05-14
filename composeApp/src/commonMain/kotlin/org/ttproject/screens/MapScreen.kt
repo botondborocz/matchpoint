@@ -2134,8 +2134,9 @@ fun ClubDetailsFullScreen(
                                                         }
                                                     },
                                                     onTap = {
-                                                        // 👇 5. Toggle UI overlay and system bars on single tap
-                                                        isUiVisible = !isUiVisible
+                                                        if (scaleAnim.value <= 1.01f) {
+                                                            isUiVisible = !isUiVisible
+                                                        }
                                                     }
                                                 )
                                             }
