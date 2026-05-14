@@ -51,7 +51,6 @@ class LocationViewModel(
         isIndoor: Boolean,
         count: Int,
         isFree: Boolean,
-        notes: String,
         images: List<ByteArray>, // 👇 ADDED
         onSuccess: () -> Unit
     ) {
@@ -62,7 +61,6 @@ class LocationViewModel(
                 type = if (isIndoor) "Indoor" else "Outdoor",
                 tableCount = count,
                 isFree = isFree,
-                notes = notes.takeIf { it.isNotBlank() },
                 images = images // 👇 ADDED
             )
 

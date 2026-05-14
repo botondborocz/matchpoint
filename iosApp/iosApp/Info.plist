@@ -82,5 +82,8 @@
     <key>NSMicrophoneUsageDescription</key>
     <string>We need access to your microphone to record and send voice notes in chat.</string>
 
+    <key>UIViewControllerBasedStatusBarAppearance</key>
+    <false/>
+
 </dict>
 </plist>

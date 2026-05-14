@@ -545,7 +545,14 @@ fun MapScreen(
                                     lat = centerLat,
                                     lng = centerLng,
                                     viewModel = viewModel,
-                                    onClose = { isAddingTable = false }
+                                    onAdjustLocation = {
+                                        isAddingTable = false
+                                        isPickingLocation = true // 👇 This brings back the crosshairs and Check icon!
+                                    },
+                                    onClose = {
+                                        isAddingTable = false
+                                        isPickingLocation = false
+                                    }
                                 )
                             }
                         }
@@ -834,23 +841,46 @@ fun ClubCard(club: TTClub, cardBg: Color, brandOrange: Color, onClick: () -> Uni
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun AddTableFullScreen(
+fun AnimatedVisibilityScope.AddTableFullScreen(
     brandOrange: Color,
     cardBg: Color,
     systemNavHeight: Dp,
     lat: Double,
     lng: Double,
     viewModel: LocationViewModel,
+    onAdjustLocation: () -> Unit,
     onClose: () -> Unit
 ) {
     var isIndoor by remember { mutableStateOf(false) }
     var tableCount by remember { mutableStateOf(1) }
     var isFree by remember { mutableStateOf(true) }
-    var notesText by remember { mutableStateOf("") }
     var isSubmitting by remember { mutableStateOf(false) }
 
     var selectedImages by remember { mutableStateOf<List<ByteArray>>(emptyList()) }
     val scope = rememberCoroutineScope()
+
+    val hasUnsavedChanges = isIndoor || tableCount > 1 || !isFree || selectedImages.isNotEmpty()
+    var showExitConfirmation by remember { mutableStateOf(false) }
+
+    val offsetY = remember { Animatable(0f) }
+    val scrollState = rememberScrollState()
+
+    val attemptClose: () -> Unit = {
+        if (hasUnsavedChanges && !isSubmitting) {
+            showExitConfirmation = true
+            scope.launch { offsetY.animateTo(0f, spring()) }
+        } else {
+            onClose()
+        }
+    }
+    val currentAttemptClose by rememberUpdatedState(attemptClose)
+
+    val tableNavState = rememberNavigationEventState(NavigationEventInfo.None)
+    NavigationBackHandler(
+        state = tableNavState,
+        isBackEnabled = true,
+        onBackCompleted = { currentAttemptClose() }
+    )
 
     val mediaLauncher = rememberFilePickerLauncher(
         type = PickerType.Image,
@@ -865,154 +895,287 @@ fun AddTableFullScreen(
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize(), color = AppColors.Background) {
-        Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val screenHeightPx = with(density) { maxHeight.toPx() }
 
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Add New Table", color = AppColors.TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                IconButton(onClick = onClose, modifier = Modifier.size(32.dp).background(Color(0xFF333947), RoundedCornerShape(16.dp))) {
-                    Icon(Icons.Default.Close, "Close", tint = Color.White, modifier = Modifier.size(18.dp))
+        val distanceThreshold = screenHeightPx / 3f
+        val velocityThreshold = 300f
+
+        val nestedScrollConnection = remember(distanceThreshold, velocityThreshold) {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    if (available.y < 0 && offsetY.value > 0f && source == NestedScrollSource.UserInput) {
+                        val newOffset = (offsetY.value + available.y).coerceAtLeast(0f)
+                        val consumed = newOffset - offsetY.value
+                        scope.launch { offsetY.snapTo(newOffset) }
+                        return Offset(0f, consumed)
+                    }
+                    return Offset.Zero
+                }
+
+                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                    if (available.y > 0 && source == NestedScrollSource.UserInput) {
+                        scope.launch { offsetY.snapTo(offsetY.value + available.y) }
+                        return Offset(0f, available.y)
+                    }
+                    return Offset.Zero
+                }
+
+                override suspend fun onPreFling(available: Velocity): Velocity {
+                    val shouldDismiss = offsetY.value > distanceThreshold ||
+                            (offsetY.value > 10f && available.y > velocityThreshold)
+
+                    if (shouldDismiss) {
+                        currentAttemptClose()
+                        return available
+                    } else if (offsetY.value > 0f) {
+                        scope.launch { offsetY.animateTo(0f, spring()) }
+                        return available
+                    }
+                    return Velocity.Zero
                 }
             }
+        }
 
-            Column(modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Color.Black.copy(alpha = 0.6f)
+        ) {
+            val topPadding = WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 40.dp
 
-                if (selectedImages.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth().height(160.dp)
-                            .background(cardBg, RoundedCornerShape(16.dp))
-                            .clickable { mediaLauncher.launch() },
-                        contentAlignment = Alignment.Center
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .animateEnterExit(
+                        enter = slideInVertically(
+                            initialOffsetY = { it },
+                            animationSpec = tween(350, easing = FastOutSlowInEasing)
+                        ),
+                        exit = slideOutVertically(
+                            targetOffsetY = { it },
+                            animationSpec = tween(250)
+                        )
+                    )
+                    .padding(top = topPadding)
+                    .offset { IntOffset(0, offsetY.value.toInt()) }
+                    .nestedScroll(nestedScrollConnection)
+                    .background(AppColors.Background, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+            ) {
+                // Top Bar with drag gestures
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .pointerInput(Unit) {
+                            detectVerticalDragGestures(
+                                onVerticalDrag = { _, dragAmount ->
+                                    if (dragAmount > 0 || offsetY.value > 0f) {
+                                        scope.launch { offsetY.snapTo((offsetY.value + dragAmount).coerceAtLeast(0f)) }
+                                    }
+                                },
+                                onDragEnd = {
+                                    if (offsetY.value > distanceThreshold) {
+                                        currentAttemptClose()
+                                    } else {
+                                        scope.launch { offsetY.animateTo(0f, spring()) }
+                                    }
+                                }
+                            )
+                        }
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        color = Color.Black.copy(alpha = 0.5f),
+                        shape = CircleShape,
+                        modifier = Modifier.align(Alignment.CenterStart)
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.CameraAlt, contentDescription = "Add Photo", tint = brandOrange, modifier = Modifier.size(40.dp))
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("Add Table Photos", color = brandOrange, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                            Text("Optional, but highly recommended!", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                        IconButton(onClick = { currentAttemptClose() }, modifier = Modifier.size(40.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White, modifier = Modifier.size(20.dp))
                         }
                     }
-                } else {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxWidth().height(160.dp)
+
+                    Text(
+                        text = "Add New Table",
+                        color = AppColors.TextPrimary,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Column(modifier = Modifier.weight(1f).verticalScroll(scrollState).padding(horizontal = 24.dp)) {
+
+                    Surface(
+                        color = cardBg,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { onAdjustLocation() }
                     ) {
-                        items(selectedImages) { imageBytes ->
-                            Box(modifier = Modifier.size(160.dp).clip(RoundedCornerShape(16.dp))) {
-                                AsyncImage(
-                                    model = imageBytes,
-                                    contentDescription = "Selected Image",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
-                                )
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.size(40.dp).background(brandOrange.copy(alpha = 0.2f), CircleShape), contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.MyLocation, contentDescription = "Location", tint = brandOrange, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Pinned Location", color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text("${lat.toString().take(8)}, ${lng.toString().take(8)}", color = Color.Gray, fontSize = 14.sp)
+                            }
+                            Text("Edit", color = brandOrange, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    if (selectedImages.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth().height(160.dp)
+                                .background(cardBg, RoundedCornerShape(16.dp))
+                                .clickable { mediaLauncher.launch() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.CameraAlt, contentDescription = "Add Photo", tint = brandOrange, modifier = Modifier.size(40.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Add Table Photos", color = brandOrange, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text("Optional, but highly recommended!", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                             }
                         }
-                        if (selectedImages.size < 5) {
-                            item {
-                                Box(
-                                    modifier = Modifier.size(160.dp).background(cardBg, RoundedCornerShape(16.dp)).clickable { mediaLauncher.launch() },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.Add, contentDescription = "Add More", tint = brandOrange, modifier = Modifier.size(32.dp))
+                    } else {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxWidth().height(160.dp)
+                        ) {
+                            items(selectedImages) { imageBytes ->
+                                Box(modifier = Modifier.size(160.dp).clip(RoundedCornerShape(16.dp))) {
+                                    AsyncImage(
+                                        model = imageBytes,
+                                        contentDescription = "Selected Image",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+                            }
+                            if (selectedImages.size < 5) {
+                                item {
+                                    Box(
+                                        modifier = Modifier.size(160.dp).background(cardBg, RoundedCornerShape(16.dp)).clickable { mediaLauncher.launch() },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.Add, contentDescription = "Add More", tint = brandOrange, modifier = Modifier.size(32.dp))
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(24.dp))
-                Text("Table Details", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text("Table Details", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Type", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(text = "Outdoor", isSelected = !isIndoor, activeColor = brandOrange, inactiveColor = cardBg) { isIndoor = false }
-                            FilterChip(text = "Indoor", isSelected = isIndoor, activeColor = brandOrange, inactiveColor = cardBg) { isIndoor = true }
+                    Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Type", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilterChip(text = "Outdoor", isSelected = !isIndoor, activeColor = brandOrange, inactiveColor = cardBg) { isIndoor = false }
+                                FilterChip(text = "Indoor", isSelected = isIndoor, activeColor = brandOrange, inactiveColor = cardBg) { isIndoor = true }
+                            }
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Number of Tables", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            IconButton(
-                                onClick = { if (tableCount > 1) tableCount-- },
-                                modifier = Modifier.size(36.dp).background(AppColors.Background, CircleShape)
-                            ) { Text("-", color = Color.White, fontWeight = FontWeight.Bold) }
+                    Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Number of Tables", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                IconButton(
+                                    onClick = { if (tableCount > 1) tableCount-- },
+                                    modifier = Modifier.size(36.dp).background(AppColors.Background, CircleShape)
+                                ) { Text("-", color = Color.White, fontWeight = FontWeight.Bold) }
 
-                            Text("$tableCount", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text("$tableCount", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
 
-                            IconButton(
-                                onClick = { if (tableCount < 20) tableCount++ },
-                                modifier = Modifier.size(36.dp).background(brandOrange, CircleShape)
-                            ) { Text("+", color = Color.White, fontWeight = FontWeight.Bold) }
+                                IconButton(
+                                    onClick = { if (tableCount < 20) tableCount++ },
+                                    modifier = Modifier.size(36.dp).background(brandOrange, CircleShape)
+                                ) { Text("+", color = Color.White, fontWeight = FontWeight.Bold) }
+                            }
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Cost", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilterChip(text = "Free", isSelected = isFree, activeColor = brandOrange, inactiveColor = cardBg) { isFree = true }
-                            FilterChip(text = "Paid", isSelected = !isFree, activeColor = brandOrange, inactiveColor = cardBg) { isFree = false }
+                    Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Cost", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilterChip(text = "Free", isSelected = isFree, activeColor = brandOrange, inactiveColor = cardBg) { isFree = true }
+                                FilterChip(text = "Paid", isSelected = !isFree, activeColor = brandOrange, inactiveColor = cardBg) { isFree = false }
+                            }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(80.dp + systemNavHeight))
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
-                Text("Notes (Optional)", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedTextField(
-                    value = notesText,
-                    onValueChange = { notesText = it },
-                    placeholder = { Text("Bring your own net, usually crowded at 6pm, etc...", color = Color.Gray) },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = cardBg,
-                        unfocusedContainerColor = cardBg,
-                        focusedIndicatorColor = brandOrange,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        focusedTextColor = AppColors.TextPrimary,
-                        unfocusedTextColor = AppColors.TextPrimary
-                    ),
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                Spacer(modifier = Modifier.height(80.dp + systemNavHeight))
+                Surface(color = AppColors.Background.copy(alpha = 0.9f), modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = {
+                            if (!isSubmitting) {
+                                isSubmitting = true
+                                viewModel.submitNewTable(
+                                    lat = lat,
+                                    lng = lng,
+                                    isIndoor = isIndoor,
+                                    count = tableCount,
+                                    isFree = isFree,
+                                    images = selectedImages,
+                                    onSuccess = {
+                                        isSubmitting = false
+                                        onClose()
+                                    }
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp + systemNavHeight)
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = brandOrange),
+                        shape = RoundedCornerShape(28.dp),
+                        enabled = !isSubmitting
+                    ) {
+                        if (isSubmitting) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                        else Text("Submit Table", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    }
+                }
             }
 
-            Surface(color = AppColors.Background.copy(alpha = 0.9f), modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = {
-                        if (!isSubmitting) {
-                            isSubmitting = true
-                            viewModel.submitNewTable(
-                                lat = lat, lng = lng, isIndoor = isIndoor, count = tableCount, isFree = isFree, notes = notesText,
-                                images = selectedImages,
-                                onSuccess = { onClose() }
-                            )
+            if (showExitConfirmation) {
+                AlertDialog(
+                    onDismissRequest = { showExitConfirmation = false },
+                    containerColor = cardBg,
+                    title = {
+                        Text("Discard New Table?", fontWeight = FontWeight.Bold, color = AppColors.TextPrimary)
+                    },
+                    text = {
+                        Text("You have unsaved changes. Are you sure you want to discard this table?", color = Color.LightGray)
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showExitConfirmation = false
+                            onClose()
+                        }) {
+                            Text("Discard", color = Color(0xFFE57373), fontWeight = FontWeight.Bold)
                         }
                     },
-                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp + systemNavHeight).height(56.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = brandOrange),
-                    shape = RoundedCornerShape(16.dp),
-                    enabled = !isSubmitting
-                ) {
-                    if (isSubmitting) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                    else Text("Submit Table", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                }
+                    dismissButton = {
+                        TextButton(onClick = { showExitConfirmation = false }) {
+                            Text("Keep Editing", color = brandOrange, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                )
             }
         }
     }
@@ -1030,8 +1193,9 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
     onSubmit: (tags: List<String>, text: String, images: List<ByteArray>, onSuccess: () -> Unit) -> Unit,
     onClose: () -> Unit
 ) {
-    val equipmentTags = listOf("Good Condition", "Damaged Table", "Good Net", "Bring Own Net", "Smooth Surface")
-    val vibeTags = listOf("Active Community", "Fun Vibe", "Friendly Vibe", "Often Crowded", "Open Late")
+    val tableConditionTags = listOf("Perfect surface", "Sturdy net", "Worn out / Damaged", "Torn net", "Slippery surface")
+    val environmentTags = listOf("Spacious", "Wind-protected", "Good lighting", "Cramped space", "Glaring sun", "Poor lighting")
+    val amenitiesTags = listOf("Drinking fountain", "Restroom available", "Usually crowded", "Quiet & Chill", "Paid access", "Free to play")
 
     var selectedTags by remember { mutableStateOf(setOf<String>()) }
     var reviewText by remember { mutableStateOf("") }
@@ -1044,6 +1208,9 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
     val scope = rememberCoroutineScope()
     val offsetY = remember { Animatable(0f) }
     val scrollState = rememberScrollState()
+
+    // 👇 1. Get the FocusManager to handle hiding the keyboard
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
 
     val attemptClose: () -> Unit = {
         if (hasUnsavedChanges && !isSubmitting) {
@@ -1142,6 +1309,8 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                     .nestedScroll(nestedScrollConnection)
                     .background(AppColors.Background, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    // 👇 2. Automatically apply bottom padding when the keyboard is visible
+                    .imePadding()
             ) {
                 Row(
                     modifier = Modifier
@@ -1176,6 +1345,7 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                         onClick = {
                             if (!isSubmitting) {
                                 isSubmitting = true
+                                focusManager.clearFocus() // Drop focus when submitting
                                 onSubmit(selectedTags.toList(), reviewText, reviewImages) { isSubmitting = false; onClose() }
                             }
                         },
@@ -1190,7 +1360,16 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                     }
                 }
 
-                Column(modifier = Modifier.weight(1f).verticalScroll(scrollState).padding(horizontal = 24.dp)) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        // 👇 3. Clear focus & close keyboard if user taps empty space
+                        .pointerInput(Unit) {
+                            detectTapGestures(onTap = { focusManager.clearFocus() })
+                        }
+                        .verticalScroll(scrollState)
+                        .padding(horizontal = 24.dp)
+                ) {
 
                     Text(clubName, color = Color.Gray, fontSize = 14.sp, modifier = Modifier.padding(bottom = 4.dp))
                     Text("Write Your Review", color = AppColors.TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(bottom = 24.dp))
@@ -1244,19 +1423,39 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                         }
                     }
 
-                    Text("Surface & Equipment", color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
-                    FlowRow(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        equipmentTags.forEach { tag ->
-                            val isSelected = selectedTags.contains(tag)
-                            FilterChip(text = tag, isSelected = isSelected, activeColor = brandOrange, inactiveColor = cardBg, onClick = { selectedTags = if (isSelected) selectedTags - tag else selectedTags + tag })
+                    Surface(color = cardBg, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Table Condition", color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
+                            FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                tableConditionTags.forEach { tag ->
+                                    val isSelected = selectedTags.contains(tag)
+                                    FilterChip(text = tag, isSelected = isSelected, activeColor = brandOrange, inactiveColor = AppColors.Background, onClick = { selectedTags = if (isSelected) selectedTags - tag else selectedTags + tag })
+                                }
+                            }
                         }
                     }
 
-                    Text("Vibe & Community", color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
-                    FlowRow(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        vibeTags.forEach { tag ->
-                            val isSelected = selectedTags.contains(tag)
-                            FilterChip(text = tag, isSelected = isSelected, activeColor = brandOrange, inactiveColor = cardBg, onClick = { selectedTags = if (isSelected) selectedTags - tag else selectedTags + tag })
+                    Surface(color = cardBg, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Playing Area & Environment", color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
+                            FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                environmentTags.forEach { tag ->
+                                    val isSelected = selectedTags.contains(tag)
+                                    FilterChip(text = tag, isSelected = isSelected, activeColor = brandOrange, inactiveColor = AppColors.Background, onClick = { selectedTags = if (isSelected) selectedTags - tag else selectedTags + tag })
+                                }
+                            }
+                        }
+                    }
+
+                    Surface(color = cardBg, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Amenities & Vibe", color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
+                            FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                amenitiesTags.forEach { tag ->
+                                    val isSelected = selectedTags.contains(tag)
+                                    FilterChip(text = tag, isSelected = isSelected, activeColor = brandOrange, inactiveColor = AppColors.Background, onClick = { selectedTags = if (isSelected) selectedTags - tag else selectedTags + tag })
+                                }
+                            }
                         }
                     }
 
@@ -1266,9 +1465,13 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                         placeholder = { Text("Describe your experience... (optional)", color = Color.Gray) },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
                         colors = TextFieldDefaults.colors(
-                            focusedContainerColor = cardBg, unfocusedContainerColor = cardBg,
-                            focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                            focusedTextColor = AppColors.TextPrimary, unfocusedTextColor = AppColors.TextPrimary
+                            focusedContainerColor = cardBg,
+                            unfocusedContainerColor = cardBg,
+                            focusedIndicatorColor = brandOrange, // 👇 Changed from Color.Transparent to brandOrange
+                            unfocusedIndicatorColor = Color.Transparent,
+                            focusedTextColor = AppColors.TextPrimary,
+                            unfocusedTextColor = AppColors.TextPrimary,
+                            cursorColor = brandOrange
                         ),
                         shape = RoundedCornerShape(16.dp),
                         supportingText = {
@@ -1276,7 +1479,8 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                         }
                     )
 
-                    Spacer(modifier = Modifier.height(100.dp + systemNavHeight))
+                    // 👇 5. Replaced huge spacer with standard 24dp padding
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
 
                 Surface(
@@ -1287,6 +1491,7 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                         onClick = {
                             if (!isSubmitting) {
                                 isSubmitting = true
+                                focusManager.clearFocus()
                                 onSubmit(selectedTags.toList(), reviewText, reviewImages) { isSubmitting = false; onClose() }
                             }
                         },
@@ -1852,7 +2057,7 @@ fun ClubDetailsFullScreen(
             AddReviewFullScreen(
                 clubName = club.name,
                 brandOrange = brandOrange,
-                cardBg = Color(0xFF2A2D34),
+                cardBg = AppColors.SurfaceDark,
                 systemNavHeight = systemNavHeight,
                 onSubmit = { tags, text, images, onSuccess ->
                     viewModel.submitReview(
