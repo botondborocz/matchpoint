@@ -2222,128 +2222,135 @@ fun ClubDetailsFullScreen(
                                     }
                                 }
 
+                                val uiAlpha by animateFloatAsState(
+                                    targetValue = if (isUiVisible) 1f else 0f,
+                                    animationSpec = tween(200),
+                                    label = "uiAlpha"
+                                )
+
                                 // Floating Top UI Elements (Hidden when Zoomed)
-                                AnimatedVisibility(
-                                    visible = isUiVisible, // 👇 6. Changed from !isGalleryZoomed
-                                    enter = fadeIn(tween(200)),
-                                    exit = fadeOut(tween(200)),
-                                    modifier = Modifier.align(Alignment.TopCenter)
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .windowInsetsPadding(
-                                                WindowInsets.systemBars.only(
-                                                    WindowInsetsSides.Top
-                                                )
+                                Row(
+                                    modifier = Modifier
+                                        .align(Alignment.TopCenter)
+                                        .fillMaxWidth()
+                                        .graphicsLayer {
+                                            alpha = uiAlpha
+                                        } // 👇 Fades out without destroying!
+                                        .windowInsetsPadding(
+                                            WindowInsets.systemBars.only(
+                                                WindowInsetsSides.Top
                                             )
-                                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Surface(color = Color(0xFF333333), shape = CircleShape) {
-                                            IconButton(
-                                                onClick = {
-                                                    // Delay by a tiny fraction so the swap happens!
+                                        )
+                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(color = Color(0xFF333333), shape = CircleShape) {
+                                        IconButton(
+                                            onClick = {
+                                                if (isUiVisible) {
                                                     scope.launch {
                                                         isMenuReady = false
                                                         delay(50)
                                                         fullScreenInitialPage = null
                                                     }
-                                                },
-                                                modifier = Modifier.size(40.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.Close,
-                                                    contentDescription = "Close",
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            }
-                                        }
-
-                                        Surface(color = Color(0xFF333333), shape = CircleShape) {
-                                            Text(
-                                                text = "${pagerState.currentPage + 1} of ${activeImages.size}",
-                                                color = Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 15.sp,
-                                                modifier = Modifier.padding(
-                                                    horizontal = 16.dp,
-                                                    vertical = 8.dp
-                                                )
-                                            )
-                                        }
-
-                                        val currentImage =
-                                            activeImages.getOrNull(pagerState.currentPage)
-
-                                        NativeImageActionMenu(
-                                            isMine = currentImage?.isMine == true,
-                                            isTransitioning = isTransitioning, // Pass the state here!
-                                            modifier = Modifier,
-                                            onDelete = {
-                                                currentImage?.url?.let { url ->
-                                                    viewModel.deleteImage(
-                                                        locationId = club.id,
-                                                        imageUrl = url
-                                                    ) {
-                                                        fullScreenInitialPage = null
-                                                        notificationMessage =
-                                                            "Photo deleted successfully"
-                                                    }
                                                 }
                                             },
-                                            onReport = { reason ->
-                                                currentImage?.url?.let { url ->
-                                                    viewModel.reportImage(
-                                                        locationId = club.id,
-                                                        imageUrl = url,
-                                                        reason = reason
-                                                    ) {
-                                                        notificationMessage =
-                                                            "Photo reported for review"
-                                                    }
-                                                }
-                                            }
+                                            modifier = Modifier.size(40.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Close,
+                                                contentDescription = "Close",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Surface(color = Color(0xFF333333), shape = CircleShape) {
+                                        Text(
+                                            text = "${pagerState.currentPage + 1} of ${activeImages.size}",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                            modifier = Modifier.padding(
+                                                horizontal = 16.dp,
+                                                vertical = 8.dp
+                                            )
                                         )
                                     }
+
+                                    val currentImage =
+                                        activeImages.getOrNull(pagerState.currentPage)
+
+                                    NativeImageActionMenu(
+                                        isMine = currentImage?.isMine == true,
+                                        isTransitioning = isTransitioning, // Pass the state here!
+                                        modifier = Modifier,
+                                        onDelete = {
+                                            currentImage?.url?.let { url ->
+                                                viewModel.deleteImage(
+                                                    locationId = club.id,
+                                                    imageUrl = url
+                                                ) {
+                                                    fullScreenInitialPage = null
+                                                    notificationMessage =
+                                                        "Photo deleted successfully"
+                                                }
+                                            }
+                                        },
+                                        onReport = { reason ->
+                                            currentImage?.url?.let { url ->
+                                                viewModel.reportImage(
+                                                    locationId = club.id,
+                                                    imageUrl = url,
+                                                    reason = reason
+                                                ) {
+                                                    notificationMessage =
+                                                        "Photo reported for review"
+                                                }
+                                            }
+                                        }
+                                    )
                                 }
 
                                 // Bottom Author Bar (Hidden when Zoomed)
-                                AnimatedVisibility(
-                                    visible = isUiVisible,
-                                    enter = fadeIn(tween(200)),
-                                    exit = fadeOut(tween(200)),
-                                    modifier = Modifier.align(Alignment.BottomCenter)
-                                ) {
-                                    val currentImage = activeImages.getOrNull(pagerState.currentPage)
-                                    if (currentImage != null) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                // Background removed! Just keeping the insets and padding
-                                                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Bottom))
-                                                .padding(bottom = 24.dp, top = 16.dp),
-                                            contentAlignment = Alignment.Center
+                                val currentImage = activeImages.getOrNull(pagerState.currentPage)
+                                if (currentImage != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .fillMaxWidth()
+                                            .graphicsLayer {
+                                                alpha = uiAlpha
+                                            } // 👇 Fades out without destroying!
+                                            .windowInsetsPadding(
+                                                WindowInsets.systemBars.only(
+                                                    WindowInsetsSides.Bottom
+                                                )
+                                            )
+                                            .padding(bottom = 24.dp, top = 16.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Surface(
+                                            color = Color(0xFF333333),
+                                            shape = RoundedCornerShape(20.dp)
                                         ) {
-                                            Surface(
-                                                color = Color(0xFF333333),
-                                                shape = RoundedCornerShape(20.dp)
+                                            Row(
+                                                modifier = Modifier.padding(
+                                                    horizontal = 16.dp,
+                                                    vertical = 8.dp
+                                                ),
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Row(
-                                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Text("📸", fontSize = 16.sp)
-                                                    Spacer(modifier = Modifier.width(8.dp))
-                                                    Text(
-                                                        text = "Uploaded by ${currentImage.authorName}",
-                                                        color = Color.White,
-                                                        fontWeight = FontWeight.Medium,
-                                                        fontSize = 14.sp
-                                                    )
-                                                }
+                                                Text("📸", fontSize = 16.sp)
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = "Uploaded by ${currentImage.authorName}",
+                                                    color = Color.White,
+                                                    fontWeight = FontWeight.Medium,
+                                                    fontSize = 14.sp
+                                                )
                                             }
                                         }
                                     }

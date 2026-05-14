@@ -2,32 +2,29 @@ package org.ttproject.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import platform.UIKit.UIApplication
-import platform.UIKit.UIWindow
+import androidx.compose.ui.interop.LocalUIViewController
 import platform.UIKit.UIWindowLevelNormal
 import platform.UIKit.UIWindowLevelStatusBar
-import platform.UIKit.UIWindowScene
 
 @Composable
 actual fun SetSystemBarsVisibility(isVisible: Boolean) {
-    DisposableEffect(isVisible) {
-        // 1. Get the current active iOS window
-        val window = (UIApplication.sharedApplication.connectedScenes.firstOrNull() as? UIWindowScene)
-            ?.windows?.firstOrNull() as? UIWindow
-            ?: UIApplication.sharedApplication.keyWindow
+    // 👇 1. Get the exact UIViewController hosting THIS specific Compose Dialog
+    val viewController = LocalUIViewController.current
+
+    DisposableEffect(isVisible, viewController) {
+        val window = viewController.view.window
 
         if (window != null) {
             if (isVisible) {
-                // Restore window to normal level (status bar is visible again)
+                // Draws natively behind the status bar, leaving clock/battery visible
                 window.windowLevel = UIWindowLevelNormal
             } else {
-                // Elevate the app window ABOVE the iOS status bar layer to hide it
+                // Elevates the Dialog ABOVE the status bar, hiding clock/battery completely!
                 window.windowLevel = UIWindowLevelStatusBar + 1.0
             }
         }
 
         onDispose {
-            // SAFETY: Always restore the window level when the gallery closes
             window?.windowLevel = UIWindowLevelNormal
         }
     }
