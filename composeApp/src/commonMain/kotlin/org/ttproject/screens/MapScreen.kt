@@ -194,6 +194,8 @@ fun MapScreen(
     var isAddingTable by remember { mutableStateOf(false) }
     var isPickingLocation by remember { mutableStateOf(false) }
 
+    var addTableDragOffset by remember { mutableFloatStateOf(0f) }
+
     val coroutineScope = rememberCoroutineScope()
 
     val mapNavState = rememberNavigationEventState(NavigationEventInfo.None)
@@ -492,6 +494,12 @@ fun MapScreen(
             label = "fabColor"
         )
 
+        val appliedFormBgColor = if (isAddingTable) {
+            formBgColor.copy(alpha = (1f - (addTableDragOffset / screenHeightPx)).coerceIn(0f, 1f))
+        } else {
+            formBgColor
+        }
+
         AnimatedVisibility(
             visible = (showFloatingElements && isActive) || isAddingTable,
             enter = slideInHorizontally(initialOffsetX = { it }, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)) + fadeIn(),
@@ -500,7 +508,7 @@ fun MapScreen(
         ) {
             Surface(
                 shape = RoundedCornerShape(currentRadius),
-                color = formBgColor,
+                color = appliedFormBgColor,
                 shadowElevation = currentElevation,
                 modifier = Modifier
                     .padding(bottom = currentBottomPadding, end = currentEndPadding)
@@ -554,6 +562,9 @@ fun MapScreen(
                                     onClose = {
                                         isAddingTable = false
                                         isPickingLocation = false
+                                    },
+                                    onDragOffsetChanged = {
+                                        addTableDragOffset = it
                                     }
                                 )
                             }
@@ -851,7 +862,8 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
     lng: Double,
     viewModel: LocationViewModel,
     onAdjustLocation: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onDragOffsetChanged: (Float) -> Unit = {}
 ) {
     var isIndoor by remember { mutableStateOf(false) }
     var tableCount by remember { mutableStateOf(1) }
@@ -866,6 +878,10 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
 
     val offsetY = remember { Animatable(0f) }
     val scrollState = rememberScrollState()
+
+    LaunchedEffect(offsetY.value) {
+        onDragOffsetChanged(offsetY.value)
+    }
 
     val attemptClose: () -> Unit = {
         if (hasUnsavedChanges && !isSubmitting) {
@@ -930,6 +946,7 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
 
                     if (shouldDismiss) {
                         currentAttemptClose()
+                        scope.launch { offsetY.animateTo(0f, tween(350, easing = FastOutSlowInEasing)) }
                         return available
                     } else if (offsetY.value > 0f) {
                         scope.launch { offsetY.animateTo(0f, spring()) }
@@ -942,9 +959,9 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
 
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = Color.Black.copy(alpha = 0.6f)
+            color = Color.Black.copy(alpha = (0.6f * (1f - (offsetY.value / (screenHeightPx / 2f)))).coerceIn(0f, 0.6f))
         ) {
-            val topPadding = WindowInsets.systemBars.asPaddingValues().calculateTopPadding() + 40.dp
+            val topPadding = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
 
             Column(
                 modifier = Modifier
@@ -959,11 +976,10 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
                             animationSpec = tween(250)
                         )
                     )
-                    .padding(top = topPadding)
                     .offset { IntOffset(0, offsetY.value.toInt()) }
                     .nestedScroll(nestedScrollConnection)
-                    .background(AppColors.Background, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .background(AppColors.Background)
+                    .padding(top = topPadding)
             ) {
                 // Top Bar with drag gestures
                 Box(
@@ -979,6 +995,7 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
                                 onDragEnd = {
                                     if (offsetY.value > distanceThreshold) {
                                         currentAttemptClose()
+                                        scope.launch { offsetY.animateTo(0f, tween(350, easing = FastOutSlowInEasing)) }
                                     } else {
                                         scope.launch { offsetY.animateTo(0f, spring()) }
                                     }

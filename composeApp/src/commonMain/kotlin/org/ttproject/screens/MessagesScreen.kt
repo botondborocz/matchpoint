@@ -111,6 +111,7 @@ import io.github.vinceglb.filekit.core.PickerMode
 import io.github.vinceglb.filekit.core.PickerType
 import org.jetbrains.compose.resources.painterResource
 import org.ttproject.components.AudioPlayer
+import org.ttproject.components.FullScreenImageGallery
 import org.ttproject.components.VideoPlayer
 import org.ttproject.components.rememberAudioPlayer
 import org.ttproject.components.rememberCameraLauncher
@@ -376,6 +377,7 @@ fun ChatDetailScreen(
     var highlightedMessageId by remember { mutableStateOf<String?>(null) }
     var fullScreenImages by remember { mutableStateOf<List<String>?>(null) }
     var fullScreenInitialPage by remember { mutableIntStateOf(0) }
+    var fullScreenImageIsMe by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     ClearChatNotificationEffect(chatId = chatId)
@@ -593,6 +595,7 @@ fun ChatDetailScreen(
                                 onImageClick = { index, urls ->
                                     fullScreenImages = urls
                                     fullScreenInitialPage = index
+                                    fullScreenImageIsMe = isMe
                                 },
                                 onReactionClick = { reactionSheetMessageId = msg.id },
                                 onLongPress = { bounds, topStart, topEnd, bottomStart, bottomEnd, initialTouch, reactionBounds ->
@@ -1220,118 +1223,23 @@ fun ChatDetailScreen(
             }
         }
 
-        if (fullScreenImages != null && activeImages.isNotEmpty()) {
-            val pagerState = rememberPagerState(
+        // --- FULL SCREEN GALLERY ---
+        if (fullScreenImages != null && fullScreenImages!!.isNotEmpty()) {
+            FullScreenImageGallery(
+                images = fullScreenImages!!,
                 initialPage = fullScreenInitialPage,
-                pageCount = { activeImages.size }
-            )
-
-            androidx.compose.ui.window.Dialog(
-                onDismissRequest = { fullScreenImages = null },
-                properties = androidx.compose.ui.window.DialogProperties(
-                    usePlatformDefaultWidth = false,
-                    dismissOnBackPress = true,
-                    dismissOnClickOutside = true
-                )
-            ) {
-                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.95f))) {
-
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier.fillMaxSize()
-                    ) { page ->
-                        var scale by remember { mutableFloatStateOf(1f) }
-                        var offset by remember { mutableStateOf(Offset.Zero) }
-
-                        val transformableState = rememberTransformableState { zoomChange, offsetChange, _ ->
-                            scale = (scale * zoomChange).coerceIn(1f, 5f)
-                            val maxPanX = (2000f * (scale - 1)) / 2
-                            val maxPanY = (2000f * (scale - 1)) / 2
-                            offset = Offset(
-                                (offset.x + offsetChange.x).coerceIn(-maxPanX, maxPanX),
-                                (offset.y + offsetChange.y).coerceIn(-maxPanY, maxPanY)
-                            )
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .pointerInput(Unit) {
-                                    detectTapGestures(
-                                        onDoubleTap = {
-                                            if (scale > 1f) { scale = 1f; offset = Offset.Zero }
-                                            else { scale = 2.5f }
-                                        },
-                                        onTap = { if (scale == 1f) fullScreenImages = null }
-                                    )
-                                }
-                                .pointerInput(Unit) {
-                                    awaitEachGesture {
-                                        awaitFirstDown()
-                                        do {
-                                            val event = awaitPointerEvent()
-                                            if (event.changes.size > 1 || scale > 1f) {
-                                                val zoomChange = event.calculateZoom()
-                                                val panChange = event.calculatePan()
-                                                event.changes.forEach { it.consume() }
-
-                                                scale = (scale * zoomChange).coerceIn(1f, 5f)
-                                                val maxPanX = (size.width * (scale - 1)) / 2
-                                                val maxPanY = (size.height * (scale - 1)) / 2
-
-                                                offset = Offset(
-                                                    (offset.x + panChange.x).coerceIn(-maxPanX, maxPanX),
-                                                    (offset.y + panChange.y).coerceIn(-maxPanY, maxPanY)
-                                                )
-                                            }
-                                        } while (event.changes.any { it.pressed })
-                                    }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            val url = activeImages.getOrNull(page) ?: ""
-                            val isVideo = url.contains(".mp4")
-
-                            if (isVideo) {
-                                VideoPlayer(
-                                    modifier = Modifier.fillMaxSize(),
-                                    url = url
-                                )
-                            } else {
-                                AsyncImage(
-                                    model = url,
-                                    contentDescription = "Image $page",
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .graphicsLayer {
-                                            scaleX = scale
-                                            scaleY = scale
-                                            translationX = offset.x
-                                            translationY = offset.y
-                                        },
-                                    contentScale = ContentScale.Fit
-                                )
-                            }
-                        }
-                    }
-
-                    IconButton(
-                        onClick = { fullScreenImages = null },
-                        modifier = Modifier.align(Alignment.TopEnd).padding(top = 48.dp, end = 16.dp)
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
-                    }
-
-                    if (activeImages.size > 1) {
-                        Text(
-                            text = "${pagerState.currentPage + 1} / ${activeImages.size}",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.align(Alignment.TopCenter).padding(top = 60.dp)
-                        )
-                    }
+                isMessageFromMe = fullScreenImageIsMe,
+                onDismiss = { fullScreenImages = null },
+                onDelete = { currentUrl ->
+                    // Trigger your viewmodel delete logic
+                    // viewModel.deleteMessageImage(chatId, selectedMessageId, currentUrl)
+                    fullScreenImages = null
+                },
+                onReport = { currentUrl, reason ->
+                    // Trigger your viewmodel report logic
+                    // viewModel.reportImage(currentUrl, reason)
                 }
-            }
+            )
         }
     }
 }

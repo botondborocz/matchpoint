@@ -256,7 +256,7 @@ actual fun GalleryTopBar(
                     val window = UIApplication.sharedApplication.windows.firstOrNull { (it as UIWindow).isKeyWindow() } as? UIWindow
 
                     alert.popoverPresentationController?.sourceView = moreBtn
-                    alert.popoverPresentationController?.sourceRect = moreBtn?.bounds ?: kotlin.cinterop.cValue()
+                    alert.popoverPresentationController?.sourceRect = moreBtn?.bounds ?: kotlinx.cinterop.cValue()
                     window?.rootViewController?.presentViewController(alert, true, null)
                 }
                 actions.add(reportAction)
