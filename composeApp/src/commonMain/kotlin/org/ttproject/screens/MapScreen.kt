@@ -102,6 +102,8 @@ import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import org.ttproject.components.FullScreenDialog
+import org.ttproject.components.GalleryBottomBar
+import org.ttproject.components.GalleryTopBar
 import org.ttproject.components.InAppNotification
 import org.ttproject.components.NativeImageActionMenu
 import org.ttproject.components.SetSystemBarsVisibility
@@ -2434,131 +2436,47 @@ fun ClubDetailsFullScreen(
                                 )
 
                                 // Floating Top UI Elements (Hidden when Zoomed)
-                                Row(
-                                    modifier = Modifier
-                                        .align(Alignment.TopCenter)
-                                        .fillMaxWidth()
-                                        .graphicsLayer {
-                                            alpha = uiAlpha
-                                        } // 👇 Fades out without destroying!
-                                        .windowInsetsPadding(
-                                            WindowInsets.systemBars.only(
-                                                WindowInsetsSides.Top
-                                            )
-                                        )
-                                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Surface(color = Color(0xFF333333), shape = CircleShape) {
-                                        IconButton(
-                                            onClick = {
-                                                if (isUiVisible) {
-                                                    scope.launch {
-                                                        isMenuReady = false
-                                                        delay(50)
-                                                        fullScreenInitialPage = null
-                                                    }
-                                                }
-                                            },
-                                            modifier = Modifier.size(40.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Close,
-                                                contentDescription = "Close",
-                                                tint = Color.White,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
+                                val currentImage = activeImages.getOrNull(pagerState.currentPage)
 
-                                    Surface(color = Color(0xFF333333), shape = CircleShape) {
-                                        Text(
-                                            text = "${pagerState.currentPage + 1} of ${activeImages.size}",
-                                            color = Color.White,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp,
-                                            modifier = Modifier.padding(
-                                                horizontal = 16.dp,
-                                                vertical = 8.dp
-                                            )
-                                        )
-                                    }
-
-                                    val currentImage =
-                                        activeImages.getOrNull(pagerState.currentPage)
-
-                                    NativeImageActionMenu(
-                                        isMine = currentImage?.isMine == true,
-                                        isTransitioning = isTransitioning, // Pass the state here!
-                                        modifier = Modifier,
-                                        onDelete = {
-                                            currentImage?.url?.let { url ->
-                                                viewModel.deleteImage(
-                                                    locationId = club.id,
-                                                    imageUrl = url
-                                                ) {
-                                                    fullScreenInitialPage = null
-                                                    notificationMessage =
-                                                        "Photo deleted successfully"
-                                                }
-                                            }
-                                        },
-                                        onReport = { reason ->
-                                            currentImage?.url?.let { url ->
-                                                viewModel.reportImage(
-                                                    locationId = club.id,
-                                                    imageUrl = url,
-                                                    reason = reason
-                                                ) {
-                                                    notificationMessage =
-                                                        "Photo reported for review"
-                                                }
+                                GalleryTopBar(
+                                    modifier = Modifier.align(Alignment.TopCenter),
+                                    currentIndex = pagerState.currentPage + 1,
+                                    totalImages = activeImages.size,
+                                    isMine = currentImage?.isMine == true,
+                                    isTransitioning = isTransitioning || !isUiVisible,
+                                    onClose = {
+                                        if (isUiVisible) {
+                                            scope.launch {
+                                                isMenuReady = false
+                                                delay(50)
+                                                fullScreenInitialPage = null
                                             }
                                         }
-                                    )
-                                }
+                                    },
+                                    onDelete = {
+                                        currentImage?.url?.let { url ->
+                                            viewModel.deleteImage(club.id, url) {
+                                                fullScreenInitialPage = null
+                                                notificationMessage = "Photo deleted successfully"
+                                            }
+                                        }
+                                    },
+                                    onReport = { reason ->
+                                        currentImage?.url?.let { url ->
+                                            viewModel.reportImage(club.id, url, reason) {
+                                                notificationMessage = "Photo reported for review"
+                                            }
+                                        }
+                                    }
+                                )
 
                                 // Bottom Author Bar (Hidden when Zoomed)
-                                val currentImage = activeImages.getOrNull(pagerState.currentPage)
                                 if (currentImage != null) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.BottomCenter)
-                                            .fillMaxWidth()
-                                            .graphicsLayer {
-                                                alpha = uiAlpha
-                                            } // 👇 Fades out without destroying!
-                                            .windowInsetsPadding(
-                                                WindowInsets.systemBars.only(
-                                                    WindowInsetsSides.Bottom
-                                                )
-                                            )
-                                            .padding(bottom = 24.dp, top = 16.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Surface(
-                                            color = Color(0xFF333333),
-                                            shape = RoundedCornerShape(20.dp)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(
-                                                    horizontal = 16.dp,
-                                                    vertical = 8.dp
-                                                ),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text("📸", fontSize = 16.sp)
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text(
-                                                    text = "Uploaded by ${currentImage.authorName}",
-                                                    color = Color.White,
-                                                    fontWeight = FontWeight.Medium,
-                                                    fontSize = 14.sp
-                                                )
-                                            }
-                                        }
-                                    }
+                                    GalleryBottomBar(
+                                        modifier = Modifier.align(Alignment.BottomCenter),
+                                        authorName = currentImage.authorName,
+                                        isTransitioning = isTransitioning || !isUiVisible
+                                    )
                                 }
                             }
                         }

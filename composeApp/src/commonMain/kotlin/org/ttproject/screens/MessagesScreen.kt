@@ -281,7 +281,6 @@ fun MessagesScreen(
         }
     }
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatDetailScreen(
@@ -305,6 +304,7 @@ fun ChatDetailScreen(
     var forceShowIcons by remember { mutableStateOf(false) }
 
     LaunchedEffect(messageText) {
+
         if (messageText.text.isBlank()) {
             forceShowIcons = false
         }

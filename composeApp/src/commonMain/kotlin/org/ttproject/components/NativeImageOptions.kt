@@ -11,3 +11,22 @@ expect fun NativeImageActionMenu(
     onDelete: () -> Unit,
     onReport: (String) -> Unit
 )
+
+@Composable
+expect fun GalleryTopBar(
+    modifier: Modifier,
+    currentIndex: Int,
+    totalImages: Int,
+    isMine: Boolean,
+    isTransitioning: Boolean,
+    onClose: () -> Unit,
+    onDelete: () -> Unit,
+    onReport: (String) -> Unit
+)
+
+@Composable
+expect fun GalleryBottomBar(
+    modifier: Modifier,
+    authorName: String,
+    isTransitioning: Boolean
+)
