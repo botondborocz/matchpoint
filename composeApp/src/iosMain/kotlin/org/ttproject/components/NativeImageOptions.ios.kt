@@ -4,10 +4,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
@@ -19,8 +23,6 @@ import androidx.compose.ui.interop.UIKitView
 import androidx.compose.ui.unit.dp
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.UIKit.*
-import androidx.compose.runtime.Composable
-import platform.Foundation.NSSelectorFromString
 
 @OptIn(ExperimentalForeignApi::class)
 @Composable
@@ -41,7 +43,6 @@ actual fun NativeImageActionMenu(
 
     Box(modifier = modifier.size(40.dp)) {
 
-        // 👇 1. ALWAYS keep the UIKitView in the tree so it doesn't have to be recreated!
         UIKitView<UIView>(
             factory = {
                 val container = UIView().apply {
@@ -72,7 +73,6 @@ actual fun NativeImageActionMenu(
                 container
             },
             update = { container ->
-                // 👇 2. Instantly hide/show the native view without destroying it
                 container.hidden = isTransitioning
 
                 val button = container.subviews.firstOrNull() as? UIButton ?: return@UIKitView
@@ -110,6 +110,11 @@ actual fun NativeImageActionMenu(
                             alert.addAction(UIAlertAction.actionWithTitle("Cancel", UIAlertActionStyleCancel, null))
 
                             val window = UIApplication.sharedApplication.windows.firstOrNull { (it as UIWindow).isKeyWindow() } as? UIWindow
+
+                            // iPad anchor safety
+                            alert.popoverPresentationController?.sourceView = button
+                            alert.popoverPresentationController?.sourceRect = button.bounds
+
                             window?.rootViewController?.presentViewController(alert, animated = true, completion = null)
                         }
                     )
@@ -121,7 +126,6 @@ actual fun NativeImageActionMenu(
             modifier = Modifier.fillMaxSize().clip(CircleShape)
         )
 
-        // 👇 3. Show the dummy pure-compose button ONLY when transitioning
         if (isTransitioning) {
             Surface(
                 color = Color(0xFF262626),
@@ -151,26 +155,31 @@ actual fun GalleryTopBar(
 ) {
     val reasons = listOf("Spam or misleading", "Inappropriate or sexually explicit", "Hate speech or bullying", "Violence or harmful behavior", "Other")
 
+    val currentOnClose by rememberUpdatedState(onClose)
+    val currentOnDelete by rememberUpdatedState(onDelete)
+    val currentOnReport by rememberUpdatedState(onReport)
+    val currentIsMine by rememberUpdatedState(isMine)
+
     UIKitView<UIView>(
         factory = {
             val container = UIView().apply { backgroundColor = UIColor.clearColor }
 
-            // 1. Close Button (Left)
+            // 1. Close Button
             val closeBtn = UIButton.buttonWithType(UIButtonTypeCustom).apply {
                 backgroundColor = UIColor(white = 0.2, alpha = 1.0)
                 layer.cornerRadius = 20.0
                 setImage(UIImage.systemImageNamed("xmark", UIImageSymbolConfiguration.configurationWithPointSize(16.0, UIImageSymbolWeightBold)), forState = UIControlStateNormal)
                 tintColor = UIColor.whiteColor
                 translatesAutoresizingMaskIntoConstraints = false
-                addAction(UIAction.actionWithHandler { _ -> onClose() }, forControlEvents = UIControlEventTouchUpInside)
+                addAction(UIAction.actionWithHandler { _ -> currentOnClose() }, forControlEvents = UIControlEventTouchUpInside)
             }
 
-            // 2. Counter Pill (Center)
+            // 2. Counter Pill
             val counterLabel = UILabel().apply {
                 textColor = UIColor.whiteColor
                 font = UIFont.boldSystemFontOfSize(15.0)
                 textAlignment = NSTextAlignmentCenter
-                tag = 99L // Easy to find later
+                tag = 99L
                 translatesAutoresizingMaskIntoConstraints = false
             }
             val counterPill = UIView().apply {
@@ -185,7 +194,7 @@ actual fun GalleryTopBar(
                 counterLabel.trailingAnchor.constraintEqualToAnchor(trailingAnchor, constant = -16.0).active = true
             }
 
-            // 3. More Menu (Right)
+            // 3. More Menu (Native UIMenu)
             val moreBtn = UIButton.buttonWithType(UIButtonTypeCustom).apply {
                 backgroundColor = UIColor(white = 0.2, alpha = 1.0)
                 layer.cornerRadius = 20.0
@@ -195,11 +204,17 @@ actual fun GalleryTopBar(
                 translatesAutoresizingMaskIntoConstraints = false
             }
 
+            // 👇 THE FIX: Instantly hide the sibling buttons the moment the 3 dots are touched
+            moreBtn.addAction(UIAction.actionWithHandler { _ ->
+                closeBtn.hidden = true
+                counterPill.hidden = true
+            }, forControlEvents = UIControlEventTouchDown)
+
             container.addSubview(closeBtn)
             container.addSubview(counterPill)
             container.addSubview(moreBtn)
 
-            // AutoLayout Constraints
+            // Constraints
             closeBtn.leadingAnchor.constraintEqualToAnchor(container.leadingAnchor, constant = 16.0).active = true
             closeBtn.centerYAnchor.constraintEqualToAnchor(container.centerYAnchor).active = true
             closeBtn.widthAnchor.constraintEqualToConstant(40.0).active = true
@@ -219,34 +234,40 @@ actual fun GalleryTopBar(
         update = { container ->
             container.hidden = isTransitioning
 
-            // Update Label Text dynamically
+            // Update Label Text
             val counterLabel = container.viewWithTag(99L) as? UILabel
             counterLabel?.text = "$currentIndex of $totalImages"
 
-            // Update Menu Actions dynamically
             val moreBtn = container.subviews.lastOrNull() as? UIButton
-            moreBtn?.userInteractionEnabled = !isTransitioning
 
+            // Build the Native UIMenu
             val actions = mutableListOf<UIMenuElement>()
-            if (isMine) {
-                val deleteAction = UIAction.actionWithTitle("Delete Photo", UIImage.systemImageNamed("trash"), null) { _ -> onDelete() }
+            if (currentIsMine) {
+                val deleteAction = UIAction.actionWithTitle("Delete Photo", UIImage.systemImageNamed("trash"), null) { _ -> currentOnDelete() }
                 deleteAction.attributes = UIMenuElementAttributesDestructive
                 actions.add(deleteAction)
             } else {
                 val reportAction = UIAction.actionWithTitle("Report Photo", UIImage.systemImageNamed("flag"), null) { _ ->
                     val alert = UIAlertController.alertControllerWithTitle("Report Photo", "Why are you reporting this photo?", UIAlertControllerStyleActionSheet)
                     reasons.forEach { reason ->
-                        alert.addAction(UIAlertAction.actionWithTitle(reason, UIAlertActionStyleDefault) { onReport(reason) })
+                        alert.addAction(UIAlertAction.actionWithTitle(reason, UIAlertActionStyleDefault) { currentOnReport(reason) })
                     }
                     alert.addAction(UIAlertAction.actionWithTitle("Cancel", UIAlertActionStyleCancel, null))
                     val window = UIApplication.sharedApplication.windows.firstOrNull { (it as UIWindow).isKeyWindow() } as? UIWindow
+
+                    alert.popoverPresentationController?.sourceView = moreBtn
+                    alert.popoverPresentationController?.sourceRect = moreBtn?.bounds ?: kotlin.cinterop.cValue()
                     window?.rootViewController?.presentViewController(alert, true, null)
                 }
                 actions.add(reportAction)
             }
             moreBtn?.menu = UIMenu.menuWithTitle("", actions)
         },
-        modifier = modifier.fillMaxWidth().height(80.dp) // Adjusted height
+        // 👇 STATUS BAR FIX: Pushes the Top Bar below the iOS Dynamic Island/Notch
+        modifier = modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .height(72.dp)
     )
 }
 
@@ -288,6 +309,9 @@ actual fun GalleryBottomBar(modifier: Modifier, authorName: String, isTransition
             val label = container.viewWithTag(99L) as? UILabel
             label?.text = "📸 Uploaded by $authorName"
         },
-        modifier = modifier.fillMaxWidth().height(100.dp)
+        modifier = modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .height(100.dp)
     )
 }
