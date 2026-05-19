@@ -80,12 +80,14 @@ fun FullScreenImageGallery(
     var isGalleryZoomed by remember { mutableStateOf(false) }
     var isUiVisible by remember { mutableStateOf(true) }
 
+    // 1. Give the dialog 350ms to finish its entrance animation before loading the UIKitView
     var isMenuReady by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         delay(350)
         isMenuReady = true
     }
 
+    // 2. Compute the exact moment the native view needs to hide
     val isSwipingToDismiss = galleryOffsetY.value > 5f
     val isPagingEnabled = !isGalleryZoomed && !isSwipingToDismiss
     val isTransitioning = !isMenuReady || !isUiVisible || isSwipingToDismiss
@@ -115,6 +117,7 @@ fun FullScreenImageGallery(
                 }
             }
 
+            // --- THE IMAGE PAGER & ZOOM MATH ---
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -162,7 +165,6 @@ fun FullScreenImageGallery(
                         }
                     }
 
-                    // 👇 RESTORED: Get the actual intrinsic size of the image to fix the pan bounds!
                     val painter = coil3.compose.rememberAsyncImagePainter(model = url)
                     val latestIntrinsicSize by rememberUpdatedState(painter.intrinsicSize)
 
@@ -197,7 +199,6 @@ fun FullScreenImageGallery(
                                                 val targetX = (center.x - tapOffset.x) * targetScale
                                                 val targetY = (center.y - tapOffset.y) * targetScale
 
-                                                // Calculate exact mathematical limits based on true image pixels
                                                 val maxPanX = maxOf(0f, (imgWidth * targetScale - boxWidth) / 2f)
                                                 val maxPanY = maxOf(0f, (imgHeight * targetScale - boxHeight) / 2f)
 
@@ -260,7 +261,6 @@ fun FullScreenImageGallery(
                         if (isVideo) {
                             VideoPlayer(modifier = Modifier.fillMaxSize(), url = url)
                         } else {
-                            // 👇 RESTORED: Changed back to Image(painter) to safely use the measured size
                             androidx.compose.foundation.Image(
                                 painter = painter,
                                 contentDescription = "Full Screen Image",
@@ -279,33 +279,41 @@ fun FullScreenImageGallery(
                 }
             }
 
-            // Top Bar
-            GalleryTopBar(
+            // --- 3. YOUR NATIVE GALLERY TOP BAR ---
+            // Wraps AnimatedVisibility so the container fades,
+            // and passes `isTransitioning` down so your UIKitView knows when to hide!
+            androidx.compose.animation.AnimatedVisibility(
+                visible = isUiVisible && !isSwipingToDismiss,
+                enter = androidx.compose.animation.fadeIn(tween(200)),
+                exit = androidx.compose.animation.fadeOut(tween(200)),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .windowInsetsPadding(WindowInsets.systemBars),
-                currentIndex = pagerState.currentPage + 1,
-                totalImages = images.size,
-                isMine = isMessageFromMe,
-                isTransitioning = isTransitioning,
-                onClose = {
-                    if (isUiVisible) {
+                    .windowInsetsPadding(WindowInsets.systemBars)
+            ) {
+                GalleryTopBar(
+                    modifier = Modifier.fillMaxWidth(),
+                    currentIndex = pagerState.currentPage + 1,
+                    totalImages = images.size,
+                    isMine = isMessageFromMe,
+                    // 👇 This makes the magic happen in your NativeImageActionMenu!
+                    isTransitioning = isTransitioning,
+                    onClose = {
                         scope.launch {
                             isMenuReady = false
                             delay(50)
                             onDismiss()
                         }
+                    },
+                    onDelete = {
+                        val currentUrl = images.getOrNull(pagerState.currentPage) ?: ""
+                        onDelete?.invoke(currentUrl)
+                    },
+                    onReport = { reason ->
+                        val currentUrl = images.getOrNull(pagerState.currentPage) ?: ""
+                        onReport?.invoke(currentUrl, reason)
                     }
-                },
-                onDelete = {
-                    val currentUrl = images.getOrNull(pagerState.currentPage) ?: ""
-                    onDelete?.invoke(currentUrl)
-                },
-                onReport = { reason ->
-                    val currentUrl = images.getOrNull(pagerState.currentPage) ?: ""
-                    onReport?.invoke(currentUrl, reason)
-                }
-            )
+                )
+            }
         }
     }
 }
