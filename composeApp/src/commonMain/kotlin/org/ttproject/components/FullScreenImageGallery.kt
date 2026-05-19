@@ -2,6 +2,7 @@ package org.ttproject.components
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -87,10 +88,8 @@ fun FullScreenImageGallery(
         isMenuReady = true
     }
 
-    // 2. Compute the exact moment the native view needs to hide
     val isSwipingToDismiss = galleryOffsetY.value > 5f
     val isPagingEnabled = !isGalleryZoomed && !isSwipingToDismiss
-    val isTransitioning = !isMenuReady || !isUiVisible || isSwipingToDismiss
 
     FullScreenDialog(
         onDismissRequest = onDismiss
@@ -279,41 +278,46 @@ fun FullScreenImageGallery(
                 }
             }
 
-            // --- 3. YOUR NATIVE GALLERY TOP BAR ---
-            // Wraps AnimatedVisibility so the container fades,
-            // and passes `isTransitioning` down so your UIKitView knows when to hide!
-            androidx.compose.animation.AnimatedVisibility(
-                visible = isUiVisible && !isSwipingToDismiss,
-                enter = androidx.compose.animation.fadeIn(tween(200)),
-                exit = androidx.compose.animation.fadeOut(tween(200)),
+            // 👇 1. Safe float animation instead of AnimatedVisibility wrapper
+            val uiAlpha by animateFloatAsState(
+                targetValue = if (isUiVisible && !isSwipingToDismiss) 1f else 0f,
+                animationSpec = tween(200),
+                label = "uiAlpha"
+            )
+
+            // 👇 2. Instantly triggers your NativeImageActionMenu swap trick!
+            val isTransitioning = !isMenuReady || uiAlpha < 1f
+
+            // 👇 3. Pure GalleryTopBar. No AnimatedVisibility to punch holes!
+            GalleryTopBar(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .windowInsetsPadding(WindowInsets.systemBars)
-            ) {
-                GalleryTopBar(
-                    modifier = Modifier.fillMaxWidth(),
-                    currentIndex = pagerState.currentPage + 1,
-                    totalImages = images.size,
-                    isMine = isMessageFromMe,
-                    // 👇 This makes the magic happen in your NativeImageActionMenu!
-                    isTransitioning = isTransitioning,
-                    onClose = {
+                    .graphicsLayer {
+                        alpha = uiAlpha
+                    },
+                currentIndex = pagerState.currentPage + 1,
+                totalImages = images.size,
+                isMine = isMessageFromMe,
+                isTransitioning = isTransitioning,
+                onClose = {
+                    if (isUiVisible) {
                         scope.launch {
                             isMenuReady = false
                             delay(50)
                             onDismiss()
                         }
-                    },
-                    onDelete = {
-                        val currentUrl = images.getOrNull(pagerState.currentPage) ?: ""
-                        onDelete?.invoke(currentUrl)
-                    },
-                    onReport = { reason ->
-                        val currentUrl = images.getOrNull(pagerState.currentPage) ?: ""
-                        onReport?.invoke(currentUrl, reason)
                     }
-                )
-            }
+                },
+                onDelete = {
+                    val currentUrl = images.getOrNull(pagerState.currentPage) ?: ""
+                    onDelete?.invoke(currentUrl)
+                },
+                onReport = { reason ->
+                    val currentUrl = images.getOrNull(pagerState.currentPage) ?: ""
+                    onReport?.invoke(currentUrl, reason)
+                }
+            )
         }
     }
 }
