@@ -112,6 +112,7 @@ import io.github.vinceglb.filekit.core.PickerType
 import org.jetbrains.compose.resources.painterResource
 import org.ttproject.components.AudioPlayer
 import org.ttproject.components.FullScreenImageGallery
+import org.ttproject.components.NativeGalleryLauncher
 import org.ttproject.components.VideoPlayer
 import org.ttproject.components.rememberAudioPlayer
 import org.ttproject.components.rememberCameraLauncher
@@ -291,7 +292,8 @@ fun ChatDetailScreen(
     otherUserImageUrl: String?,
     initialThemeName: String,
     bottomNavPadding: Dp,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    galleryLauncher: NativeGalleryLauncher
 ) {
     LaunchedEffect(otherUsername) {
         viewModel.fetchOtherUserProfile(otherUsername)
@@ -593,9 +595,19 @@ fun ChatDetailScreen(
                                     selectedMessageId = if (isSelected) null else msg.id
                                 },
                                 onImageClick = { index, urls ->
-                                    fullScreenImages = urls
-                                    fullScreenInitialPage = index
-                                    fullScreenImageIsMe = isMe
+                                    if (isIosPlatform()) {
+                                        galleryLauncher.openGallery(
+                                            images = urls,
+                                            initialIndex = index,
+                                            isMine = isMe,
+                                            onDelete = { url -> println("viewModel.deleteMessageImage(chatId, selectedMessageId, url)") },
+                                            onReport = { url, reason -> println("viewModel.reportImage(url, reason)") }
+                                        )
+                                    } else {
+                                        fullScreenImages = urls
+                                        fullScreenInitialPage = index
+                                        fullScreenImageIsMe = isMe
+                                    }
                                 },
                                 onReactionClick = { reactionSheetMessageId = msg.id },
                                 onLongPress = { bounds, topStart, topEnd, bottomStart, bottomEnd, initialTouch, reactionBounds ->

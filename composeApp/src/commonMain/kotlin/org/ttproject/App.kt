@@ -35,6 +35,7 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.ttproject.components.DesktopSidebar
 import org.ttproject.components.MobileBottomNavPill
 import org.ttproject.components.MobileTopBar
+import org.ttproject.components.NativeGalleryLauncher
 import org.ttproject.data.TokenStorage
 import org.ttproject.icon.AppIconManager
 import org.ttproject.icon.PremiumAppIcon
@@ -65,7 +66,8 @@ val LocalIsDarkTheme = compositionLocalOf { false }
 @Composable
 fun App(
     pendingChatId: String? = null,
-    onChatConsumed: () -> Unit = {}
+    onChatConsumed: () -> Unit = {},
+    galleryLauncher: NativeGalleryLauncher
 ) {
     val tokenStorage: TokenStorage = koinInject()
     val appIconManager: AppIconManager = koinInject()
@@ -400,7 +402,8 @@ fun App(
                                     otherUserImageUrl = route.otherUserImageUrl,
                                     initialThemeName = route.themeName,
                                     bottomNavPadding = 0.dp,
-                                    onBack = { rootNavController.popBackStack() }
+                                    onBack = { rootNavController.popBackStack() },
+                                    galleryLauncher = galleryLauncher
                                 )
                             }
                         }
