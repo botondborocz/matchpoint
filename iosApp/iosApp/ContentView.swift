@@ -10,13 +10,12 @@ class IOSGalleryLauncher: NativeGalleryLauncher {
         self.appState = appState
     }
 
-    // 👇 CHANGED: Accept [KotlinBoolean] and map it
     func openGallery(images: [String], initialIndex: Int32, isMineList: [KotlinBoolean], onDelete: @escaping (String) -> Void, onReport: @escaping (String, String) -> Void) {
         DispatchQueue.main.async {
             self.appState.galleryData = GalleryData(
                 images: images,
                 initialIndex: Int(initialIndex),
-                isMineList: isMineList.map { $0.boolValue }, // 👈 Map Kotlin Booleans to Swift Bools
+                isMineList: isMineList.map { $0.boolValue },
                 onDelete: onDelete,
                 onReport: onReport
             )
@@ -33,7 +32,7 @@ struct GalleryData: Identifiable {
     let id = UUID()
     let images: [String]
     let initialIndex: Int
-    let isMineList: [Bool] // 👈 CHANGED to Array
+    let isMineList: [Bool]
     let onDelete: (String) -> Void
     let onReport: (String, String) -> Void
 }
@@ -47,7 +46,6 @@ struct ContentView: View {
             .ignoresSafeArea()
             .fullScreenCover(item: $appState.galleryData) { data in
                 NativeSwiftGalleryView(data: data)
-                    // Makes the background transparent during the dismiss animation
                     .background(TransparentBackground())
             }
     }
@@ -96,7 +94,6 @@ struct NativeSwiftGalleryView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            // Dynamic Background that fades when pulled down
             Color.black.opacity(bgOpacity).ignoresSafeArea()
 
             // Native Paging
@@ -112,18 +109,15 @@ struct NativeSwiftGalleryView: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea()
-            .statusBarHidden(!isUiVisible)
-            .offset(y: viewOffset.height) // Moves the image when swiping down
+            .offset(y: viewOffset.height)
 
-            // 👇 THE SWIPE-TO-DISMISS PHYSICS
+            // Swipe-to-dismiss physics
             .simultaneousGesture(
                 DragGesture()
                     .onChanged { value in
                         guard !isZoomed else { return }
 
                         let isHorizontal = abs(value.translation.width) > abs(value.translation.height)
-
-                        // If swipe is mostly horizontal, let TabView handle paging
                         if !isDraggingVertically && isHorizontal && abs(value.translation.width) > 5 {
                             return
                         }
@@ -131,7 +125,6 @@ struct NativeSwiftGalleryView: View {
                         isDraggingVertically = true
                         viewOffset.height = value.translation.height
 
-                        // Fade the background out as they pull down
                         let progress = min(abs(value.translation.height) / 300, 1.0)
                         bgOpacity = 1.0 - (progress * 0.4)
 
@@ -143,14 +136,10 @@ struct NativeSwiftGalleryView: View {
                         guard !isZoomed && isDraggingVertically else { return }
                         isDraggingVertically = false
 
-                        // Calculate velocity for flick-to-dismiss
                         let velocity = value.predictedEndLocation.y - value.location.y
-
                         if abs(viewOffset.height) + abs(velocity) > 150 {
-                            // Dismiss if pulled far enough or flicked hard enough
                             dismiss()
                         } else {
-                            // Snap back if they let go too early
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                 viewOffset = .zero
                                 bgOpacity = 1.0
@@ -206,9 +195,11 @@ struct NativeSwiftGalleryView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
-            .opacity(isUiVisible && viewOffset == .zero ? 1.0 : 0.0) // Hide when pulling down
+            .opacity(isUiVisible && viewOffset == .zero ? 1.0 : 0.0)
             .animation(.easeInOut(duration: 0.2), value: isUiVisible)
         }
+        // 👈 FIX 4: Applied to root ZStack to properly hide Clock/Network
+        .statusBarHidden(!isUiVisible)
     }
 }
 
@@ -216,31 +207,46 @@ struct NativeSwiftGalleryView: View {
 struct ZoomableImageView: View {
     let url: String
     @Binding var isUiVisible: Bool
-    @Binding var isZoomed: Bool // Tells the parent if we can swipe-to-dismiss
+    @Binding var isZoomed: Bool
 
-    // Zoom & Pan State
     @State private var scale: CGFloat = 1.0
     @State private var lastScale: CGFloat = 1.0
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
 
+    // Tracks the exact rendered pixel size of the image to clamp panning
+    @State private var imageSize: CGSize = .zero
+
     var body: some View {
         GeometryReader { geometry in
-            AsyncImage(url: URL(string: url)) { image in
-                image
-                    .resizable()
-                    .scaledToFit()
-            } placeholder: {
-                ProgressView().tint(.white)
+            ZStack {
+                AsyncImage(url: URL(string: url)) { phase in
+                    if let image = phase.image {
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .background(
+                                GeometryReader { imgGeo in
+                                    Color.clear
+                                        .onAppear { imageSize = imgGeo.size }
+                                        .onChange(of: imgGeo.size) { newSize in imageSize = newSize }
+                                }
+                            )
+                    } else if phase.error != nil {
+                        Image(systemName: "photo")
+                            .foregroundColor(.gray)
+                    } else {
+                        ProgressView().tint(.white)
+                    }
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .ignoresSafeArea()
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .contentShape(Rectangle()) // Ensures the whole screen is draggable
 
-            // Pan and Zoom transformations
+            // 👈 FIX 1: Applied directly to the wrapper ZStack for buttery smooth performance
             .scaleEffect(scale)
             .offset(offset)
 
-            // Double Tap to Zoom to targeted location
             .onTapGesture(count: 2, coordinateSpace: .local) { location in
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     if scale > 1.0 {
@@ -249,23 +255,24 @@ struct ZoomableImageView: View {
                     } else {
                         scale = 2.5
                         lastScale = 2.5
-                        isZoomed = true // <--- Locks vertical swiping
+                        isZoomed = true
 
                         let midX = geometry.size.width / 2
                         let midY = geometry.size.height / 2
-                        let newX = (location.x - midX) * (1 - scale)
-                        let newY = (location.y - midY) * (1 - scale)
+                        let newX = (midX - location.x) * (scale - 1)
+                        let newY = (midY - location.y) * (scale - 1)
 
-                        offset = CGSize(width: newX, height: newY)
+                        // 👈 FIX 3: Clamp the offset so it never reveals the black background!
+                        offset = clampOffset(CGSize(width: newX, height: newY), scale: scale, container: geometry.size)
                         lastOffset = offset
                         isUiVisible = false
                     }
                 }
             }
-            // Single tap toggles the UI
+            // 👈 FIX 2: Single tap toggles UI *only* when fully zoomed out
             .onTapGesture(count: 1) {
-                withAnimation {
-                    isUiVisible.toggle()
+                if scale <= 1.0 {
+                    withAnimation { isUiVisible.toggle() }
                 }
             }
             // Pinch to zoom
@@ -274,34 +281,55 @@ struct ZoomableImageView: View {
                     .onChanged { value in
                         let newScale = lastScale * value
                         scale = max(newScale, 1.0)
-                        isZoomed = scale > 1.0 // <--- Locks vertical swiping
+                        isZoomed = scale > 1.0
 
                         if scale > 1.0 && isUiVisible {
                             withAnimation { isUiVisible = false }
                         }
+
+                        // Keeps image perfectly clamped while zooming out
+                        offset = clampOffset(offset, scale: scale, container: geometry.size)
                     }
                     .onEnded { value in
                         lastScale = scale
                         if scale <= 1.0 {
                             resetImageState()
+                        } else {
+                            lastOffset = offset
                         }
                     }
             )
-            // Drag to pan (Only enabled when zoomed in)
+            // Drag to pan
             .gesture(
                 DragGesture()
                     .onChanged { value in
-                        offset = CGSize(
+                        let proposedOffset = CGSize(
                             width: lastOffset.width + value.translation.width,
                             height: lastOffset.height + value.translation.height
                         )
+                        // 👈 FIX 3: Blocks dragging past the edges of the image
+                        offset = clampOffset(proposedOffset, scale: scale, container: geometry.size)
                     }
                     .onEnded { value in
                         lastOffset = offset
                     },
-                including: scale > 1.0 ? .all : .none // Only hijack swiping when zoomed in
+                including: scale > 1.0 ? .all : .none
             )
         }
+    }
+
+    // 👈 FIX 3: Math algorithm to ensure edge-to-edge perfection
+    private func clampOffset(_ proposed: CGSize, scale: CGFloat, container: CGSize) -> CGSize {
+        let scaledWidth = imageSize.width * scale
+        let scaledHeight = imageSize.height * scale
+
+        let maxPanX = max(0, (scaledWidth - container.width) / 2)
+        let maxPanY = max(0, (scaledHeight - container.height) / 2)
+
+        let clampedX = min(max(proposed.width, -maxPanX), maxPanX)
+        let clampedY = min(max(proposed.height, -maxPanY), maxPanY)
+
+        return CGSize(width: clampedX, height: clampedY)
     }
 
     private func resetImageState() {
@@ -310,7 +338,7 @@ struct ZoomableImageView: View {
             lastScale = 1.0
             offset = .zero
             lastOffset = .zero
-            isZoomed = false // <--- Unlocks vertical swiping
+            isZoomed = false
         }
     }
 }
