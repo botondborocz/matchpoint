@@ -113,6 +113,7 @@ import org.ttproject.components.FullScreenDialog
 import org.ttproject.components.GalleryBottomBar
 import org.ttproject.components.GalleryTopBar
 import org.ttproject.components.InAppNotification
+import org.ttproject.components.NativeGalleryLauncher
 import org.ttproject.components.NativeImageActionMenu
 import org.ttproject.components.SetSystemBarsVisibility
 import org.ttproject.data.LocationType
@@ -156,6 +157,7 @@ fun MapScreen(
     isActive: Boolean = true,
     bottomNavHeight: Dp = 0.dp,
     systemNavHeight: Dp = 0.dp,
+    galleryLauncher: NativeGalleryLauncher? = null, // 👈 ADDED HERE
     onNavBarVisibilityChange: (Boolean) -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -397,7 +399,6 @@ fun MapScreen(
         var isSearchActive by remember { mutableStateOf(false) }
         val focusManager = LocalFocusManager.current
 
-        // 👇 1. Create a FocusRequester to manually open the keyboard
         val searchFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
 
         val searchNavState = rememberNavigationEventState(NavigationEventInfo.None)
@@ -427,16 +428,12 @@ fun MapScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)),
-                // 👇 24.dp perfectly halves 48.dp, creating a flawless Pill shape!
                 shape = RoundedCornerShape(24.dp),
                 color = cardBg.copy(alpha = 0.95f),
                 shadowElevation = 6.dp,
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
             ) {
-                // 👇 2. Removed vertical padding here so it hugs the 48dp Row tightly!
                 Column {
-
-                    // --- 1. SEARCH ROW (Exactly 48dp tall) ---
                     Row(
                         modifier = Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -448,7 +445,6 @@ fun MapScreen(
                                     isSearchActive = false
                                     isFilterPanelExpanded = false
                                 } else {
-                                    // 👇 3. Clicking the magnifying glass opens the keyboard!
                                     searchFocusRequester.requestFocus()
                                 }
                             },
@@ -462,7 +458,6 @@ fun MapScreen(
                             )
                         }
 
-                        // 👇 FIXED: BasicTextField strips out the hidden Material 56dp height constraints!
                         BasicTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
@@ -475,7 +470,7 @@ fun MapScreen(
                                         isFilterPanelExpanded = false
                                     }
                                 }
-                                .padding(horizontal = 8.dp), // Clean horizontal breathing room
+                                .padding(horizontal = 8.dp),
                             singleLine = true,
                             textStyle = androidx.compose.ui.text.TextStyle(
                                 color = AppColors.TextPrimary,
@@ -483,7 +478,6 @@ fun MapScreen(
                             ),
                             cursorBrush = androidx.compose.ui.graphics.SolidColor(brandOrange),
                             decorationBox = { innerTextField ->
-                                // The Box wrapping guarantees a perfect vertical alignment
                                 Box(
                                     modifier = Modifier.fillMaxWidth(),
                                     contentAlignment = Alignment.CenterStart
@@ -533,10 +527,7 @@ fun MapScreen(
                         }
                     }
 
-                    // --- 2. DYNAMIC DROPDOWN CONTENT ---
-
                     if (isFilterPanelExpanded) {
-                        // Added horizontal padding to the dropdowns to compensate for stripping it from the Column above
                         Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
                             HorizontalDivider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 8.dp))
 
@@ -620,8 +611,6 @@ fun MapScreen(
             }
         }
 
-
-
         AnimatedVisibility(
             visible = isPickingLocation,
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
@@ -691,7 +680,6 @@ fun MapScreen(
                 contentColor = brandOrange,
                 modifier = Modifier.size(48.dp),
                 shape = RoundedCornerShape(16.dp),
-//                shape = CircleShape,
                 elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 8.dp)
             ) {
                 Icon(Icons.Default.MyLocation, contentDescription = "Center on me")
@@ -709,7 +697,6 @@ fun MapScreen(
         val currentEndPadding = 16.dp * (1f - expandProgress)
 
         val currentRadius = 16.dp * (1f - expandProgress)
-//        val currentRadius = 24.dp * (1f - expandProgress)
         val currentElevation = 8.dp * (1f - expandProgress)
 
         val currentWidth = 48.dp + (screenWidth - 48.dp) * expandProgress
@@ -867,6 +854,7 @@ fun MapScreen(
                                 systemNavHeight = systemNavHeight,
                                 viewModel = viewModel,
                                 currentUserId = currentUserId,
+                                galleryLauncher = galleryLauncher, // 👈 PASSED HERE
                                 onClose = {
                                     isDetailsExpanded = false
                                     coroutineScope.launch {
@@ -1489,7 +1477,6 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
     val offsetY = remember { Animatable(0f) }
     val scrollState = rememberScrollState()
 
-    // 👇 1. Get the FocusManager to handle hiding the keyboard
     val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
 
     val attemptClose: () -> Unit = {
@@ -1589,7 +1576,6 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                     .nestedScroll(nestedScrollConnection)
                     .background(AppColors.Background, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    // 👇 2. Automatically apply bottom padding when the keyboard is visible
                     .imePadding()
             ) {
                 Row(
@@ -1643,7 +1629,6 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        // 👇 3. Clear focus & close keyboard if user taps empty space
                         .pointerInput(Unit) {
                             detectTapGestures(onTap = { focusManager.clearFocus() })
                         }
@@ -1747,7 +1732,7 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = cardBg,
                             unfocusedContainerColor = cardBg,
-                            focusedIndicatorColor = brandOrange, // 👇 Changed from Color.Transparent to brandOrange
+                            focusedIndicatorColor = brandOrange,
                             unfocusedIndicatorColor = Color.Transparent,
                             focusedTextColor = AppColors.TextPrimary,
                             unfocusedTextColor = AppColors.TextPrimary,
@@ -1759,7 +1744,6 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                         }
                     )
 
-                    // 👇 5. Replaced huge spacer with standard 24dp padding
                     Spacer(modifier = Modifier.height(24.dp))
                 }
 
@@ -1824,13 +1808,13 @@ fun ClubDetailsFullScreen(
     viewModel: LocationViewModel, currentUserId: String, onClose: () -> Unit,
     currentOffset: Float,
     onDragDelta: (Float) -> Unit,
-    onDragStopped: (Float) -> Unit
+    onDragStopped: (Float) -> Unit,
+    galleryLauncher: NativeGalleryLauncher? = null // 👈 ADDED HERE
 ) {
     val reviews by viewModel.clubReviews.collectAsState()
     val hasReviewed =
         remember(reviews, currentUserId) { reviews.any { it.userId == currentUserId } }
 
-    // 👇 Updated to parse and assign `isMine` based on currentUserId
     val allGalleryImages = remember(club.imageUrls, reviews, club.createdBy, currentUserId) {
         val list = mutableListOf<GalleryImage>()
         val isClubCreatorMe = club.createdBy == currentUserId
@@ -1852,6 +1836,30 @@ fun ClubDetailsFullScreen(
 
     var fullScreenInitialPage by remember { mutableStateOf<Int?>(null) }
     var isWritingReview by remember { mutableStateOf(false) }
+    var notificationMessage by remember { mutableStateOf<String?>(null) }
+
+    // 👇 ADDED: Universal platform-aware gallery launcher lambda
+    val openImageGallery = { index: Int ->
+        if (isIosPlatform() && galleryLauncher != null) {
+            galleryLauncher.openGallery(
+                images = allGalleryImages.map { it.url },
+                initialIndex = index,
+                isMineList = allGalleryImages.map { it.isMine }, // 👈 CHANGED: Pass list of ownership
+                onDelete = { url ->
+                    viewModel.deleteImage(club.id, url) {
+                        notificationMessage = "Photo deleted successfully"
+                    }
+                },
+                onReport = { url, reason ->
+                    viewModel.reportImage(club.id, url, reason) {
+                        notificationMessage = "Photo reported for review"
+                    }
+                }
+            )
+        } else {
+            fullScreenInitialPage = index // Trigger Compose fallback for Android
+        }
+    }
 
     val galleryNavState = rememberNavigationEventState(NavigationEventInfo.None)
     NavigationBackHandler(
@@ -1862,7 +1870,7 @@ fun ClubDetailsFullScreen(
 
     val scope = rememberCoroutineScope()
     var isUploadingGallery by remember { mutableStateOf(false) }
-    val galleryLauncher = rememberFilePickerLauncher(
+    val mediaLauncher = rememberFilePickerLauncher(
         type = PickerType.Image,
         mode = PickerMode.Multiple(maxItems = 5)
     ) { files ->
@@ -1943,7 +1951,7 @@ fun ClubDetailsFullScreen(
         }
     }
 
-    var notificationMessage by remember { mutableStateOf<String?>(null) }
+
 
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize()
@@ -1990,7 +1998,7 @@ fun ClubDetailsFullScreen(
                         AsyncImage(
                             model = allGalleryImages[page].url, contentDescription = "Hero Image",
                             modifier = Modifier.fillMaxSize()
-                                .clickable { fullScreenInitialPage = page },
+                                .clickable { openImageGallery(page) }, // 👈 UPDATED HERE
                             contentScale = ContentScale.Crop
                         )
                     }
@@ -2196,8 +2204,7 @@ fun ClubDetailsFullScreen(
                                                 Box(
                                                     modifier = Modifier.size(60.dp)
                                                         .clip(RoundedCornerShape(8.dp)).clickable {
-                                                            if (globalIndex != -1) fullScreenInitialPage =
-                                                                globalIndex
+                                                            if (globalIndex != -1) openImageGallery(globalIndex) // 👈 UPDATED HERE
                                                         }) {
                                                     AsyncImage(
                                                         model = url,
@@ -2256,7 +2263,7 @@ fun ClubDetailsFullScreen(
             if (hasReviewed) {
                 Surface(color = brandOrange, shape = CircleShape) {
                     IconButton(
-                        onClick = { galleryLauncher.launch() },
+                        onClick = { mediaLauncher.launch() },
                         modifier = Modifier.size(40.dp)
                     ) {
                         if (isUploadingGallery) CircularProgressIndicator(
@@ -2374,7 +2381,7 @@ fun ClubDetailsFullScreen(
             }
         }
 
-        // 👇 1. Use standard KMP Dialog
+        // 👇 ANDROID COMPOSE GALLERY (Triggered only when fullScreenInitialPage != null)
         if (showGalleryDialog) {
             FullScreenDialog(
                 onDismissRequest = { fullScreenInitialPage = null }
@@ -2403,10 +2410,8 @@ fun ClubDetailsFullScreen(
                         val galleryOffsetY = remember { Animatable(0f) }
                         var isGalleryZoomed by remember { mutableStateOf(false) }
 
-                        // 👇 1. Add new state for immersive mode
                         var isUiVisible by remember { mutableStateOf(true) }
 
-                        // 👇 2. System bars now follow the UI state, not the zoom state
                         SetSystemBarsVisibility(isVisible = isUiVisible)
 
                         var isMenuReady by remember { mutableStateOf(false) }
@@ -2422,7 +2427,6 @@ fun ClubDetailsFullScreen(
                         val isSwipingToDismiss = galleryOffsetY.value > 5f
                         val isPagingEnabled = !isGalleryZoomed && !isSwipingToDismiss
 
-                        // 👇 3. Native menu transitions out when UI is hidden
                         val isTransitioning = !isMenuReady || !isUiVisible || isSwipingToDismiss
 
                         Box(
@@ -2431,7 +2435,6 @@ fun ClubDetailsFullScreen(
                                 .background(Color.Black.copy(
                                     alpha = (1f - (galleryOffsetY.value / 1500f)).coerceIn(0f, 1f)
                                 ))
-                                // Keep this to protect the bottom nav bar area
                                 .windowInsetsPadding(WindowInsets.navigationBars)
                         ) {
                             val handleDragEnd = {
@@ -2491,7 +2494,6 @@ fun ClubDetailsFullScreen(
                                         }
                                     }
 
-                                    // 👇 4. Auto-hide UI when zoomed in, but DON'T auto-show when zoomed out
                                     LaunchedEffect(scaleAnim.value) {
                                         val zoomed = scaleAnim.value > 1.01f
                                         isGalleryZoomed = zoomed
@@ -2500,7 +2502,6 @@ fun ClubDetailsFullScreen(
                                         }
                                     }
 
-                                    // 👇 1. Load the painter so we can measure the EXACT image pixels!
                                     val painter =
                                         coil3.compose.rememberAsyncImagePainter(model = image.url)
                                     val latestIntrinsicSize by rememberUpdatedState(painter.intrinsicSize)
@@ -2546,7 +2547,6 @@ fun ClubDetailsFullScreen(
                                                                 val boxHeight =
                                                                     size.height.toFloat()
 
-                                                                // 👇 2. Calculate the exact bounding box of the visual pixels
                                                                 var imgWidth = boxWidth
                                                                 var imgHeight = boxHeight
                                                                 if (latestIntrinsicSize.width > 0 && latestIntrinsicSize.height > 0) {
@@ -2569,7 +2569,6 @@ fun ClubDetailsFullScreen(
                                                                 val targetY =
                                                                     (center.y - tapOffset.y) * targetScale
 
-                                                                // 👇 3. Clamp using TRUE image size! If zoomed height is smaller than screen, maxPanY becomes 0 (locked!)
                                                                 val maxPanX = maxOf(
                                                                     0f,
                                                                     (imgWidth * targetScale - boxWidth) / 2f
@@ -2647,7 +2646,6 @@ fun ClubDetailsFullScreen(
                                                             val boxWidth = size.width.toFloat()
                                                             val boxHeight = size.height.toFloat()
 
-                                                            // 👇 4. Apply the same mathematical pixel boundary to manual dragging
                                                             var imgWidth = boxWidth
                                                             var imgHeight = boxHeight
                                                             if (latestIntrinsicSize.width > 0 && latestIntrinsicSize.height > 0) {
@@ -2692,7 +2690,6 @@ fun ClubDetailsFullScreen(
                                             },
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        // 👇 5. Replace AsyncImage with Image(painter)
                                         Image(
                                             painter = painter,
                                             contentDescription = "Full Screen Image",
@@ -2713,7 +2710,6 @@ fun ClubDetailsFullScreen(
                                     label = "uiAlpha"
                                 )
 
-                                // Floating Top UI Elements (Hidden when Zoomed)
                                 val currentImage = activeImages.getOrNull(pagerState.currentPage)
 
                                 GalleryTopBar(
@@ -2748,7 +2744,6 @@ fun ClubDetailsFullScreen(
                                     }
                                 )
 
-                                // Bottom Author Bar (Hidden when Zoomed)
                                 if (currentImage != null) {
                                     GalleryBottomBar(
                                         modifier = Modifier.align(Alignment.BottomCenter),

@@ -4,20 +4,19 @@ import ComposeApp
 
 // 1. Implement the Kotlin Interface in Swift
 class IOSGalleryLauncher: NativeGalleryLauncher {
-    // We use an ObservableObject to trigger SwiftUI presentation
     var appState: AppState
 
     init(appState: AppState) {
         self.appState = appState
     }
 
-    func openGallery(images: [String], initialIndex: Int32, isMine: Bool, onDelete: @escaping (String) -> Void, onReport: @escaping (String, String) -> Void) {
-        // Update the state on the main thread to trigger the SwiftUI sheet
+    // 👇 CHANGED: Accept [KotlinBoolean] and map it
+    func openGallery(images: [String], initialIndex: Int32, isMineList: [KotlinBoolean], onDelete: @escaping (String) -> Void, onReport: @escaping (String, String) -> Void) {
         DispatchQueue.main.async {
             self.appState.galleryData = GalleryData(
                 images: images,
                 initialIndex: Int(initialIndex),
-                isMine: isMine,
+                isMineList: isMineList.map { $0.boolValue }, // 👈 Map Kotlin Booleans to Swift Bools
                 onDelete: onDelete,
                 onReport: onReport
             )
@@ -34,7 +33,7 @@ struct GalleryData: Identifiable {
     let id = UUID()
     let images: [String]
     let initialIndex: Int
-    let isMine: Bool
+    let isMineList: [Bool] // 👈 CHANGED to Array
     let onDelete: (String) -> Void
     let onReport: (String, String) -> Void
 }
@@ -44,12 +43,12 @@ struct ContentView: View {
     @StateObject var appState = AppState()
 
     var body: some View {
-        // Initialize your Compose app, passing in the Swift implementation
         ComposeView(launcher: IOSGalleryLauncher(appState: appState))
             .ignoresSafeArea()
             .fullScreenCover(item: $appState.galleryData) { data in
-                // Present the purely native Swift Gallery!
                 NativeSwiftGalleryView(data: data)
+                    // Makes the background transparent during the dismiss animation
+                    .background(TransparentBackground())
             }
     }
 }
@@ -64,12 +63,31 @@ struct ComposeView: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
 }
 
+// Helper to ensure transparent background on fullScreenCover
+struct TransparentBackground: UIViewRepresentable {
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        DispatchQueue.main.async {
+            view.superview?.superview?.backgroundColor = .clear
+        }
+        return view
+    }
+    func updateUIView(_ uiView: UIView, context: Context) {}
+}
+
+// MARK: - Native Gallery View
 struct NativeSwiftGalleryView: View {
     let data: GalleryData
     @Environment(\.dismiss) var dismiss
 
     @State private var currentIndex: Int
     @State private var isUiVisible: Bool = true
+
+    // Swipe-to-Dismiss State
+    @State private var isZoomed: Bool = false
+    @State private var bgOpacity: Double = 1.0
+    @State private var viewOffset: CGSize = .zero
+    @State private var isDraggingVertically = false
 
     init(data: GalleryData) {
         self.data = data
@@ -78,27 +96,74 @@ struct NativeSwiftGalleryView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            Color.black.ignoresSafeArea()
+            // Dynamic Background that fades when pulled down
+            Color.black.opacity(bgOpacity).ignoresSafeArea()
 
             // Native Paging
             TabView(selection: $currentIndex) {
                 ForEach(0..<data.images.count, id: \.self) { index in
                     ZoomableImageView(
                         url: data.images[index],
-                        isUiVisible: $isUiVisible
+                        isUiVisible: $isUiVisible,
+                        isZoomed: $isZoomed
                     )
                     .tag(index)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            // Only hide the status bar when the UI is hidden
+            .ignoresSafeArea()
             .statusBarHidden(!isUiVisible)
+            .offset(y: viewOffset.height) // Moves the image when swiping down
+
+            // 👇 THE SWIPE-TO-DISMISS PHYSICS
+            .simultaneousGesture(
+                DragGesture()
+                    .onChanged { value in
+                        guard !isZoomed else { return }
+
+                        let isHorizontal = abs(value.translation.width) > abs(value.translation.height)
+
+                        // If swipe is mostly horizontal, let TabView handle paging
+                        if !isDraggingVertically && isHorizontal && abs(value.translation.width) > 5 {
+                            return
+                        }
+
+                        isDraggingVertically = true
+                        viewOffset.height = value.translation.height
+
+                        // Fade the background out as they pull down
+                        let progress = min(abs(value.translation.height) / 300, 1.0)
+                        bgOpacity = 1.0 - (progress * 0.4)
+
+                        if isUiVisible {
+                            withAnimation { isUiVisible = false }
+                        }
+                    }
+                    .onEnded { value in
+                        guard !isZoomed && isDraggingVertically else { return }
+                        isDraggingVertically = false
+
+                        // Calculate velocity for flick-to-dismiss
+                        let velocity = value.predictedEndLocation.y - value.location.y
+
+                        if abs(viewOffset.height) + abs(velocity) > 150 {
+                            // Dismiss if pulled far enough or flicked hard enough
+                            dismiss()
+                        } else {
+                            // Snap back if they let go too early
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                viewOffset = .zero
+                                bgOpacity = 1.0
+                            }
+                        }
+                    }
+            )
 
             // Your Custom Top Bar
             HStack {
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 28))
+                        .font(.system(size: 34))
                         .symbolRenderingMode(.palette)
                         .foregroundStyle(.white, Color(white: 0.2))
                 }
@@ -109,7 +174,7 @@ struct NativeSwiftGalleryView: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundColor(.white)
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 8)
                     .background(Color(white: 0.2))
                     .cornerRadius(16)
 
@@ -117,7 +182,7 @@ struct NativeSwiftGalleryView: View {
 
                 // Pure Native iOS Menu
                 Menu {
-                    if data.isMine {
+                    if data.isMineList[currentIndex] {
                         Button(role: .destructive) {
                             data.onDelete(data.images[currentIndex])
                             dismiss()
@@ -134,14 +199,14 @@ struct NativeSwiftGalleryView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle.fill")
-                        .font(.system(size: 28))
+                        .font(.system(size: 34))
                         .symbolRenderingMode(.palette)
                         .foregroundStyle(.white, Color(white: 0.2))
                 }
             }
-            .padding()
-            // Gracefully fade the top bar in and out
-            .opacity(isUiVisible ? 1.0 : 0.0)
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .opacity(isUiVisible && viewOffset == .zero ? 1.0 : 0.0) // Hide when pulling down
             .animation(.easeInOut(duration: 0.2), value: isUiVisible)
         }
     }
@@ -151,6 +216,7 @@ struct NativeSwiftGalleryView: View {
 struct ZoomableImageView: View {
     let url: String
     @Binding var isUiVisible: Bool
+    @Binding var isZoomed: Bool // Tells the parent if we can swipe-to-dismiss
 
     // Zoom & Pan State
     @State private var scale: CGFloat = 1.0
@@ -168,39 +234,48 @@ struct ZoomableImageView: View {
                 ProgressView().tint(.white)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // Apply pan and zoom transformations
-            .offset(offset)
+            .ignoresSafeArea()
+
+            // Pan and Zoom transformations
             .scaleEffect(scale)
-            // 1. Prioritize double tap over single tap
-            .onTapGesture(count: 2) {
+            .offset(offset)
+
+            // Double Tap to Zoom to targeted location
+            .onTapGesture(count: 2, coordinateSpace: .local) { location in
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     if scale > 1.0 {
-                        // Reset Zoom
                         resetImageState()
                         isUiVisible = true
                     } else {
-                        // Zoom in
                         scale = 2.5
                         lastScale = 2.5
+                        isZoomed = true // <--- Locks vertical swiping
+
+                        let midX = geometry.size.width / 2
+                        let midY = geometry.size.height / 2
+                        let newX = (location.x - midX) * (1 - scale)
+                        let newY = (location.y - midY) * (1 - scale)
+
+                        offset = CGSize(width: newX, height: newY)
+                        lastOffset = offset
                         isUiVisible = false
                     }
                 }
             }
-            // 2. Single tap toggles the UI
+            // Single tap toggles the UI
             .onTapGesture(count: 1) {
                 withAnimation {
                     isUiVisible.toggle()
                 }
             }
-            // 3. Pinch to zoom (Magnification)
+            // Pinch to zoom
             .simultaneousGesture(
                 MagnificationGesture()
                     .onChanged { value in
                         let newScale = lastScale * value
-                        // Prevent shrinking smaller than the original size
                         scale = max(newScale, 1.0)
+                        isZoomed = scale > 1.0 // <--- Locks vertical swiping
 
-                        // Hide UI immediately if user starts zooming
                         if scale > 1.0 && isUiVisible {
                             withAnimation { isUiVisible = false }
                         }
@@ -212,32 +287,30 @@ struct ZoomableImageView: View {
                         }
                     }
             )
-            // 4. Drag to pan (Only enabled when zoomed in)
-            .simultaneousGesture(
+            // Drag to pan (Only enabled when zoomed in)
+            .gesture(
                 DragGesture()
                     .onChanged { value in
-                        if scale > 1.0 {
-                            offset = CGSize(
-                                width: lastOffset.width + value.translation.width,
-                                height: lastOffset.height + value.translation.height
-                            )
-                        }
+                        offset = CGSize(
+                            width: lastOffset.width + value.translation.width,
+                            height: lastOffset.height + value.translation.height
+                        )
                     }
                     .onEnded { value in
-                        if scale > 1.0 {
-                            lastOffset = offset
-                        }
-                    }
+                        lastOffset = offset
+                    },
+                including: scale > 1.0 ? .all : .none // Only hijack swiping when zoomed in
             )
         }
     }
 
     private func resetImageState() {
-        withAnimation(.spring()) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             scale = 1.0
             lastScale = 1.0
             offset = .zero
             lastOffset = .zero
+            isZoomed = false // <--- Unlocks vertical swiping
         }
     }
 }

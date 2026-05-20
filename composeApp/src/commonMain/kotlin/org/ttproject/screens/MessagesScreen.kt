@@ -599,7 +599,7 @@ fun ChatDetailScreen(
                                         galleryLauncher.openGallery(
                                             images = urls,
                                             initialIndex = index,
-                                            isMine = isMe,
+                                            isMineList = urls.map { isMe },
                                             onDelete = { url -> println("viewModel.deleteMessageImage(chatId, selectedMessageId, url)") },
                                             onReport = { url, reason -> println("viewModel.reportImage(url, reason)") }
                                         )
