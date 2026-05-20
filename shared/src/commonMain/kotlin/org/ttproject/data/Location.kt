@@ -15,6 +15,7 @@ data class Location(
     val longitude: Double,
     val type: LocationType,
     val isFree: Boolean,
+    val tags: List<String> = emptyList(),
     val tableCount: Int,
     val address: String? = null,
     val createdBy: String? = null,     // ID of the user who added it

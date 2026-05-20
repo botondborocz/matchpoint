@@ -1,5 +1,6 @@
 package org.ttproject.screens
 
+import ttproject.composeapp.generated.resources.zap
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -74,9 +76,14 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -85,6 +92,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.window.Dialog
@@ -112,9 +120,10 @@ import org.ttproject.data.TokenStorage
 import org.ttproject.isIosPlatform
 import org.ttproject.viewmodel.LocationViewModel
 import org.ttproject.viewmodel.LocationsUiState
-import ttproject.composeapp.generated.resources.Res
+import ttproject.composeapp.generated.resources.Res as AppRes
 import ttproject.composeapp.generated.resources.apple_logo_white
 import ttproject.composeapp.generated.resources.google_logo_white
+import ttproject.composeapp.generated.resources.phosphor_funnel
 import kotlin.math.absoluteValue
 
 data class TTClub(
@@ -164,7 +173,7 @@ fun MapScreen(
                     rating = 0.0,
                     lat = loc.latitude,
                     lng = loc.longitude,
-                    tags = listOf(loc.type.name, if (loc.isFree) "Free" else "Paid"),
+                    tags = listOf(loc.type.name, if (loc.isFree) "Free" else "Paid") + loc.tags,
                     type = loc.type,
                     createdBy = loc.createdBy ?: "Anonymous",
                     imageUrls = loc.imageUrls
@@ -198,12 +207,18 @@ fun MapScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
+    // Dynamic Filter State Engine
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedFilterTags by remember { mutableStateOf(setOf<String>()) }
+    var isFilterPanelExpanded by remember { mutableStateOf(false) }
+
     val mapNavState = rememberNavigationEventState(NavigationEventInfo.None)
     NavigationBackHandler(
         state = mapNavState,
-        isBackEnabled = isDetailsExpanded || isAddingTable || isPickingLocation,
+        isBackEnabled = isDetailsExpanded || isAddingTable || isPickingLocation || isFilterPanelExpanded,
         onBackCompleted = {
             when {
+                isFilterPanelExpanded -> isFilterPanelExpanded = false
                 isPickingLocation -> isPickingLocation = false
                 isAddingTable -> isAddingTable = false
                 isDetailsExpanded -> {
@@ -222,38 +237,6 @@ fun MapScreen(
     var userLocationTrigger by remember { mutableStateOf(0) }
     var mapBounds by remember { mutableStateOf<MapBounds?>(null) }
 
-    var isIndoorSelected by remember { mutableStateOf(false) }
-    var isOutdoorSelected by remember { mutableStateOf(false) }
-    var isFreeSelected by remember { mutableStateOf(false) }
-
-    val visibleClubs = remember(clubs, mapBounds, isIndoorSelected, isOutdoorSelected, isFreeSelected) {
-        clubs.filter { club ->
-            val boundsMatch = mapBounds?.let { bounds ->
-                val isInsideLat = club.lat in bounds.south..bounds.north
-                val isInsideLng = if (bounds.west <= bounds.east) {
-                    club.lng in bounds.west..bounds.east
-                } else {
-                    club.lng >= bounds.west || club.lng <= bounds.east
-                }
-                isInsideLat && isInsideLng
-            } ?: true
-
-            val isIndoor = club.type.name.equals("INDOOR", ignoreCase = true)
-            val isOutdoor = club.type.name.equals("OUTDOOR", ignoreCase = true)
-
-            val typeMatch = when {
-                isIndoorSelected && isOutdoorSelected -> true
-                !isIndoorSelected && !isOutdoorSelected -> true
-                isIndoorSelected -> isIndoor
-                isOutdoorSelected -> isOutdoor
-                else -> true
-            }
-
-            val freeMatch = if (isFreeSelected) club.tags.contains("Free") else true
-            boundsMatch && typeMatch && freeMatch
-        }
-    }
-
     val sheetState = remember {
         AnchoredDraggableState(
             initialValue = SheetState.Collapsed,
@@ -262,6 +245,50 @@ fun MapScreen(
             snapAnimationSpec = spring(),
             decayAnimationSpec = exponentialDecay()
         )
+    }
+
+    // Auto-close filter board when full details or full lists occupy layout spaces
+    LaunchedEffect(selectedClub, sheetState.targetValue) {
+        if (selectedClub != null || sheetState.targetValue == SheetState.Expanded) {
+            isFilterPanelExpanded = false
+        }
+    }
+
+    val visibleClubs = remember(clubs, mapBounds, selectedFilterTags, searchQuery) {
+        clubs.filter { club ->
+            val isSearching = searchQuery.isNotBlank()
+
+            // 👇 If searching, ignore map bounds to search globally!
+            val boundsMatch = if (isSearching) true else {
+                mapBounds?.let { bounds ->
+                    val isInsideLat = club.lat in bounds.south..bounds.north
+                    val isInsideLng = if (bounds.west <= bounds.east) {
+                        club.lng in bounds.west..bounds.east
+                    } else {
+                        club.lng >= bounds.west || club.lng <= bounds.east
+                    }
+                    isInsideLat && isInsideLng
+                } ?: true
+            }
+
+            val searchMatch = if (!isSearching) true else {
+                club.name.contains(searchQuery, ignoreCase = true)
+            }
+
+            val tagsMatch = if (selectedFilterTags.isEmpty()) true else {
+                selectedFilterTags.all { filterTag ->
+                    when (filterTag) {
+                        "Indoor" -> club.type.name.equals("INDOOR", ignoreCase = true)
+                        "Outdoor" -> club.type.name.equals("OUTDOOR", ignoreCase = true)
+                        "Free" -> club.tags.contains("Free")
+                        "Paid" -> !club.tags.contains("Free")
+                        else -> club.tags.any { it.equals(filterTag, ignoreCase = true) }
+                    }
+                }
+            }
+
+            boundsMatch && searchMatch && tagsMatch
+        }
     }
 
     val nestedScrollConnection = remember(sheetState) {
@@ -319,15 +346,12 @@ fun MapScreen(
             sheetState.updateAnchors(anchors)
         }
 
-        // 👇 1. Capture the latest state values safely for the flow
         val currentIsDetailsExpanded by rememberUpdatedState(isDetailsExpanded)
         val currentCollapsedOffset by rememberUpdatedState(layoutHeightPx - peekHeightPx)
 
         LaunchedEffect(sheetState) {
             snapshotFlow { sheetState.offset }.collect { offset ->
                 if (!offset.isNaN()) {
-                    // 👇 2. Only dismiss the compact card if the details screen ISN'T expanded.
-                    // This prevents layout jumps (like system bars toggling) from killing the full-screen view.
                     if (!currentIsDetailsExpanded && offset < currentCollapsedOffset - 15f && selectedClub != null) {
                         isDetailsExpanded = false
                         selectedClub = null
@@ -365,38 +389,238 @@ fun MapScreen(
             onBoundsChanged = { newBounds -> mapBounds = newBounds }
         )
 
+        val sheetOffsetYRaw = if (sheetState.offset.isNaN()) (layoutHeightPx - peekHeightPx) else sheetState.offset
+        val sheetVisibleHeightDp = with(density) { (layoutHeightPx - sheetOffsetYRaw).coerceAtLeast(0f).toDp() }
+
+        // --- DYNAMIC TOP SEARCH & FILTER CAPSULE ---
+
+        var isSearchActive by remember { mutableStateOf(false) }
+        val focusManager = LocalFocusManager.current
+
+        // 👇 1. Create a FocusRequester to manually open the keyboard
+        val searchFocusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+
+        val searchNavState = rememberNavigationEventState(NavigationEventInfo.None)
+        NavigationBackHandler(
+            state = searchNavState,
+            isBackEnabled = isSearchActive || isFilterPanelExpanded,
+            onBackCompleted = {
+                focusManager.clearFocus()
+                isFilterPanelExpanded = false
+                isSearchActive = false
+            }
+        )
+
+        val searchZIndex = if (sheetState.targetValue == SheetState.Expanded) 0f else 25f
+
         AnimatedVisibility(
-            visible = isActive && !isDetailsExpanded && !isPickingLocation,
+            visible = isActive && !isDetailsExpanded && !isPickingLocation && !isAddingTable,
             enter = slideInVertically(initialOffsetY = { -it }, animationSpec = tween(400, delayMillis = 100)) + fadeIn(tween(400, delayMillis = 100)),
             exit = fadeOut(tween(200)),
-            modifier = Modifier.align(Alignment.TopCenter)
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+                .padding(top = 16.dp, start = 16.dp, end = 16.dp)
+                .zIndex(searchZIndex)
         ) {
-            Row(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
-                    .padding(top = 12.dp, start = 16.dp, end = 16.dp)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)),
+                // 👇 24.dp perfectly halves 48.dp, creating a flawless Pill shape!
+                shape = RoundedCornerShape(24.dp),
+                color = cardBg.copy(alpha = 0.95f),
+                shadowElevation = 6.dp,
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
             ) {
-                FilterChip(
-                    stringResource(SharedRes.string.indoor),
-                    isIndoorSelected,
-                    brandOrange,
-                    cardBg
-                ) { isIndoorSelected = !isIndoorSelected }
-                FilterChip(
-                    stringResource(SharedRes.string.outdoor),
-                    isOutdoorSelected,
-                    brandOrange,
-                    cardBg
-                ) { isOutdoorSelected = !isOutdoorSelected }
+                // 👇 2. Removed vertical padding here so it hugs the 48dp Row tightly!
+                Column {
+
+                    // --- 1. SEARCH ROW (Exactly 48dp tall) ---
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = {
+                                if (isSearchActive || isFilterPanelExpanded) {
+                                    focusManager.clearFocus()
+                                    isSearchActive = false
+                                    isFilterPanelExpanded = false
+                                } else {
+                                    // 👇 3. Clicking the magnifying glass opens the keyboard!
+                                    searchFocusRequester.requestFocus()
+                                }
+                            },
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isSearchActive || isFilterPanelExpanded) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Search,
+                                contentDescription = if (isSearchActive || isFilterPanelExpanded) "Close" else "Search",
+                                tint = if (isSearchActive || isFilterPanelExpanded) brandOrange else Color.Gray,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // 👇 FIXED: BasicTextField strips out the hidden Material 56dp height constraints!
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(searchFocusRequester)
+                                .onFocusChanged { focusState ->
+                                    if (focusState.isFocused) {
+                                        isSearchActive = true
+                                        isFilterPanelExpanded = false
+                                    }
+                                }
+                                .padding(horizontal = 8.dp), // Clean horizontal breathing room
+                            singleLine = true,
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                color = AppColors.TextPrimary,
+                                fontSize = 15.sp
+                            ),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(brandOrange),
+                            decorationBox = { innerTextField ->
+                                // The Box wrapping guarantees a perfect vertical alignment
+                                Box(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (searchQuery.isEmpty()) {
+                                        Text(
+                                            text = "Search venues...",
+                                            color = Color.Gray,
+                                            fontSize = 14.sp
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                            }
+                        )
+
+                        if (searchQuery.isNotEmpty() || selectedFilterTags.isNotEmpty()) {
+                            TextButton(
+                                onClick = {
+                                    searchQuery = ""
+                                    selectedFilterTags = emptySet()
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                Text("Clear", color = brandOrange, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        IconButton(
+                            onClick = {
+                                isFilterPanelExpanded = !isFilterPanelExpanded
+                                if (isFilterPanelExpanded) {
+                                    isSearchActive = false
+                                    focusManager.clearFocus()
+                                }
+                            },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(if (isFilterPanelExpanded || selectedFilterTags.isNotEmpty()) brandOrange.copy(alpha = 0.2f) else Color.Transparent, CircleShape)
+                        ) {
+                            Icon(
+                                painter = painterResource(AppRes.drawable.phosphor_funnel),
+                                contentDescription = "Filters",
+                                tint = if (isFilterPanelExpanded || selectedFilterTags.isNotEmpty()) brandOrange else Color.Gray,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+
+                    // --- 2. DYNAMIC DROPDOWN CONTENT ---
+
+                    if (isFilterPanelExpanded) {
+                        // Added horizontal padding to the dropdowns to compensate for stripping it from the Column above
+                        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                            HorizontalDivider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 8.dp))
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 260.dp)
+                                    .verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                FilterGroupRow("Type & Access Strategy", listOf("Indoor", "Outdoor", "Free", "Paid"), selectedFilterTags, brandOrange, AppColors.Background) { tag ->
+                                    selectedFilterTags = if (selectedFilterTags.contains(tag)) selectedFilterTags - tag else selectedFilterTags + tag
+                                }
+
+                                FilterGroupRow("Table Properties", listOf("Perfect surface", "Sturdy net", "Worn out / Damaged", "Torn net", "Slippery surface"), selectedFilterTags, brandOrange, AppColors.Background) { tag ->
+                                    selectedFilterTags = if (selectedFilterTags.contains(tag)) selectedFilterTags - tag else selectedFilterTags + tag
+                                }
+
+                                FilterGroupRow("Playing Arena Environment", listOf("Spacious", "Wind-protected", "Good lighting", "Cramped space", "Glaring sun", "Poor lighting"), selectedFilterTags, brandOrange, AppColors.Background) { tag ->
+                                    selectedFilterTags = if (selectedFilterTags.contains(tag)) selectedFilterTags - tag else selectedFilterTags + tag
+                                }
+
+                                FilterGroupRow("Amenities & Settings Vibe", listOf("Drinking fountain", "Restroom available", "Usually crowded", "Quiet & Chill"), selectedFilterTags, brandOrange, AppColors.Background) { tag ->
+                                    selectedFilterTags = if (selectedFilterTags.contains(tag)) selectedFilterTags - tag else selectedFilterTags + tag
+                                }
+                            }
+                        }
+                    }
+                    else if (isSearchActive) {
+                        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                            HorizontalDivider(color = Color.White.copy(alpha = 0.1f), modifier = Modifier.padding(vertical = 8.dp))
+
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 260.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                if (visibleClubs.isEmpty()) {
+                                    item {
+                                        Text(
+                                            text = "No clubs found matching \"$searchQuery\"",
+                                            color = Color.Gray,
+                                            fontSize = 14.sp,
+                                            modifier = Modifier.padding(8.dp)
+                                        )
+                                    }
+                                } else {
+                                    items(visibleClubs) { club ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .clickable {
+                                                    focusManager.clearFocus()
+                                                    isSearchActive = false
+                                                    searchQuery = club.name
+                                                    handleClubSelection(club)
+                                                }
+                                                .padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier.size(36.dp).background(AppColors.Background, CircleShape),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(Icons.Default.MyLocation, contentDescription = null, tint = brandOrange, modifier = Modifier.size(16.dp))
+                                            }
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column {
+                                                Text(club.name, color = AppColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                                Text("${club.distance} • ${club.type.name.lowercase().replaceFirstChar { it.uppercase() }}", color = Color.Gray, fontSize = 12.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        val sheetOffsetYRaw = if (sheetState.offset.isNaN()) (layoutHeightPx - peekHeightPx) else sheetState.offset
-        val sheetVisibleHeightDp = with(density) { (layoutHeightPx - sheetOffsetYRaw).coerceAtLeast(0f).toDp() }
+
 
         AnimatedVisibility(
             visible = isPickingLocation,
@@ -454,7 +678,7 @@ fun MapScreen(
         }
 
         AnimatedVisibility(
-            visible = showFloatingElements && isActive,
+            visible = showFloatingElements && isActive && !isSearchActive,
             enter = slideInHorizontally(initialOffsetX = { it }, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)) + fadeIn(),
             exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
             modifier = Modifier
@@ -467,6 +691,7 @@ fun MapScreen(
                 contentColor = brandOrange,
                 modifier = Modifier.size(48.dp),
                 shape = RoundedCornerShape(16.dp),
+//                shape = CircleShape,
                 elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 8.dp)
             ) {
                 Icon(Icons.Default.MyLocation, contentDescription = "Center on me")
@@ -484,6 +709,7 @@ fun MapScreen(
         val currentEndPadding = 16.dp * (1f - expandProgress)
 
         val currentRadius = 16.dp * (1f - expandProgress)
+//        val currentRadius = 24.dp * (1f - expandProgress)
         val currentElevation = 8.dp * (1f - expandProgress)
 
         val currentWidth = 48.dp + (screenWidth - 48.dp) * expandProgress
@@ -501,7 +727,7 @@ fun MapScreen(
         }
 
         AnimatedVisibility(
-            visible = (showFloatingElements && isActive) || isAddingTable,
+            visible = (showFloatingElements && isActive && !isSearchActive) || isAddingTable,
             enter = slideInHorizontally(initialOffsetX = { it }, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)) + fadeIn(),
             exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
             modifier = Modifier.align(Alignment.BottomEnd).zIndex(20f)
@@ -557,7 +783,7 @@ fun MapScreen(
                                     viewModel = viewModel,
                                     onAdjustLocation = {
                                         isAddingTable = false
-                                        isPickingLocation = true // 👇 This brings back the crosshairs and Check icon!
+                                        isPickingLocation = true
                                     },
                                     onClose = {
                                         isAddingTable = false
@@ -729,6 +955,41 @@ fun MapScreen(
 }
 
 @Composable
+fun FilterGroupRow(
+    title: String,
+    tags: List<String>,
+    selectedTags: Set<String>,
+    activeColor: Color,
+    inactiveColor: Color,
+    onTagClick: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = title,
+            color = Color.Gray,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 4.dp)
+        )
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(tags) { tag ->
+                val isSelected = selectedTags.contains(tag)
+                FilterChip(
+                    text = tag,
+                    isSelected = isSelected,
+                    activeColor = activeColor,
+                    inactiveColor = inactiveColor,
+                    onClick = { onTagClick(tag) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun ClubCardCompact(
     club: TTClub, brandOrange: Color, tokenStorage: TokenStorage,
     onExpand: () -> Unit, onClose: () -> Unit
@@ -766,7 +1027,7 @@ fun ClubCardCompact(
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2A2D34)),
                     shape = RoundedCornerShape(10.dp), modifier = Modifier.height(buttonHeight), contentPadding = PaddingValues(horizontal = 12.dp)
                 ) {
-                    Image(painter = painterResource(Res.drawable.apple_logo_white), contentDescription = "Apple", modifier = Modifier.size(20.dp).padding(end = 6.dp))
+                    Image(painter = painterResource(AppRes.drawable.apple_logo_white), contentDescription = "Apple", modifier = Modifier.size(20.dp).padding(end = 6.dp))
                     Text("Apple", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
@@ -779,7 +1040,7 @@ fun ClubCardCompact(
                     colors = ButtonDefaults.buttonColors(containerColor = brandOrange),
                     shape = RoundedCornerShape(10.dp), modifier = Modifier.height(buttonHeight), contentPadding = PaddingValues(horizontal = 12.dp)
                 ) {
-                    Image(painter = painterResource(Res.drawable.google_logo_white), contentDescription = "Google", modifier = Modifier.size(20.dp).padding(end = 6.dp))
+                    Image(painter = painterResource(AppRes.drawable.google_logo_white), contentDescription = "Google", modifier = Modifier.size(20.dp).padding(end = 6.dp))
                     Text("Google", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
             }

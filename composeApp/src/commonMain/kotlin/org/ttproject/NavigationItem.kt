@@ -67,12 +67,12 @@ val MainNavItems = listOf(
     NavigationItem(NavRoute.Match, SharedRes.string.match, AppIcon.Drawable(AppRes.drawable.zap)),
 
     // YOUR CUSTOM XML -> Wrap in AppIcon.Drawable
-    NavigationItem(
-        NavRoute.Coach,
-        SharedRes.string.ai_coach,
-        AppIcon.Drawable(AppRes.drawable.brain), // 👈 Uses your xml file
-        isPro = true
-    ),
+//    NavigationItem(
+//        NavRoute.Coach,
+//        SharedRes.string.ai_coach,
+//        AppIcon.Drawable(AppRes.drawable.brain), // 👈 Uses your xml file
+//        isPro = true
+//    ),
 
     // Standard Icon -> Wrap in AppIcon.Vector
     NavigationItem(NavRoute.Messages, SharedRes.string.messages, AppIcon.Drawable(AppRes.drawable.message_circle)),

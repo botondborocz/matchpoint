@@ -41,21 +41,18 @@ fun MobileBottomNavPill(
     onNavigate: (NavRoute) -> Unit,
     messagesViewModel: MessagesViewModel = koinViewModel()
 ) {
+    // --- DESIGN TOGGLE ---
+    // Set to true for the new Pill background, false for the original Glow Line
+    val usePillActiveState = false
+
     val glowColor = AppColors.AccentOrange
 
     // --- DYNAMIC LIGHTING & MATERIAL PHYSICS ---
-    // The base color of the pill (Off-white for light mode, dark for dark mode)
     val surfaceColor = if (isDark) AppColors.SurfaceDark else Color(0xFFF3F4F6)
-
-    // Shadows (Heavy and dark for Dark Mode, soft and diffused for Light Mode)
     val shadowSpot = if (isDark) Color.Black.copy(alpha = 0.6f) else Color.Black.copy(alpha = 0.12f)
     val shadowAmbient = if (isDark) Color.Black.copy(alpha = 0.4f) else Color.Black.copy(alpha = 0.04f)
-
-    // Glass Edges (Catching the light on top, receding into shadow on bottom)
     val borderTopColor = if (isDark) Color.White.copy(alpha = 0.25f) else Color.White
     val borderBottomColor = if (isDark) Color.Black.copy(alpha = 0.5f) else Color.Black.copy(alpha = 0.08f)
-
-    // Surface Curvature (Makes the flat pill look slightly rounded)
     val surfaceGradientTop = if (isDark) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.6f)
     val surfaceGradientBottom = if (isDark) Color.Black.copy(alpha = 0.3f) else Color.Transparent
 
@@ -66,23 +63,16 @@ fun MobileBottomNavPill(
         messagesViewModel.loadConnections()
     }
 
-    // 1. Get the raw bottom inset size from the system
     val density = LocalDensity.current
     val bottomInsetDp = with(density) {
         WindowInsets.navigationBars.getBottom(this).toDp()
     }
-
-    // 2. Calculate dynamic padding.
-    // We want a minimum of 16.dp distance from the screen edge,
-    // but if the system inset is already huge (like iOS), we only add a tiny bit of extra breathing room (e.g., 4.dp).
     val dynamicBottomPadding = if (bottomInsetDp > 20.dp) 4.dp else 16.dp
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            // 3. Apply the system insets FIRST
             .windowInsetsPadding(WindowInsets.navigationBars)
-            // 4. Apply our adjusted padding
             .padding(
                 start = 16.dp,
                 end = 16.dp,
@@ -94,7 +84,6 @@ fun MobileBottomNavPill(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(72.dp)
-                // 1. DYNAMIC SHADOW
                 .shadow(
                     elevation = if (isDark) 20.dp else 16.dp,
                     shape = RoundedCornerShape(36.dp),
@@ -102,15 +91,12 @@ fun MobileBottomNavPill(
                     ambientColor = shadowAmbient
                 )
                 .clip(RoundedCornerShape(36.dp))
-                // 2. BASE COLOR
                 .background(surfaceColor)
-                // 3. CURVATURE SHADING
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(surfaceGradientTop, Color.Transparent, surfaceGradientBottom)
                     )
                 )
-                // 4. GLASS EDGE BORDER
                 .border(
                     width = 1.dp,
                     brush = Brush.verticalGradient(
@@ -131,42 +117,63 @@ fun MobileBottomNavPill(
                 label = "indicatorOffset"
             )
 
-            // --- THE SLIDING GLOW LINE ---
-            Box(
-                modifier = Modifier
-                    .offset(x = indicatorOffset)
-                    .width(itemWidth)
-                    .fillMaxHeight(),
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                // Outer glow
+            // --- ACTIVE STATE INDICATOR (SLIDING) ---
+            if (usePillActiveState) {
+                // THE SLIDING PILL
                 Box(
                     modifier = Modifier
-                        .padding(bottom = 2.dp)
-                        .width(44.dp)
-                        .height(6.dp)
-                        .background(
-                            brush = Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    glowColor.copy(alpha = if (isDark) 0.4f else 0.2f),
-                                    Color.Transparent
-                                )
-                            ),
-                            shape = CircleShape
-                        )
-                )
-                // Bright core
+                        .offset(x = indicatorOffset)
+                        .width(itemWidth)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp) // Leaves a little gap so pills don't touch
+                            .height(52.dp)
+                            .background(
+                                color = glowColor.copy(alpha = if (isDark) 0.15f else 0.12f),
+                                shape = RoundedCornerShape(26.dp)
+                            )
+                    )
+                }
+            } else {
+                // THE SLIDING GLOW LINE (Original)
                 Box(
                     modifier = Modifier
-                        .padding(bottom = 3.dp)
-                        .width(28.dp)
-                        .height(3.dp)
-                        .background(
-                            color = glowColor,
-                            shape = CircleShape
-                        )
-                )
+                        .offset(x = indicatorOffset)
+                        .width(itemWidth)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .padding(bottom = 2.dp)
+                            .width(44.dp)
+                            .height(6.dp)
+                            .background(
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        glowColor.copy(alpha = if (isDark) 0.4f else 0.2f),
+                                        Color.Transparent
+                                    )
+                                ),
+                                shape = CircleShape
+                            )
+                    )
+                    Box(
+                        modifier = Modifier
+                            .padding(bottom = 3.dp)
+                            .width(28.dp)
+                            .height(3.dp)
+                            .background(
+                                color = glowColor,
+                                shape = CircleShape
+                            )
+                    )
+                }
             }
 
             // --- THE ICONS ROW ---
@@ -196,7 +203,8 @@ fun MobileBottomNavPill(
                             label = label,
                             activeColor = glowColor,
                             isDark = isDark,
-                            badgeCount = if (item.route == NavRoute.Messages) unreadChatsCount else 0
+                            badgeCount = if (item.route == NavRoute.Messages) unreadChatsCount else 0,
+                            isPillStyle = usePillActiveState // Pass the toggle down
                         )
                     }
                 }
@@ -212,17 +220,19 @@ fun StandardTabItemPill(
     label: String,
     activeColor: Color,
     isDark: Boolean,
-    badgeCount: Int = 0
+    badgeCount: Int = 0,
+    isPillStyle: Boolean = false // New parameter to adjust behavior
 ) {
+    // If using the pill style, keep the icon centered. If using the line, keep the upward jump.
     val animatedOffsetY by animateDpAsState(
-        targetValue = if (isSelected) (-4).dp else 0.dp,
+        targetValue = if (isSelected && !isPillStyle) (-4).dp else 0.dp,
         animationSpec = tween(durationMillis = 300),
         label = "tabOffset"
     )
 
     Box(contentAlignment = Alignment.Center) {
-        // 5. AMBIENT ICON GLOW
-        if (isSelected) {
+        // AMBIENT ICON GLOW (Only show if we are NOT using the Pill style, to prevent clashing)
+        if (isSelected && !isPillStyle) {
             Box(
                 modifier = Modifier
                     .size(48.dp)
@@ -230,7 +240,7 @@ fun StandardTabItemPill(
                     .background(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                activeColor.copy(alpha = if (isDark) 0.15f else 0.08f), // Softer glow in light mode
+                                activeColor.copy(alpha = if (isDark) 0.15f else 0.08f),
                                 Color.Transparent
                             )
                         ),
@@ -243,7 +253,6 @@ fun StandardTabItemPill(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            // Dynamic tint for inactive state (Dark gray for light mode, light gray for dark mode)
             val inactiveTint = if (isDark) AppColors.TextSecondary else Color(0xFF6B7280)
             val tint = if (isSelected) activeColor else inactiveTint
             val iconSize = 24.dp
