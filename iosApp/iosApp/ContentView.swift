@@ -89,7 +89,6 @@ struct NativeSwiftGalleryView: View {
     }
 
     var body: some View {
-        // 👇 GeometryReader maps system constraints even when ignoring safe areas
         GeometryReader { geometry in
             ZStack(alignment: .top) {
                 Color.black.opacity(bgOpacity).ignoresSafeArea()
@@ -140,8 +139,7 @@ struct NativeSwiftGalleryView: View {
                                 }
                             }
                         }
-                    }
-                )
+                ) // 👈 Fixed: Removed the extraneous closing brace that broke the build here!
 
                 // Custom Top Bar
                 HStack {
@@ -188,18 +186,17 @@ struct NativeSwiftGalleryView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                // 👇 FIX 1: Pushes the overlay buttons exactly below the native Notch/Dynamic Island boundary
                 .padding(.top, geometry.safeAreaInsets.top > 0 ? geometry.safeAreaInsets.top : 12)
                 .opacity(isUiVisible && viewOffset == .zero ? 1.0 : 0.0)
                 .animation(.easeInOut(duration: 0.2), value: isUiVisible)
             }
         }
-        .ignoresSafeArea() // Keeps layout black full-bleed
+        .ignoresSafeArea()
         .statusBarHidden(!isUiVisible)
     }
 }
 
-// MARK: - Core 120Hz Native Zoom Engine (Zero Extra Black Space)
+// MARK: - Core 120Hz Native Zoom Engine
 fileprivate let ImageMemoryCache = NSCache<NSURL, UIImage>()
 
 struct UIKitZoomableImageView: UIViewRepresentable {
@@ -211,7 +208,6 @@ struct UIKitZoomableImageView: UIViewRepresentable {
         let scrollView = ZoomScrollView()
         scrollView.parent = self
 
-        // Single and Double Tap integration
         let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleDoubleTap(_:)))
         doubleTap.numberOfTapsRequired = 2
         scrollView.imageView.addGestureRecognizer(doubleTap)
@@ -302,7 +298,7 @@ class ZoomScrollView: UIScrollView, UIScrollViewDelegate {
         self.showsHorizontalScrollIndicator = false
         self.delegate = self
         self.backgroundColor = .clear
-        self.contentInsetAdjustmentBehavior = .never // Full screen bleed access
+        self.contentInsetAdjustmentBehavior = .never
 
         imageView.contentMode = .scaleAspectFit
         imageView.clipsToBounds = true
@@ -317,7 +313,6 @@ class ZoomScrollView: UIScrollView, UIScrollViewDelegate {
         super.layoutSubviews()
         spinner.center = CGPoint(x: self.bounds.midX, y: self.bounds.midY)
 
-        // Handle initial frame constraints and rotation safely
         if self.bounds.size != lastBoundsSize {
             lastBoundsSize = self.bounds.size
             if let image = imageView.image {
@@ -359,7 +354,6 @@ class ZoomScrollView: UIScrollView, UIScrollViewDelegate {
         }
     }
 
-    // 👈 FIX 3: Calculate the exact aspect ratio bounding frame of the image data
     private func configureImageSize(for image: UIImage) {
         let boundsSize = self.bounds.size
         if boundsSize.width == 0 || boundsSize.height == 0 { return }
@@ -375,7 +369,6 @@ class ZoomScrollView: UIScrollView, UIScrollViewDelegate {
         self.setZoomScale(1.0, animated: false)
         imageView.frame = CGRect(x: 0, y: 0, width: width, height: height)
 
-        // Content size matches the asset boundary perfectly -> Zero extra space when zooming!
         self.contentSize = imageView.frame.size
         centerImageView()
     }
