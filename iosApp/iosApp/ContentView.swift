@@ -71,7 +71,7 @@ struct TransparentBackground: UIViewRepresentable {
     func updateUIView(_ uiView: UIView, context: Context) {}
 }
 
-// MARK: - Native Gallery View
+// MARK: - Native Gallery View (Fixed Layout & Interaction)
 struct NativeSwiftGalleryView: View {
     let data: GalleryData
     @Environment(\.dismiss) var dismiss
@@ -89,109 +89,111 @@ struct NativeSwiftGalleryView: View {
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .top) {
-                Color.black.opacity(bgOpacity).ignoresSafeArea()
+        ZStack(alignment: .top) {
+            // 1. Background expands truly edge-to-edge
+            Color.black
+                .opacity(bgOpacity)
+                .ignoresSafeArea()
 
-                // Native Immersive Paging
-                TabView(selection: $currentIndex) {
-                    ForEach(0..<data.images.count, id: \.self) { index in
-                        UIKitZoomableImageView(
-                            url: data.images[index],
-                            isUiVisible: $isUiVisible,
-                            isZoomed: $isZoomed
-                        )
-                        .tag(index)
-                    }
+            // 2. TabView ignores safe area so the underlying native scroll view is truly full-screen
+            TabView(selection: $currentIndex) {
+                ForEach(0..<data.images.count, id: \.self) { index in
+                    UIKitZoomableImageView(
+                        url: data.images[index],
+                        isUiVisible: $isUiVisible,
+                        isZoomed: $isZoomed
+                    )
+                    .tag(index)
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .offset(y: viewOffset.height)
-                .simultaneousGesture(
-                    DragGesture()
-                        .onChanged { value in
-                            guard !isZoomed else { return }
-                            let isHorizontal = abs(value.translation.width) > abs(value.translation.height)
-                            if !isDraggingVertically && isHorizontal && abs(value.translation.width) > 5 {
-                                return
-                            }
-
-                            isDraggingVertically = true
-                            viewOffset.height = value.translation.height
-
-                            let progress = min(abs(value.translation.height) / 300, 1.0)
-                            bgOpacity = 1.0 - (progress * 0.4)
-
-                            if isUiVisible {
-                                withAnimation { isUiVisible = false }
-                            }
-                        }
-                        .onEnded { value in
-                            guard !isZoomed && isDraggingVertically else { return }
-                            isDraggingVertically = false
-
-                            let velocity = value.predictedEndLocation.y - value.location.y
-                            if abs(viewOffset.height) + abs(velocity) > 150 {
-                                dismiss()
-                            } else {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                    viewOffset = .zero
-                                    bgOpacity = 1.0
-                                }
-                            }
-                        }
-                ) // 👈 Fixed: Removed the extraneous closing brace that broke the build here!
-
-                // Custom Top Bar
-                HStack {
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 34))
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, Color(white: 0.2))
-                    }
-
-                    Spacer()
-
-                    Text("\(currentIndex + 1) of \(data.images.count)")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color(white: 0.2))
-                        .cornerRadius(16)
-
-                    Spacer()
-
-                    Menu {
-                        if data.isMineList[currentIndex] {
-                            Button(role: .destructive) {
-                                data.onDelete(data.images[currentIndex])
-                                dismiss()
-                            } label: {
-                                Label("Delete Photo", systemImage: "trash")
-                            }
-                        } else {
-                            Button {
-                                data.onReport(data.images[currentIndex], "Spam")
-                                dismiss()
-                            } label: {
-                                Label("Report Photo", systemImage: "flag")
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle.fill")
-                            .font(.system(size: 34))
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, Color(white: 0.2))
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, geometry.safeAreaInsets.top > 0 ? geometry.safeAreaInsets.top : 12)
-                .opacity(isUiVisible && viewOffset == .zero ? 1.0 : 0.0)
-                .animation(.easeInOut(duration: 0.2), value: isUiVisible)
             }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .ignoresSafeArea() // 👈 Crucial: forces UIKitZoomableImageView to adopt absolute hardware bounds
+            .offset(y: viewOffset.height)
+            .simultaneousGesture(
+                DragGesture()
+                    .onChanged { value in
+                        guard !isZoomed else { return }
+                        let isHorizontal = abs(value.translation.width) > abs(value.translation.height)
+                        if !isDraggingVertically && isHorizontal && abs(value.translation.width) > 5 {
+                            return
+                        }
+
+                        isDraggingVertically = true
+                        viewOffset.height = value.translation.height
+
+                        let progress = min(abs(value.translation.height) / 300, 1.0)
+                        bgOpacity = 1.0 - (progress * 0.4)
+
+                        if isUiVisible {
+                            withAnimation { isUiVisible = false }
+                        }
+                    }
+                    .onEnded { value in
+                        guard !isZoomed && isDraggingVertically else { return }
+                        isDraggingVertically = false
+
+                        let velocity = value.predictedEndLocation.y - value.location.y
+                        if abs(viewOffset.height) + abs(velocity) > 150 {
+                            dismiss()
+                        } else {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                viewOffset = .zero
+                                bgOpacity = 1.0
+                            }
+                        }
+                    }
+            )
+
+            // 3. Custom Top Bar — automatically drops perfectly below the status bar notch
+            HStack {
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 34))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, Color(white: 0.2))
+                }
+
+                Spacer()
+
+                Text("\(currentIndex + 1) of \(data.images.count)")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color(white: 0.2))
+                    .cornerRadius(16)
+
+                Spacer()
+
+                Menu {
+                    if data.isMineList[currentIndex] {
+                        Button(role: .destructive) {
+                            data.onDelete(data.images[currentIndex])
+                            dismiss()
+                        } label: {
+                            Label("Delete Photo", systemImage: "trash")
+                        }
+                    } else {
+                        Button {
+                            data.onReport(data.images[currentIndex], "Spam")
+                            dismiss()
+                        } label: {
+                            Label("Report Photo", systemImage: "flag")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle.fill")
+                        .font(.system(size: 34))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, Color(white: 0.2))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10) // Clean aesthetic buffer spacing directly beneath the status bar
+            .opacity(isUiVisible && viewOffset == .zero ? 1.0 : 0.0)
+            .animation(.easeInOut(duration: 0.2), value: isUiVisible)
         }
-        .ignoresSafeArea()
+        // Controls status bar visibility dynamically during zoom/UI toggles
         .statusBarHidden(!isUiVisible)
     }
 }
