@@ -95,7 +95,6 @@ struct NativeSwiftGalleryView: View {
             // Native Paging
             TabView(selection: $currentIndex) {
                 ForEach(0..<data.images.count, id: \.self) { index in
-                    // 👇 Uses the lightning fast native UIKit engine wrapper
                     UIKitZoomableImageView(
                         url: data.images[index],
                         isUiVisible: $isUiVisible,
@@ -105,7 +104,6 @@ struct NativeSwiftGalleryView: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .ignoresSafeArea()
             .offset(y: viewOffset.height)
             .simultaneousGesture(
                 DragGesture()
@@ -191,11 +189,13 @@ struct NativeSwiftGalleryView: View {
             .opacity(isUiVisible && viewOffset == .zero ? 1.0 : 0.0)
             .animation(.easeInOut(duration: 0.2), value: isUiVisible)
         }
+        // 👈 FIX 1: Tell the entire SwiftUI view container to completely bypass safe areas!
+        .ignoresSafeArea()
         .statusBarHidden(!isUiVisible)
     }
 }
 
-// 👇 A fast, global memory cache to keep swiping instant
+// MARK: - Optimized Native Image View
 fileprivate let ImageMemoryCache = NSCache<NSURL, UIImage>()
 
 struct UIKitZoomableImageView: UIViewRepresentable {
@@ -222,7 +222,6 @@ struct UIKitZoomableImageView: UIViewRepresentable {
         scrollView.addSubview(imageView)
         context.coordinator.imageView = imageView
 
-        // Setup absolute edge-to-edge layout anchors
         NSLayoutConstraint.activate([
             imageView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
             imageView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
@@ -232,7 +231,6 @@ struct UIKitZoomableImageView: UIViewRepresentable {
             imageView.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor)
         ])
 
-        // Native loading spinner centered on screen
         let spinner = UIActivityIndicatorView(style: .medium)
         spinner.color = .white
         spinner.translatesAutoresizingMaskIntoConstraints = false
@@ -243,7 +241,6 @@ struct UIKitZoomableImageView: UIViewRepresentable {
             spinner.centerYAnchor.constraint(equalTo: scrollView.frameLayoutGuide.centerYAnchor)
         ])
 
-        // Add native Tap Gestures
         let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleDoubleTap(_:)))
         doubleTap.numberOfTapsRequired = 2
         imageView.addGestureRecognizer(doubleTap)
@@ -253,18 +250,15 @@ struct UIKitZoomableImageView: UIViewRepresentable {
         singleTap.require(toFail: doubleTap)
         imageView.addGestureRecognizer(singleTap)
 
-        // --- OPTIMIZED CACHED IMAGE LOADER ---
         if let imageURL = URL(string: url) {
             let cacheKey = imageURL as NSURL
 
-            // 1. Check if the image is already cached in memory
             if let cachedImage = ImageMemoryCache.object(forKey: cacheKey) {
                 imageView.image = cachedImage
                 imageView.alpha = 1.0
             } else {
-                // 2. Not cached: Show spinner and fetch over network
                 spinner.startAnimating()
-                imageView.alpha = 0.0 // Hide image completely until loaded
+                imageView.alpha = 0.0
 
                 URLSession.shared.dataTask(with: imageURL) { data, _, _ in
                     guard let data = data, let loadedImage = UIImage(data: data) else {
@@ -272,15 +266,12 @@ struct UIKitZoomableImageView: UIViewRepresentable {
                         return
                     }
 
-                    // Save to global memory cache
                     ImageMemoryCache.setObject(loadedImage, forKey: cacheKey)
 
                     DispatchQueue.main.async {
                         spinner.stopAnimating()
                         imageView.image = loadedImage
-
-                        // 3. Smooth fade-in transition
-                        UIView.animate(withDuration: 0.25, delay: 0, options: .curveEaseInOut) {
+                        UIView.animate(withDuration: 0.25) {
                             imageView.alpha = 1.0
                         }
                     }
@@ -315,6 +306,13 @@ struct UIKitZoomableImageView: UIViewRepresentable {
         }
 
         func scrollViewDidZoom(_ scrollView: UIScrollView) {
+            guard let imageView = imageView else { return }
+
+            // 👈 FIX 2: Dynamically shift content offsets so the canvas expands edge-to-edge seamlessly over the screen bounds
+            let offsetX = max(0, (scrollView.bounds.width - scrollView.contentSize.width) / 2)
+            let offsetY = max(0, (scrollView.bounds.height - scrollView.contentSize.height) / 2)
+            scrollView.contentInset = UIEdgeInsets(top: offsetY, left: offsetX, bottom: offsetY, right: offsetX)
+
             let zoomed = scrollView.zoomScale > 1.0
             if parent.isZoomed != zoomed {
                 parent.isZoomed = zoomed
