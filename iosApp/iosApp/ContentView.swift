@@ -67,12 +67,12 @@ struct ContentView: View {
             )
             .ignoresSafeArea()
 
-            // Layer 2: Floating Liquid Glass Menu System (Pulls directly from LiquidNavbar.swift)
+            // Layer 2: Floating Liquid Glass Menu System
             LiquidNavbar(currentTab: Binding(
                 get: { appState.currentTab },
                 set: { appState.changeTabFromSwiftUI($0) }
             ))
-            .padding(.bottom, 8) // Suspends cleanly over the iOS Home Indicator track
+            .padding(.bottom, 8)
         }
         .fullScreenCover(item: $appState.galleryData) { data in
             NativeSwiftGalleryView(data: data)
@@ -174,25 +174,31 @@ struct NativeSwiftGalleryView: View {
             )
 
             HStack {
+                // 👇 FIXED: Rewritten with standard materials for seamless iOS 18-26 compatibility
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(Circle().stroke(.white.opacity(0.25), lineWidth: 0.5))
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
+                .buttonStyle(.plain)
 
                 Spacer()
 
+                // 👇 FIXED: Uses fallback Capsule material shape architecture
                 Text("\(currentIndex + 1) of \(data.images.count)")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
-                    .glassEffect(.regular, in: .capsule)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .overlay(Capsule().stroke(.white.opacity(0.25), lineWidth: 0.5))
 
                 Spacer()
 
+                // 👇 FIXED: Material-backed contextual menu button
                 Menu {
                     if data.isMineList[currentIndex] {
                         Button(role: .destructive) {
@@ -213,9 +219,11 @@ struct NativeSwiftGalleryView: View {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .overlay(Circle().stroke(.white.opacity(0.25), lineWidth: 0.5))
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
             .padding(.top, 10)
