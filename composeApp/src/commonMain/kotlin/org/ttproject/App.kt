@@ -67,7 +67,9 @@ val LocalIsDarkTheme = compositionLocalOf { false }
 fun App(
     pendingChatId: String? = null,
     onChatConsumed: () -> Unit = {},
-    galleryLauncher: NativeGalleryLauncher
+    galleryLauncher: NativeGalleryLauncher,
+    externalTabRoute: NavRoute? = null,
+    onTabChangedBySystem: (NavRoute) -> Unit = {}
 ) {
     val tokenStorage: TokenStorage = koinInject()
     val appIconManager: AppIconManager = koinInject()
@@ -78,9 +80,28 @@ fun App(
 
     var currentTabRoute by remember { mutableStateOf<NavRoute>(NavRoute.Map) }
     val loadedTabs = remember { mutableStateListOf<NavRoute>(NavRoute.Map) }
-
     var isLoggedIn by remember { mutableStateOf(tokenStorage.getToken() != null) }
     var playMessagesAnimation by remember { mutableStateOf(true) }
+
+    // 2. NEW: Listen to tab changes coming from native iOS
+    LaunchedEffect(externalTabRoute) {
+        if (externalTabRoute != null && externalTabRoute != currentTabRoute) {
+            currentTabRoute = externalTabRoute
+            if (!loadedTabs.contains(externalTabRoute)) {
+                loadedTabs.add(externalTabRoute)
+            }
+        }
+    }
+
+    // 3. UPDATED: Notify native iOS when an internal tab change happens
+    val onTabNavigate: (NavRoute) -> Unit = { targetRoute ->
+        if (targetRoute == NavRoute.Messages) playMessagesAnimation = true
+        currentTabRoute = targetRoute
+        if (!loadedTabs.contains(targetRoute)) {
+            loadedTabs.add(targetRoute)
+        }
+        onTabChangedBySystem(targetRoute) // 👈 NEW
+    }
 
     val systemLanguage = Locale.current.language
     val supportedSystemLanguage = if (systemLanguage == "hu") "hu" else "en"
@@ -99,14 +120,6 @@ fun App(
     }
 
     var currentAuthRoute by remember { mutableStateOf(AuthRoute.Login) }
-
-    val onTabNavigate: (NavRoute) -> Unit = { targetRoute ->
-        if (targetRoute == NavRoute.Messages) playMessagesAnimation = true
-        currentTabRoute = targetRoute
-        if (!loadedTabs.contains(targetRoute)) {
-            loadedTabs.add(targetRoute)
-        }
-    }
 
     LaunchedEffect(pendingChatId) {
         if (pendingChatId != null) {
@@ -363,9 +376,10 @@ fun App(
                                         }
                                     }
 
+                                    // 4. UPDATED: Modify Layer 2 at the bottom of your Scaffold
                                     // --- LAYER 2: BOTTOM NAV BAR ---
-                                    if (isMobile) {
-                                        // 👇 3. UPDATED: Calculate visibility (Show if NOT on Map, OR if Map says it should be visible)
+                                    // 👇 Add !isIosPlatform() so Compose steps back on iOS device types
+                                    if (isMobile && !isIosPlatform()) {
                                         val showNavBar = currentTabRoute != NavRoute.Map || isMapNavBarVisible
 
                                         Box(modifier = Modifier.align(Alignment.BottomCenter).zIndex(10f)) {
