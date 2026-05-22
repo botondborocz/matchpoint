@@ -67,7 +67,7 @@ struct ContentView: View {
             )
             .ignoresSafeArea()
 
-            // Layer 2: Floating Liquid Glass Menu System
+            // Layer 2: Floating Liquid Glass Menu System (Pulls directly from LiquidNavbar.swift)
             LiquidNavbar(currentTab: Binding(
                 get: { appState.currentTab },
                 set: { appState.changeTabFromSwiftUI($0) }
@@ -88,55 +88,7 @@ struct ComposeView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
         return MainViewControllerKt.MainViewController(galleryLauncher: launcher, navHolder: navHolder)
     }
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
-        // State updates are handled inside the shared pointer references automatically
-    }
-}
-
-// MARK: - Native Liquid Glass Bar Implementation
-struct LiquidNavbar: View {
-    @Binding var currentTab: String
-
-    let tabs = [
-        ("map", "map.fill", "Map"),
-        ("match", "sportscourt.fill", "Match"),
-        ("coach", "cpu", "AI Coach"),
-        ("messages", "bubble.left.and.bubble.right.fill", "Messages"),
-        ("profile", "person.crop.circle.fill", "Profile")
-    ]
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(tabs, id: \.0) { id, icon, label in
-                Button(action: { currentTab = id }) {
-                    VStack(spacing: 4) {
-                        Image(systemName: icon)
-                            .font(.system(size: 20, weight: .medium))
-                        Text(label)
-                            .font(.system(size: 10, weight: .bold))
-                    }
-                    .foregroundColor(currentTab == id ? .orange : .secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-        }
-        .frame(height: 72)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedCornerShape(radius: 36, corners: .allCorners))
-        .overlay(
-            RoundedCornerShape(radius: 36, corners: .allCorners)
-                .stroke(
-                    LinearGradient(
-                        colors: [.white.opacity(0.35), .clear, .black.opacity(0.1)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 1
-                )
-        )
-        .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 8)
-        .padding(.horizontal, 16)
-    }
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
 }
 
 struct TransparentBackground: UIViewRepresentable {
@@ -490,16 +442,5 @@ class ZoomScrollView: UIScrollView, UIScrollViewDelegate {
         if scrollView.zoomScale <= 1.0 {
             withAnimation { parent?.isUiVisible = true }
         }
-    }
-}
-
-// Helper for rounding specified corners inside the capsule overlay shape
-struct RoundedCornerShape: Shape {
-    var radius: CGFloat = .infinity
-    var corners: UIRectCorner = .allCorners
-
-    func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
-        return Path(path.cgPath)
     }
 }
