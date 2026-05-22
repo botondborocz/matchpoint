@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit // 👈 Added: Needed for UIRectCorner and UIBezierPath mechanics
 
 struct LiquidNavbar: View {
     @Binding var currentTab: String
@@ -26,7 +27,6 @@ struct LiquidNavbar: View {
                         Text(label)
                             .font(.system(size: 10, weight: currentTab == id ? .bold : .semibold))
                     }
-                    // Highlight the active tab with your brand color, and use a soft translucent secondary for inactive tabs
                     .foregroundColor(currentTab == id ? .orange : .secondary.opacity(0.8))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -34,10 +34,7 @@ struct LiquidNavbar: View {
             }
         }
         .frame(height: 74)
-        // 1. Core Material Backdrop (Handles real-time background blurring)
         .background(.ultraThinMaterial)
-
-        // 2. Gloss Sheen Overlays (Creates the 3D surface reflection curve)
         .background(
             LinearGradient(
                 colors: [.white.opacity(0.18), .clear, .black.opacity(0.06)],
@@ -46,8 +43,6 @@ struct LiquidNavbar: View {
             )
         )
         .clipShape(RoundedCornerShape(radius: 37, corners: .allCorners))
-
-        // 3. Specular Rim Light Edge (Gives the glass container its physical 'thickness' profile)
         .overlay(
             RoundedCornerShape(radius: 37, corners: .allCorners)
                 .stroke(
@@ -65,10 +60,19 @@ struct LiquidNavbar: View {
                     lineWidth: 1.5
                 )
         )
-
-        // 4. Fluid Layered Shadows (Combines a tight ambient contact shadow with a deep, soft blur spot shadow)
         .shadow(color: Color.black.opacity(0.06), radius: 3, x: 0, y: 2)
         .shadow(color: Color.black.opacity(0.14), radius: 14, x: 0, y: 10)
         .padding(.horizontal, 16)
+    }
+}
+
+// 👇 FIXED: Added the missing custom container clip shape back to the local target workspace
+struct RoundedCornerShape: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
+        return Path(path.cgPath)
     }
 }
