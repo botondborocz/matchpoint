@@ -23,9 +23,26 @@ class IOSGalleryLauncher: NativeGalleryLauncher {
     }
 }
 
-// 2. State object to hold the gallery data
+// 2. State object holding lifecycle-safe parameters
 class AppState: ObservableObject {
     @Published var galleryData: GalleryData? = nil
+    @Published var currentTab: String = "map"
+
+    var navHolder: AppNavigationHolder? = nil
+
+    init() {
+        // Initialize the bridge and pipe inner Compose state alterations back to SwiftUI
+        self.navHolder = AppNavigationHolder(initialTab: self.currentTab, onTabChangedByCompose: { [weak self] newTab in
+            DispatchQueue.main.async {
+                self?.currentTab = newTab
+            }
+        })
+    }
+
+    func changeTabFromSwiftUI(_ newTab: String) {
+        self.currentTab = newTab
+        self.navHolder?.currentTabBySystem = newTab
+    }
 }
 
 struct GalleryData: Identifiable {
@@ -37,27 +54,89 @@ struct GalleryData: Identifiable {
     let onReport: (String, String) -> Void
 }
 
-// 3. Your Main SwiftUI View
+// 3. Your Main View coordinating the Hybrid shell layout
 struct ContentView: View {
     @StateObject var appState = AppState()
 
     var body: some View {
-        ComposeView(launcher: IOSGalleryLauncher(appState: appState))
+        ZStack(alignment: .bottom) {
+            // Layer 1: Core Shared Multiplatform Workspace
+            ComposeView(
+                launcher: IOSGalleryLauncher(appState: appState),
+                navHolder: appState.navHolder!
+            )
             .ignoresSafeArea()
-            .fullScreenCover(item: $appState.galleryData) { data in
-                NativeSwiftGalleryView(data: data)
-                    .background(TransparentBackground())
-            }
+
+            // Layer 2: Floating Liquid Glass Menu System
+            LiquidNavbar(currentTab: Binding(
+                get: { appState.currentTab },
+                set: { appState.changeTabFromSwiftUI($0) }
+            ))
+            .padding(.bottom, 8) // Suspends cleanly over the iOS Home Indicator track
+        }
+        .fullScreenCover(item: $appState.galleryData) { data in
+            NativeSwiftGalleryView(data: data)
+                .background(TransparentBackground())
+        }
     }
 }
 
 struct ComposeView: UIViewControllerRepresentable {
     let launcher: NativeGalleryLauncher
+    let navHolder: AppNavigationHolder
 
     func makeUIViewController(context: Context) -> UIViewController {
-        return MainViewControllerKt.MainViewController(galleryLauncher: launcher)
+        return MainViewControllerKt.MainViewController(galleryLauncher: launcher, navHolder: navHolder)
     }
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        // State updates are handled inside the shared pointer references automatically
+    }
+}
+
+// MARK: - Native Liquid Glass Bar Implementation
+struct LiquidNavbar: View {
+    @Binding var currentTab: String
+
+    let tabs = [
+        ("map", "map.fill", "Map"),
+        ("match", "sportscourt.fill", "Match"),
+        ("coach", "cpu", "AI Coach"),
+        ("messages", "bubble.left.and.bubble.right.fill", "Messages"),
+        ("profile", "person.crop.circle.fill", "Profile")
+    ]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(tabs, id: \.0) { id, icon, label in
+                Button(action: { currentTab = id }) {
+                    VStack(spacing: 4) {
+                        Image(systemName: icon)
+                            .font(.system(size: 20, weight: .medium))
+                        Text(label)
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundColor(currentTab == id ? .orange : .secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+        }
+        .frame(height: 72)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedCornerShape(radius: 36, corners: .allCorners))
+        .overlay(
+            RoundedCornerShape(radius: 36, corners: .allCorners)
+                .stroke(
+                    LinearGradient(
+                        colors: [.white.opacity(0.35), .clear, .black.opacity(0.1)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 8)
+        .padding(.horizontal, 16)
+    }
 }
 
 struct TransparentBackground: UIViewRepresentable {
@@ -90,12 +169,10 @@ struct NativeSwiftGalleryView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            // 1. Background expands truly edge-to-edge
             Color.black
                 .opacity(bgOpacity)
                 .ignoresSafeArea()
 
-            // 2. TabView ignores safe area so the underlying native scroll view is truly full-screen
             TabView(selection: $currentIndex) {
                 ForEach(0..<data.images.count, id: \.self) { index in
                     UIKitZoomableImageView(
@@ -107,7 +184,7 @@ struct NativeSwiftGalleryView: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .ignoresSafeArea() // 👈 Crucial: forces UIKitZoomableImageView to adopt absolute hardware bounds
+            .ignoresSafeArea()
             .offset(y: viewOffset.height)
             .simultaneousGesture(
                 DragGesture()
@@ -144,24 +221,23 @@ struct NativeSwiftGalleryView: View {
                     }
             )
 
-            // 3. Custom Top Bar — automatically drops perfectly below the status bar notch
             HStack {
                 Button(action: { dismiss() }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 34))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, Color(white: 0.2))
+                    Image(systemName: "xmark")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
                 }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
 
                 Spacer()
 
                 Text("\(currentIndex + 1) of \(data.images.count)")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(.white)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
-                    .background(Color(white: 0.2))
-                    .cornerRadius(16)
+                    .glassEffect(.regular, in: .capsule)
 
                 Spacer()
 
@@ -182,18 +258,18 @@ struct NativeSwiftGalleryView: View {
                         }
                     }
                 } label: {
-                    Image(systemName: "ellipsis.circle.fill")
-                        .font(.system(size: 34))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, Color(white: 0.2))
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
                 }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
             }
             .padding(.horizontal, 16)
-            .padding(.top, 10) // Clean aesthetic buffer spacing directly beneath the status bar
+            .padding(.top, 10)
             .opacity(isUiVisible && viewOffset == .zero ? 1.0 : 0.0)
             .animation(.easeInOut(duration: 0.2), value: isUiVisible)
         }
-        // Controls status bar visibility dynamically during zoom/UI toggles
         .statusBarHidden(!isUiVisible)
     }
 }
@@ -394,7 +470,6 @@ class ZoomScrollView: UIScrollView, UIScrollViewDelegate {
         imageView.frame = contentsFrame
     }
 
-    // MARK: - UIScrollViewDelegate Implementation
     func viewForZooming(in scrollView: UIScrollView) -> UIView? {
         return imageView
     }
@@ -415,5 +490,16 @@ class ZoomScrollView: UIScrollView, UIScrollViewDelegate {
         if scrollView.zoomScale <= 1.0 {
             withAnimation { parent?.isUiVisible = true }
         }
+    }
+}
+
+// Helper for rounding specified corners inside the capsule overlay shape
+struct RoundedCornerShape: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
+        return Path(path.cgPath)
     }
 }
