@@ -61,6 +61,13 @@ jobs:
           project.save
           puts 'Successfully updated Xcode build settings for iOS 18 Alternate Icons!'
           "
+      - name: Select Xcode 26 Toolchain
+        run: |
+          # Lists available Xcode installations on the runner for debugging
+          ls -la /Applications/
+          
+          # Force the runner to use the Xcode 26 environment containing the iOS 26 SDK
+          sudo xcode-select -s /Applications/Xcode_26.0.app/Contents/Developer
 
       - name: Build Unsigned iOS App
         run: |
