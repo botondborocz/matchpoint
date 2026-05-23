@@ -2,453 +2,83 @@ import UIKit
 import SwiftUI
 import ComposeApp
 
-// 1. Implement the Kotlin Interface in Swift
-class IOSGalleryLauncher: NativeGalleryLauncher {
-    var appState: AppState
+// MARK: - Core Tab Link to Kotlin Multiplatform
+struct ComposeTabViewControllerRepresentable: UIViewControllerRepresentable {
+    let tabName: String
+    let launcher: NativeGalleryLauncher
+    @Binding var currentTab: String
 
-    init(appState: AppState) {
-        self.appState = appState
+    func makeUIViewController(context: Context) -> UIViewController {
+        return MainViewControllerKt.TabViewController(
+            tabName: tabName,
+            galleryLauncher: launcher,
+            onTabChangedByCompose: { newTab in
+                DispatchQueue.main.async {
+                    self.currentTab = newTab
+                }
+            }
+        )
     }
 
-    func openGallery(images: [String], initialIndex: Int32, isMineList: [KotlinBoolean], onDelete: @escaping (String) -> Void, onReport: @escaping (String, String) -> Void) {
-        DispatchQueue.main.async {
-            self.appState.galleryData = GalleryData(
-                images: images,
-                initialIndex: Int(initialIndex),
-                isMineList: isMineList.map { $0.boolValue },
-                onDelete: onDelete,
-                onReport: onReport
-            )
-        }
-    }
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
 }
 
-// 2. State object holding lifecycle-safe parameters
 class AppState: ObservableObject {
     @Published var galleryData: GalleryData? = nil
     @Published var currentTab: String = "map"
-
-    var navHolder: AppNavigationHolder? = nil
-
-    init() {
-        // Initialize the bridge and pipe inner Compose state alterations back to SwiftUI
-        self.navHolder = AppNavigationHolder(initialTab: self.currentTab, onTabChangedByCompose: { [weak self] newTab in
-            DispatchQueue.main.async {
-                self?.currentTab = newTab
-            }
-        })
-    }
-
-    func changeTabFromSwiftUI(_ newTab: String) {
-        self.currentTab = newTab
-        self.navHolder?.currentTabBySystem = newTab
-    }
 }
 
-struct GalleryData: Identifiable {
-    let id = UUID()
-    let images: [String]
-    let initialIndex: Int
-    let isMineList: [Bool]
-    let onDelete: (String) -> Void
-    let onReport: (String, String) -> Void
-}
-
-// 3. Your Main View coordinating the Hybrid shell layout
+// MARK: - Main Native Tab Layout View
 struct ContentView: View {
     @StateObject var appState = AppState()
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            // Layer 1: Core Shared Multiplatform Workspace
-            ComposeView(
-                launcher: IOSGalleryLauncher(appState: appState),
-                navHolder: appState.navHolder!
-            )
-            .ignoresSafeArea()
+        // 🌟 Native standard system tab bar controller
+        TabView(selection: $appState.currentTab) {
 
-            // Layer 2: Floating Liquid Glass Menu System
-            LiquidNavbar(currentTab: Binding(
-                get: { appState.currentTab },
-                set: { appState.changeTabFromSwiftUI($0) }
-            ))
-            .padding(.bottom, 8)
+            ComposeTabViewControllerRepresentable(
+                tabName: "map",
+                launcher: IOSGalleryLauncher(appState: appState),
+                currentTab: $appState.currentTab
+            )
+            .tabItem {
+                Label("Map", systemImage: "map.fill")
+            }
+            .tag("map")
+
+            ComposeTabViewControllerRepresentable(
+                tabName: "match",
+                launcher: IOSGalleryLauncher(appState: appState),
+                currentTab: $appState.currentTab
+            )
+            .tabItem {
+                Label("Match", systemImage: "sportscourt.fill")
+            }
+            .tag("match")
+
+            ComposeTabViewControllerRepresentable(
+                tabName: "messages",
+                launcher: IOSGalleryLauncher(appState: appState),
+                currentTab: $appState.currentTab
+            )
+            .tabItem {
+                Label("Messages", systemImage: "bubble.left.and.bubble.right.fill")
+            }
+            .tag("messages")
+
+            ComposeTabViewControllerRepresentable(
+                tabName: "profile",
+                launcher: IOSGalleryLauncher(appState: appState),
+                currentTab: $appState.currentTab
+            )
+            .tabItem {
+                Label("Profile", systemImage: "person.crop.circle.fill")
+            }
+            .tag("profile")
         }
         .fullScreenCover(item: $appState.galleryData) { data in
             NativeSwiftGalleryView(data: data)
                 .background(TransparentBackground())
-        }
-    }
-}
-
-struct ComposeView: UIViewControllerRepresentable {
-    let launcher: NativeGalleryLauncher
-    let navHolder: AppNavigationHolder
-
-    func makeUIViewController(context: Context) -> UIViewController {
-        return MainViewControllerKt.MainViewController(galleryLauncher: launcher, navHolder: navHolder)
-    }
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
-}
-
-struct TransparentBackground: UIViewRepresentable {
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
-        DispatchQueue.main.async {
-            view.superview?.superview?.backgroundColor = .clear
-        }
-        return view
-    }
-    func updateUIView(_ uiView: UIView, context: Context) {}
-}
-
-// MARK: - Native Gallery View (Fixed Layout & Interaction)
-struct NativeSwiftGalleryView: View {
-    let data: GalleryData
-    @Environment(\.dismiss) var dismiss
-
-    @State private var currentIndex: Int
-    @State private var isUiVisible: Bool = true
-    @State private var isZoomed: Bool = false
-    @State private var bgOpacity: Double = 1.0
-    @State private var viewOffset: CGSize = .zero
-    @State private var isDraggingVertically = false
-
-    init(data: GalleryData) {
-        self.data = data
-        _currentIndex = State(initialValue: data.initialIndex)
-    }
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            Color.black
-                .opacity(bgOpacity)
-                .ignoresSafeArea()
-
-            TabView(selection: $currentIndex) {
-                ForEach(0..<data.images.count, id: \.self) { index in
-                    UIKitZoomableImageView(
-                        url: data.images[index],
-                        isUiVisible: $isUiVisible,
-                        isZoomed: $isZoomed
-                    )
-                    .tag(index)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .ignoresSafeArea()
-            .offset(y: viewOffset.height)
-            .simultaneousGesture(
-                DragGesture()
-                    .onChanged { value in
-                        guard !isZoomed else { return }
-                        let isHorizontal = abs(value.translation.width) > abs(value.translation.height)
-                        if !isDraggingVertically && isHorizontal && abs(value.translation.width) > 5 {
-                            return
-                        }
-
-                        isDraggingVertically = true
-                        viewOffset.height = value.translation.height
-
-                        let progress = min(abs(value.translation.height) / 300, 1.0)
-                        bgOpacity = 1.0 - (progress * 0.4)
-
-                        if isUiVisible {
-                            withAnimation { isUiVisible = false }
-                        }
-                    }
-                    .onEnded { value in
-                        guard !isZoomed && isDraggingVertically else { return }
-                        isDraggingVertically = false
-
-                        let velocity = value.predictedEndLocation.y - value.location.y
-                        if abs(viewOffset.height) + abs(velocity) > 150 {
-                            dismiss()
-                        } else {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                viewOffset = .zero
-                                bgOpacity = 1.0
-                            }
-                        }
-                    }
-            )
-
-            HStack {
-                // 👇 FIXED: Rewritten with standard materials for seamless iOS 18-26 compatibility
-                Button(action: { dismiss() }) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 40, height: 40)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .overlay(Circle().stroke(.white.opacity(0.25), lineWidth: 0.5))
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-
-                // 👇 FIXED: Uses fallback Capsule material shape architecture
-                Text("\(currentIndex + 1) of \(data.images.count)")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().stroke(.white.opacity(0.25), lineWidth: 0.5))
-
-                Spacer()
-
-                // 👇 FIXED: Material-backed contextual menu button
-                Menu {
-                    if data.isMineList[currentIndex] {
-                        Button(role: .destructive) {
-                            data.onDelete(data.images[currentIndex])
-                            dismiss()
-                        } label: {
-                            Label("Delete Photo", systemImage: "trash")
-                        }
-                    } else {
-                        Button {
-                            data.onReport(data.images[currentIndex], "Spam")
-                            dismiss()
-                        } label: {
-                            Label("Report Photo", systemImage: "flag")
-                        }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 40, height: 40)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .overlay(Circle().stroke(.white.opacity(0.25), lineWidth: 0.5))
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
-            .opacity(isUiVisible && viewOffset == .zero ? 1.0 : 0.0)
-            .animation(.easeInOut(duration: 0.2), value: isUiVisible)
-        }
-        .statusBarHidden(!isUiVisible)
-    }
-}
-
-// MARK: - Core 120Hz Native Zoom Engine
-fileprivate let ImageMemoryCache = NSCache<NSURL, UIImage>()
-
-struct UIKitZoomableImageView: UIViewRepresentable {
-    let url: String
-    @Binding var isUiVisible: Bool
-    @Binding var isZoomed: Bool
-
-    func makeUIView(context: Context) -> ZoomScrollView {
-        let scrollView = ZoomScrollView()
-        scrollView.parent = self
-
-        let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleDoubleTap(_:)))
-        doubleTap.numberOfTapsRequired = 2
-        scrollView.imageView.addGestureRecognizer(doubleTap)
-
-        let singleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleSingleTap(_:)))
-        singleTap.numberOfTapsRequired = 1
-        singleTap.require(toFail: doubleTap)
-        scrollView.imageView.addGestureRecognizer(singleTap)
-
-        context.coordinator.scrollView = scrollView
-        scrollView.loadImage(from: url)
-
-        return scrollView
-    }
-
-    func updateUIView(_ uiView: ZoomScrollView, context: Context) {
-        uiView.parent = self
-        if !isZoomed && uiView.zoomScale != 1.0 {
-            uiView.setZoomScale(1.0, animated: false)
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    class Coordinator: NSObject {
-        var parent: UIKitZoomableImageView
-        weak var scrollView: ZoomScrollView?
-
-        init(_ parent: UIKitZoomableImageView) {
-            self.parent = parent
-        }
-
-        @objc func handleSingleTap(_ gesture: UITapGestureRecognizer) {
-            guard let scrollView = scrollView, scrollView.zoomScale <= 1.0 else { return }
-            withAnimation {
-                parent.isUiVisible.toggle()
-            }
-        }
-
-        @objc func handleDoubleTap(_ gesture: UITapGestureRecognizer) {
-            guard let scrollView = scrollView else { return }
-
-            if scrollView.zoomScale > 1.0 {
-                scrollView.setZoomScale(1.0, animated: true)
-                withAnimation { parent.isUiVisible = true }
-            } else {
-                let point = gesture.location(in: scrollView.imageView)
-                let zoomRect = calculateZoomRect(for: scrollView, at: 2.5, with: point)
-                scrollView.zoom(to: zoomRect, animated: true)
-                withAnimation { parent.isUiVisible = false }
-            }
-        }
-
-        private func calculateZoomRect(for scrollView: UIScrollView, at scale: CGFloat, with center: CGPoint) -> CGRect {
-            var zoomRect = CGRect.zero
-            zoomRect.size.height = scrollView.frame.size.height / scale
-            zoomRect.size.width  = scrollView.frame.size.width  / scale
-            zoomRect.origin.x    = center.x - (zoomRect.size.width  / 2.0)
-            zoomRect.origin.y    = center.y - (zoomRect.size.height / 2.0)
-            return zoomRect
-        }
-    }
-}
-
-// MARK: - Native UIKit Custom Scroll Container
-class ZoomScrollView: UIScrollView, UIScrollViewDelegate {
-    let imageView = UIImageView()
-    let spinner = UIActivityIndicatorView(style: .medium)
-    var parent: UIKitZoomableImageView?
-    private var lastBoundsSize: CGSize = .zero
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        setupEngine()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        setupEngine()
-    }
-
-    private func setupEngine() {
-        self.minimumZoomScale = 1.0
-        self.maximumZoomScale = 4.0
-        self.showsVerticalScrollIndicator = false
-        self.showsHorizontalScrollIndicator = false
-        self.delegate = self
-        self.backgroundColor = .clear
-        self.contentInsetAdjustmentBehavior = .never
-
-        imageView.contentMode = .scaleAspectFit
-        imageView.clipsToBounds = true
-        imageView.isUserInteractionEnabled = true
-        self.addSubview(imageView)
-
-        spinner.color = .white
-        self.addSubview(spinner)
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        spinner.center = CGPoint(x: self.bounds.midX, y: self.bounds.midY)
-
-        if self.bounds.size != lastBoundsSize {
-            lastBoundsSize = self.bounds.size
-            if let image = imageView.image {
-                configureImageSize(for: image)
-            }
-        }
-        centerImageView()
-    }
-
-    func loadImage(from urlString: String) {
-        guard let url = URL(string: urlString) else { return }
-        let cacheKey = url as NSURL
-
-        if let cachedImage = ImageMemoryCache.object(forKey: cacheKey) {
-            self.display(image: cachedImage)
-        } else {
-            spinner.startAnimating()
-            imageView.alpha = 0.0
-
-            URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
-                guard let self = self, let data = data, let loadedImage = UIImage(data: data) else {
-                    DispatchQueue.main.async { self?.spinner.stopAnimating() }
-                    return
-                }
-
-                ImageMemoryCache.setObject(loadedImage, forKey: cacheKey)
-                DispatchQueue.main.async { self.display(image: loadedImage) }
-            }
-            .resume()
-        }
-    }
-
-    private func display(image: UIImage) {
-        spinner.stopAnimating()
-        imageView.image = image
-        configureImageSize(for: image)
-        UIView.animate(withDuration: 0.23) {
-            self.imageView.alpha = 1.0
-        }
-    }
-
-    private func configureImageSize(for image: UIImage) {
-        let boundsSize = self.bounds.size
-        if boundsSize.width == 0 || boundsSize.height == 0 { return }
-
-        let imageSize = image.size
-        let xScale = boundsSize.width / imageSize.width
-        let yScale = boundsSize.height / imageSize.height
-        let minScale = min(xScale, yScale)
-
-        let width = imageSize.width * minScale
-        let height = imageSize.height * minScale
-
-        self.setZoomScale(1.0, animated: false)
-        imageView.frame = CGRect(x: 0, y: 0, width: width, height: height)
-
-        self.contentSize = imageView.frame.size
-        centerImageView()
-    }
-
-    private func centerImageView() {
-        let boundsSize = self.bounds.size
-        var contentsFrame = imageView.frame
-
-        if contentsFrame.size.width < boundsSize.width {
-            contentsFrame.origin.x = (boundsSize.width - contentsFrame.size.width) / 2
-        } else {
-            contentsFrame.origin.x = 0
-        }
-
-        if contentsFrame.size.height < boundsSize.height {
-            contentsFrame.origin.y = (boundsSize.height - contentsFrame.size.height) / 2
-        } else {
-            contentsFrame.origin.y = 0
-        }
-
-        imageView.frame = contentsFrame
-    }
-
-    func viewForZooming(in scrollView: UIScrollView) -> UIView? {
-        return imageView
-    }
-
-    func scrollViewDidZoom(_ scrollView: UIScrollView) {
-        centerImageView()
-
-        let zoomed = scrollView.zoomScale > 1.0
-        if parent?.isZoomed != zoomed {
-            parent?.isZoomed = zoomed
-        }
-        if scrollView.zoomScale > 1.01, let uiVisible = parent?.isUiVisible, uiVisible {
-            withAnimation { parent?.isUiVisible = false }
-        }
-    }
-
-    func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
-        if scrollView.zoomScale <= 1.0 {
-            withAnimation { parent?.isUiVisible = true }
         }
     }
 }

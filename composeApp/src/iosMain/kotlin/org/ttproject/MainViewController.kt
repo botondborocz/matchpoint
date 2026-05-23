@@ -8,19 +8,12 @@ import androidx.compose.ui.uikit.OnFocusBehavior
 import org.ttproject.components.NativeGalleryLauncher
 import org.ttproject.di.initKoin
 
-// 👇 The State Container that bridges both runtimes reactively
-class AppNavigationHolder(
-    initialTab: String,
-    val onTabChangedByCompose: (String) -> Unit
-) {
-    var currentTabBySystem by mutableStateOf(initialTab)
-}
-
 private var isKoinInitialized = false
 
-fun MainViewController(
+fun TabViewController(
+    tabName: String,
     galleryLauncher: NativeGalleryLauncher,
-    navHolder: AppNavigationHolder // 👈 Accept the holder instance here
+    onTabChangedByCompose: (String) -> Unit
 ) = ComposeUIViewController(
     configure = {
         onFocusBehavior = OnFocusBehavior.DoNothing
@@ -31,8 +24,7 @@ fun MainViewController(
         isKoinInitialized = true
     }
 
-    // Convert the active string state to your strongly-typed NavRoute enum
-    val externalRoute = when (navHolder.currentTabBySystem) {
+    val fixedRoute = when (tabName) {
         "match" -> NavRoute.Match
         "coach" -> NavRoute.Coach
         "messages" -> NavRoute.Messages
@@ -42,7 +34,7 @@ fun MainViewController(
 
     App(
         galleryLauncher = galleryLauncher,
-        externalTabRoute = externalRoute,
+        externalTabRoute = fixedRoute,
         onTabChangedBySystem = { route ->
             val stringName = when (route) {
                 NavRoute.Match -> "match"
@@ -51,10 +43,7 @@ fun MainViewController(
                 NavRoute.Profile -> "profile"
                 else -> "map"
             }
-            // Prevent recursive update loops if state matches
-            if (navHolder.currentTabBySystem != stringName) {
-                navHolder.onTabChangedByCompose(stringName)
-            }
+            onTabChangedByCompose(stringName)
         }
     )
 }
