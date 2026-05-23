@@ -1,5 +1,5 @@
 import SwiftUI
-import UIKit // 👈 Added: Needed for UIRectCorner and UIBezierPath mechanics
+import UIKit
 
 struct LiquidNavbar: View {
     @Binding var currentTab: String
@@ -34,39 +34,57 @@ struct LiquidNavbar: View {
             }
         }
         .frame(height: 74)
-        .background(.ultraThinMaterial)
-        .background(
-            LinearGradient(
-                colors: [.white.opacity(0.18), .clear, .black.opacity(0.06)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-        .clipShape(RoundedCornerShape(radius: 37, corners: .allCorners))
-        .overlay(
-            RoundedCornerShape(radius: 37, corners: .allCorners)
-                .stroke(
-                    LinearGradient(
-                        colors: [
-                            .white.opacity(0.65),
-                            .white.opacity(0.20),
-                            .clear,
-                            .black.opacity(0.12),
-                            .white.opacity(0.30)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1.5
-                )
-        )
-        .shadow(color: Color.black.opacity(0.06), radius: 3, x: 0, y: 2)
-        .shadow(color: Color.black.opacity(0.14), radius: 14, x: 0, y: 10)
+        // 👇 UPDATED: Replaced explicit styling with our adaptive layout modifier
+        .adaptiveLiquidGlassBackground(radius: 37)
         .padding(.horizontal, 16)
     }
 }
 
-// 👇 FIXED: Added the missing custom container clip shape back to the local target workspace
+// MARK: - Progressive Enhancement View Extension
+extension View {
+    @ViewBuilder
+    func adaptiveLiquidGlassBackground(radius: CGFloat) -> some View {
+        if #available(iOS 26.0, *) {
+            // Native iOS 26 dynamic liquid rendering pipelines
+            self
+                .background(.glassEffect)
+                .clipShape(RoundedCornerShape(radius: radius, corners: .allCorners))
+        } else {
+            // High-fidelity fallback styling for iOS 17 and iOS 18
+            self
+                .background(.ultraThinMaterial)
+                .background(
+                    LinearGradient(
+                        colors: [.white.opacity(0.18), .clear, .black.opacity(0.06)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .clipShape(RoundedCornerShape(radius: radius, corners: .allCorners))
+                .overlay(
+                    RoundedCornerShape(radius: radius, corners: .allCorners)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    .white.opacity(0.65),
+                                    .white.opacity(0.20),
+                                    .clear,
+                                    .black.opacity(0.12),
+                                    .white.opacity(0.30)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1.5
+                        )
+                )
+                .shadow(color: Color.black.opacity(0.06), radius: 3, x: 0, y: 2)
+                .shadow(color: Color.black.opacity(0.14), radius: 14, x: 0, y: 10)
+        }
+    }
+}
+
+// MARK: - Core Shapes
 struct RoundedCornerShape: Shape {
     var radius: CGFloat = .infinity
     var corners: UIRectCorner = .allCorners
