@@ -33,7 +33,6 @@ struct LiquidNavbar: View {
             }
         }
         .frame(height: 74)
-        // 👇 UPDATED: Replaced explicit styling with our adaptive layout modifier
         .adaptiveLiquidGlassBackground(radius: 37)
         .padding(.horizontal, 16)
     }
@@ -45,8 +44,9 @@ extension View {
     func adaptiveLiquidGlassBackground(radius: CGFloat) -> some View {
         if #available(iOS 26.0, *) {
             // Native iOS 26 dynamic liquid rendering pipelines
+            // 👇 FIXED: Called directly as a View modifier function instead of inside .background()
             self
-                .background(.glassEffect)
+                .glassEffect(.regular)
                 .clipShape(RoundedCornerShape(radius: radius, corners: .allCorners))
         } else {
             // High-fidelity fallback styling for iOS 17 and iOS 18
