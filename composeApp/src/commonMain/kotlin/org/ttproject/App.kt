@@ -75,15 +75,12 @@ fun App(
     val appIconManager: AppIconManager = koinInject()
     val rootNavController = rememberNavController()
 
-    // 👇 1. ADDED: State to track if the Map's floating buttons are visible
     var isMapNavBarVisible by remember { mutableStateOf(true) }
-
     var currentTabRoute by remember { mutableStateOf<NavRoute>(NavRoute.Map) }
     val loadedTabs = remember { mutableStateListOf<NavRoute>(NavRoute.Map) }
     var isLoggedIn by remember { mutableStateOf(tokenStorage.getToken() != null) }
     var playMessagesAnimation by remember { mutableStateOf(true) }
 
-    // 2. NEW: Listen to tab changes coming from native iOS
     LaunchedEffect(externalTabRoute) {
         if (externalTabRoute != null && externalTabRoute != currentTabRoute) {
             currentTabRoute = externalTabRoute
@@ -93,14 +90,13 @@ fun App(
         }
     }
 
-    // 3. UPDATED: Notify native iOS when an internal tab change happens
     val onTabNavigate: (NavRoute) -> Unit = { targetRoute ->
         if (targetRoute == NavRoute.Messages) playMessagesAnimation = true
         currentTabRoute = targetRoute
         if (!loadedTabs.contains(targetRoute)) {
             loadedTabs.add(targetRoute)
         }
-        onTabChangedBySystem(targetRoute) // 👈 NEW
+        onTabChangedBySystem(targetRoute)
     }
 
     val systemLanguage = Locale.current.language
@@ -157,7 +153,6 @@ fun App(
         )
     }
 
-    // 👇 NEW: Load the saved AppIcon from storage, defaulting to DEFAULT
     var currentAppIcon by remember {
         mutableStateOf(
             PremiumAppIcon.entries.find { it.alias == tokenStorage.getAppIcon() } ?: PremiumAppIcon.DEFAULT
@@ -198,7 +193,6 @@ fun App(
                         enterTransition = { EnterTransition.None },
                         exitTransition = { ExitTransition.None }
                     ) {
-                        // --- SCREEN A: THE HOME BASE (Holds the Tabs) ---
                         composable<HomeBase>(
                             exitTransition = {
                                 if (targetState.destination.hasRoute(NavRoute.ChatDetail::class) ||
@@ -222,24 +216,23 @@ fun App(
                                     }
                                 },
                                 containerColor = Color.Transparent,
+                                contentWindowInsets = WindowInsets(0.dp), // 👈 FIX 1: Prevents double-consuming bottom safe-area/notch padding
                                 modifier = Modifier.fillMaxSize()
                             ) { innerPadding ->
 
-                                val bottomNavHeight = 80.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-                                val frozenBottomPadding = if (isMobile) bottomNavHeight else 0.dp
+                                val systemNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                                // The SwiftUI floating bar takes up 74.dp height + 8.dp padding bottom = 82.dp
+                                val frozenBottomPadding = if (isMobile) 82.dp + systemNavPadding else 0.dp
 
                                 Box(modifier = Modifier.fillMaxSize()) {
 
-                                    // --- LAYER 1: THE PERSISTENT TABS ---
                                     loadedTabs.forEach { route ->
                                         val isVisible = currentTabRoute == route
-
                                         val alpha by animateFloatAsState(
                                             targetValue = if (isVisible) 1f else 0f,
                                             animationSpec = tween(200),
                                             label = "tabAlpha"
                                         )
-
                                         val zIndex = if (isVisible) 1f else 0f
 
                                         Box(
@@ -251,11 +244,10 @@ fun App(
                                         ) {
                                             when (route) {
                                                 NavRoute.Map -> {
-                                                    val systemNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                                                     Box(modifier = Modifier.fillMaxSize()) {
                                                         MapScreen(
                                                             bottomNavHeight = frozenBottomPadding,
-                                                            systemNavHeight = systemNavPadding, // 👇 FIX 2: Restored the dynamic calculation (removed 60.dp)
+                                                            systemNavHeight = systemNavPadding,
                                                             onNavBarVisibilityChange = { isVisible ->
                                                                 isMapNavBarVisible = isVisible
                                                             }
@@ -263,7 +255,7 @@ fun App(
                                                     }
                                                 }
                                                 NavRoute.Match -> {
-                                                    Box(modifier = Modifier.fillMaxSize().padding(innerPadding).padding(bottom = frozenBottomPadding)) {
+                                                    Box(modifier = Modifier.fillMaxSize().padding(top = innerPadding.calculateTopPadding()).padding(bottom = frozenBottomPadding)) {
                                                         MatchScreen(
                                                             onNavigateToLogin = {
                                                                 currentAuthRoute = AuthRoute.Login
@@ -274,7 +266,7 @@ fun App(
                                                     }
                                                 }
                                                 NavRoute.Coach -> {
-                                                    Box(modifier = Modifier.fillMaxSize().padding(innerPadding).padding(bottom = frozenBottomPadding)) {
+                                                    Box(modifier = Modifier.fillMaxSize().padding(top = innerPadding.calculateTopPadding()).padding(bottom = frozenBottomPadding)) {
                                                         AiHubScreen(
                                                             onNavigateToAiChat = { rootNavController.navigate(NavRoute.AiChat) },
                                                             onNavigateToVideoAnalysis = {}
@@ -282,17 +274,19 @@ fun App(
                                                     }
                                                 }
                                                 NavRoute.Messages -> {
-                                                    MessagesScreen(
-                                                        playAnimation = playMessagesAnimation,
-                                                        bottomNavPadding = frozenBottomPadding,
-                                                        onNavigateToChat = { chatId, otherUsername, otherUserImageUrl, themeName ->
-                                                            playMessagesAnimation = false
-                                                            rootNavController.navigate(NavRoute.ChatDetail(chatId, otherUsername, otherUserImageUrl, themeName))
-                                                        }
-                                                    )
+                                                    Box(modifier = Modifier.fillMaxSize().padding(top = innerPadding.calculateTopPadding())) {
+                                                        MessagesScreen(
+                                                            playAnimation = playMessagesAnimation,
+                                                            bottomNavPadding = frozenBottomPadding,
+                                                            onNavigateToChat = { chatId, otherUsername, otherUserImageUrl, themeName ->
+                                                                playMessagesAnimation = false
+                                                                rootNavController.navigate(NavRoute.ChatDetail(chatId, otherUsername, otherUserImageUrl, themeName))
+                                                            }
+                                                        )
+                                                    }
                                                 }
                                                 NavRoute.Profile -> {
-                                                    Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                                                    Box(modifier = Modifier.fillMaxSize().padding(top = innerPadding.calculateTopPadding()).padding(bottom = if (isIosPlatform()) frozenBottomPadding else 0.dp)) {
                                                         if (isLoggedIn) {
                                                             ProfileScreen(
                                                                 currentLanguage = currentLanguage,
@@ -335,12 +329,11 @@ fun App(
                                                                         }
                                                                     )
                                                                     currentThemeStyle = newStyle
-                                                                    // Itt még el is mentheted a választást, ha szeretnéd
                                                                 },
                                                                 onChangeAppIcon = { newIcon ->
                                                                     tokenStorage.saveAppIcon(newIcon.alias)
                                                                     currentAppIcon = newIcon
-                                                                    appIconManager.changeIcon(newIcon) // Triggers the OS level change
+                                                                    appIconManager.changeIcon(newIcon)
                                                                 }
                                                             )
                                                         } else {
@@ -376,12 +369,8 @@ fun App(
                                         }
                                     }
 
-                                    // 4. UPDATED: Modify Layer 2 at the bottom of your Scaffold
-                                    // --- LAYER 2: BOTTOM NAV BAR ---
-                                    // 👇 Add !isIosPlatform() so Compose steps back on iOS device types
                                     if (isMobile && !isIosPlatform()) {
                                         val showNavBar = currentTabRoute != NavRoute.Map || isMapNavBarVisible
-
                                         Box(modifier = Modifier.align(Alignment.BottomCenter).zIndex(10f)) {
                                             AnimatedBottomNavBar(
                                                 isVisible = showNavBar,
@@ -394,7 +383,6 @@ fun App(
                             }
                         }
 
-                        // --- SCREEN B: CHAT DETAIL SCREEN ---
                         composable<NavRoute.ChatDetail>(
                             enterTransition = {
                                 if (isIosPlatform()) slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300, easing = LinearEasing))
@@ -422,7 +410,6 @@ fun App(
                             }
                         }
 
-                        // --- SCREEN C: AI CHAT SCREEN ---
                         composable<NavRoute.AiChat>(
                             enterTransition = {
                                 if (isIosPlatform()) slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300, easing = LinearEasing))
@@ -450,8 +437,6 @@ fun AnimatedBottomNavBar(
     currentTabRoute: NavRoute,
     onTabNavigate: (NavRoute) -> Unit
 ) {
-    // Because this is a separate function, it doesn't know about the "Row"
-    // and correctly uses the standard AnimatedVisibility!
     androidx.compose.animation.AnimatedVisibility(
         visible = isVisible,
         enter = slideInVertically(initialOffsetY = { it }, animationSpec = tween(300)),

@@ -1,12 +1,11 @@
 name: Build KMP iOS App (Unsigned)
 
-# This allows you to manually trigger the build from the GitHub website
 on:
   workflow_dispatch:
 
 jobs:
   build-ios:
-    runs-on: macos-latest # This requests the free cloud Mac
+    runs-on: macos-latest
 
     steps:
       - name: Checkout Repository
@@ -21,34 +20,79 @@ jobs:
       - name: Make Gradle Wrapper Executable
         run: chmod +x gradlew
 
-      - name: Inject API Key into local.properties
+      - name: Inject API Keys into local.properties
         env:
           MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
-        run: echo "MAPS_API_KEY=$MAPS_API_KEY" >> local.properties
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          GOOGLE_IOS_CLIENT_ID: ${{ secrets.GOOGLE_IOS_CLIENT_ID }}
+        run: |
+          echo "MAPS_API_KEY=$MAPS_API_KEY" >> local.properties
+          echo "GOOGLE_WEB_CLIENT_ID=$GOOGLE_WEB_CLIENT_ID" >> local.properties
+          echo "GOOGLE_IOS_CLIENT_ID=$GOOGLE_IOS_CLIENT_ID" >> local.properties
+
+      - name: Configure Gradle Memory limits
+        run: |
+          echo "" >> gradle.properties 
+          echo "org.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=512m" >> gradle.properties
+          echo "kotlin.native.jvmArgs=-Xmx3g" >> gradle.properties
+          echo "kotlin.native.cacheKind=none" >> gradle.properties
+          echo "org.gradle.daemon=false" >> gradle.properties
+
+      - name: Configure iOS 18 Alternate Icons in Xcode
+        run: |
+          gem install xcodeproj
+          ruby -e "
+          require 'xcodeproj'
+          
+          project_path = 'iosApp/iosApp.xcodeproj'
+          project = Xcodeproj::Project.open(project_path)
+          target = project.targets.find { |t| t.name == 'iosApp' } || project.targets.first
+          
+          # Define the exact names of your .appiconset folders (without the extension)
+          alternate_icons = 'AdrenalinIcon ChampionshipIcon CyberIcon GoldIcon IceIcon IceIconExtra LightIcon StealthIcon SynthwaveIcon SynthwaveIconExtra'
+          
+          target.build_configurations.each do |config|
+            # Tell Xcode to compile these as alternate icons
+            config.build_settings['ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES'] = alternate_icons
+            # Ensure it bundles them into the final app
+            config.build_settings['ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS'] = 'YES'
+          end
+          
+          project.save
+          puts 'Successfully updated Xcode build settings for iOS 18 Alternate Icons!'
+          "
 
       - name: Build Unsigned iOS App
         run: |
-          # 1. Ask Xcode to build the app, but explicitly disable code signing
-          # Note: If your Xcode project is named differently, update "iosApp" below.
-          xcodebuild clean build \
-            -project iosApp/iosApp.xcodeproj \
+          set -e 
+
+          # 1. Prepare Kotlin CocoaPods
+          ./gradlew :shared:generateDummyFramework :shared:podspec
+
+          # 2. Install Pods
+          cd iosApp
+          pod install
+          cd ..
+
+          # 3. Build the Workspace (Mirrors the exact parameters from Codemagic)
+          xcodebuild build \
+            -workspace iosApp/iosApp.xcworkspace \
             -scheme iosApp \
-            -configuration Release \
+            -configuration Debug \
             -sdk iphoneos \
+            -derivedDataPath ./build-xcode \
+            PARALLELIZE_TARGETS=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            CONFIGURATION_BUILD_DIR=build/Release-iphoneos \
-            OTHER_LDFLAGS="-framework MapKit -framework CoreLocation"
+            CODE_SIGNING_ALLOWED=NO
 
-          # 2. Package the resulting .app folder into an .ipa file
-          # An .ipa is secretly just a zip file containing a "Payload" folder!
+          # 4. Package the IPA as MatchPoint.ipa
           mkdir -p Payload
-          mv iosApp/build/Release-iphoneos/*.app Payload/
-          zip -r KmpApp.ipa Payload
+          cp -R build-xcode/Build/Products/Debug-iphoneos/MatchPoint.app Payload/
+          zip -r MatchPoint.ipa Payload
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: KmpApp-IPA
-          path: KmpApp.ipa
+          name: MatchPoint-IPA
+          path: MatchPoint.ipa

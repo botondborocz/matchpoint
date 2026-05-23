@@ -3,7 +3,7 @@ import UIKit
 
 struct LiquidNavbar: View {
     @Binding var currentTab: String
-    @Namespace private var fallbackNamespace
+    @Namespace private var navbarTransitionNamespace // 👈 FIX: Namespace handles fluid capsule sliding transitions
 
     let tabs = [
         ("map", "map.fill", "Map"),
@@ -17,7 +17,8 @@ struct LiquidNavbar: View {
             HStack(spacing: 0) {
                 ForEach(tabs, id: \.0) { id, icon, label in
                     Button(action: {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.76)) {
+                        // 🌟 Standard spring curves match native iOS 26 response thresholds
+                        withAnimation(.spring(response: 0.36, dampingFraction: 0.74)) {
                             currentTab = id
                         }
                     }) {
@@ -29,7 +30,19 @@ struct LiquidNavbar: View {
                         }
                         .foregroundColor(currentTab == id ? .orange : .secondary.opacity(0.8))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .adaptivePillHighlight(isActive: currentTab == id, namespace: fallbackNamespace)
+                        .padding(.vertical, 6)
+                        // 👈 FIX: High-vibrancy single layer flat capsule overlay moving fluidly via matched geometry
+                        .background(
+                            ZStack {
+                                if currentTab == id {
+                                    Capsule()
+                                        .fill(Color.white.opacity(0.14))
+                                        .overlay(Capsule().stroke(Color.white.opacity(0.22), lineWidth: 0.5))
+                                        .matchedGeometryEffect(id: "active_liquid_pill", in: navbarTransitionNamespace)
+                                        .padding(.horizontal, 4)
+                                }
+                            }
+                        )
                     }
                     .buttonStyle(.plain)
                 }
@@ -51,11 +64,12 @@ struct AdaptiveGlassBaseContainer<Content: View>: View {
 
     var body: some View {
         if #available(iOS 26.0, *) {
+            // 👈 FIX: Glass effect applied straight to the structural bounding capsule container
             GlassEffectContainer {
                 content
-                    .glassEffect(.regular)
-                    .clipShape(Capsule())
+                    .background(Capsule().glassEffect(.regular))
             }
+            .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 8)
         } else {
             content
                 .background(.ultraThinMaterial)
@@ -80,46 +94,5 @@ struct AdaptiveGlassBaseContainer<Content: View>: View {
                 )
                 .shadow(color: Color.black.opacity(0.12), radius: 12, x: 0, y: 8)
         }
-    }
-}
-
-// MARK: - Progressive Selection Modifiers
-extension View {
-    @ViewBuilder
-    func adaptivePillHighlight(isActive: Bool, namespace: Namespace.ID) -> some View {
-        if #available(iOS 26.0, *) {
-            // 👇 FIXED: Swapped out invalid property value for .regular + opacity interpolation
-            self.background(
-                Capsule()
-                    .glassEffect(.regular)
-                    .opacity(isActive ? 1.0 : 0.0)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 6)
-            )
-        } else {
-            self.background(
-                ZStack {
-                    if isActive {
-                        Capsule()
-                            .fill(Color.white.opacity(0.12))
-                            .overlay(Capsule().stroke(Color.white.opacity(0.25), lineWidth: 0.5))
-                            .matchedGeometryEffect(id: "fallback_pill_geometry", in: namespace)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 6)
-                    }
-                }
-            )
-        }
-    }
-}
-
-// MARK: - Core Shapes
-struct RoundedCornerShape: Shape {
-    var radius: CGFloat = .infinity
-    var corners: UIRectCorner = .allCorners
-
-    func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
-        return Path(path.cgPath)
     }
 }
