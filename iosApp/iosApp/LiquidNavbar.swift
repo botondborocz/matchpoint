@@ -7,7 +7,6 @@ struct LiquidNavbar: View {
     let tabs = [
         ("map", "map.fill", "Map"),
         ("match", "sportscourt.fill", "Match"),
-        ("coach", "cpu", "AI Coach"),
         ("messages", "bubble.left.and.bubble.right.fill", "Messages"),
         ("profile", "person.crop.circle.fill", "Profile")
     ]
