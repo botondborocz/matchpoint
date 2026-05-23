@@ -3,7 +3,6 @@ import UIKit
 
 struct LiquidNavbar: View {
     @Binding var currentTab: String
-    // 👇 The Namespace is retained exclusively to drive the sliding animation fallback on iOS 17/18
     @Namespace private var fallbackNamespace
 
     let tabs = [
@@ -14,12 +13,10 @@ struct LiquidNavbar: View {
     ]
 
     var body: some View {
-        // 1. ADOPTED: Custom adaptive base container implementing Apple's specification
         AdaptiveGlassBaseContainer {
             HStack(spacing: 0) {
                 ForEach(tabs, id: \.0) { id, icon, label in
                     Button(action: {
-                        // Fluid spring mechanics required to drive the physics morphing pipeline
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.76)) {
                             currentTab = id
                         }
@@ -32,7 +29,6 @@ struct LiquidNavbar: View {
                         }
                         .foregroundColor(currentTab == id ? .orange : .secondary.opacity(0.8))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        // 2. ADOPTED: State-driven selection token mapping directly to standard runtime parameters
                         .adaptivePillHighlight(isActive: currentTab == id, namespace: fallbackNamespace)
                     }
                     .buttonStyle(.plain)
@@ -55,15 +51,12 @@ struct AdaptiveGlassBaseContainer<Content: View>: View {
 
     var body: some View {
         if #available(iOS 26.0, *) {
-            // 🌟 Standard Implementation Framework: Nesting elements in a GlassEffectContainer
-            // triggers automatic path union, blur calculations, and morphing transitions.
             GlassEffectContainer {
                 content
-                    .glassEffect(.regular) // Continuous base material backing sheet
+                    .glassEffect(.regular)
                     .clipShape(Capsule())
             }
         } else {
-            // High-fidelity fallback styling for iOS 17 & 18 deployments
             content
                 .background(.ultraThinMaterial)
                 .background(
@@ -95,16 +88,15 @@ extension View {
     @ViewBuilder
     func adaptivePillHighlight(isActive: Bool, namespace: Namespace.ID) -> some View {
         if #available(iOS 26.0, *) {
-            // 🌟 Standard Implementation Framework: Toggle between visibility weights (.prominent vs .clear).
-            // The enclosing GlassEffectContainer visually merges overlapping layers automatically.
+            // 👇 FIXED: Swapped out invalid property value for .regular + opacity interpolation
             self.background(
                 Capsule()
-                    .glassEffect(isActive ? .prominent : .clear)
+                    .glassEffect(.regular)
+                    .opacity(isActive ? 1.0 : 0.0)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 6)
             )
         } else {
-            // Standard geometric transition pipeline fallback for backward-compatible runtimes
             self.background(
                 ZStack {
                     if isActive {
@@ -118,5 +110,16 @@ extension View {
                 }
             )
         }
+    }
+}
+
+// MARK: - Core Shapes
+struct RoundedCornerShape: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
+        return Path(path.cgPath)
     }
 }
