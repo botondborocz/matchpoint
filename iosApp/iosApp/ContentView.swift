@@ -2,7 +2,7 @@ import UIKit
 import SwiftUI
 import ComposeApp
 
-// MARK: - Native Gallery Structs & Bridges
+// MARK: - Native Gallery Bridge Models
 struct GalleryData: Identifiable {
     let id = UUID()
     let images: [String]
@@ -32,16 +32,24 @@ class IOSGalleryLauncher: NativeGalleryLauncher {
     }
 }
 
+// MARK: - Reactive Application State
 class AppState: ObservableObject {
     @Published var galleryData: GalleryData? = nil
     @Published var currentTab: String = "map"
+    @Published var tabTintColor: Color = .orange // Default initial fallback
+
+    func updateThemeColor(from hexString: String) {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            self.tabTintColor = Color(hex: hexString)
+        }
+    }
 }
 
 // MARK: - Core Tab Link to Kotlin Multiplatform
 struct ComposeTabViewControllerRepresentable: UIViewControllerRepresentable {
     let tabName: String
     let launcher: NativeGalleryLauncher
-    @Binding var currentTab: String
+    @ObservedObject var appState: AppState
 
     func makeUIViewController(context: Context) -> UIViewController {
         return MainViewControllerKt.TabViewController(
@@ -49,7 +57,12 @@ struct ComposeTabViewControllerRepresentable: UIViewControllerRepresentable {
             galleryLauncher: launcher,
             onTabChangedByCompose: { newTab in
                 DispatchQueue.main.async {
-                    self.currentTab = newTab
+                    self.appState.currentTab = newTab
+                }
+            },
+            onThemeChangedByCompose: { hexStr in
+                DispatchQueue.main.async {
+                    self.appState.updateThemeColor(from: hexStr)
                 }
             }
         )
@@ -65,46 +78,27 @@ struct ContentView: View {
     var body: some View {
         TabView(selection: $appState.currentTab) {
 
-            ComposeTabViewControllerRepresentable(
-                tabName: "map",
-                launcher: IOSGalleryLauncher(appState: appState),
-                currentTab: $appState.currentTab
-            )
-            .tabItem {
-                Label("Map", systemImage: "map.fill")
-            }
-            .tag("map")
+            ComposeTabViewControllerRepresentable(tabName: "map", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                .ignoresSafeArea()
+                .tabItem { Label("Map", systemImage: "map.fill") }
+                .tag("map")
 
-            ComposeTabViewControllerRepresentable(
-                tabName: "match",
-                launcher: IOSGalleryLauncher(appState: appState),
-                currentTab: $appState.currentTab
-            )
-            .tabItem {
-                Label("Match", systemImage: "sportscourt.fill")
-            }
-            .tag("match")
+            ComposeTabViewControllerRepresentable(tabName: "match", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                .ignoresSafeArea()
+                .tabItem { Label("Match", systemImage: "sportscourt.fill") }
+                .tag("match")
 
-            ComposeTabViewControllerRepresentable(
-                tabName: "messages",
-                launcher: IOSGalleryLauncher(appState: appState),
-                currentTab: $appState.currentTab
-            )
-            .tabItem {
-                Label("Messages", systemImage: "bubble.left.and.bubble.right.fill")
-            }
-            .tag("messages")
+            ComposeTabViewControllerRepresentable(tabName: "messages", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                .ignoresSafeArea()
+                .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
+                .tag("messages")
 
-            ComposeTabViewControllerRepresentable(
-                tabName: "profile",
-                launcher: IOSGalleryLauncher(appState: appState),
-                currentTab: $appState.currentTab
-            )
-            .tabItem {
-                Label("Profile", systemImage: "person.crop.circle.fill")
-            }
-            .tag("profile")
+            ComposeTabViewControllerRepresentable(tabName: "profile", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                .ignoresSafeArea()
+                .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
+                .tag("profile")
         }
+        .tint(appState.tabTintColor) // Applies your dynamic themes seamlessly
         .fullScreenCover(item: $appState.galleryData) { data in
             NativeSwiftGalleryView(data: data)
                 .background(TransparentBackground())
@@ -112,7 +106,7 @@ struct ContentView: View {
     }
 }
 
-// MARK: - UIKIT Bridge Components (Restored)
+// MARK: - UIKIT Bridge Components
 struct TransparentBackground: UIViewRepresentable {
     func makeUIView(context: Context) -> UIView {
         let view = UIView()
@@ -124,7 +118,7 @@ struct TransparentBackground: UIViewRepresentable {
     func updateUIView(_ uiView: UIView, context: Context) {}
 }
 
-// MARK: - Native Gallery View (Fixed Layout & Interaction)
+// MARK: - Native Gallery View
 struct NativeSwiftGalleryView: View {
     let data: GalleryData
     @Environment(\.dismiss) var dismiss
@@ -468,5 +462,32 @@ class ZoomScrollView: UIScrollView, UIScrollViewDelegate {
         if scrollView.zoomScale <= 1.0 {
             withAnimation { parent?.isUiVisible = true }
         }
+    }
+}
+
+// MARK: - Swift Hex Parser Utility
+extension Color {
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 3:
+            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
+        case 6:
+            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8:
+            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (a, r, g, b) = (255, 1, 1, 1)
+        }
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue: Double(b) / 255,
+            opacity: Double(a) / 255
+        )
     }
 }

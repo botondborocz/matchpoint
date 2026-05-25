@@ -13,7 +13,8 @@ private var isKoinInitialized = false
 fun TabViewController(
     tabName: String,
     galleryLauncher: NativeGalleryLauncher,
-    onTabChangedByCompose: (String) -> Unit
+    onTabChangedByCompose: (String) -> Unit,
+    onThemeChangedByCompose: (String) -> Unit
 ) = ComposeUIViewController(
     configure = {
         onFocusBehavior = OnFocusBehavior.DoNothing
@@ -44,6 +45,9 @@ fun TabViewController(
                 else -> "map"
             }
             onTabChangedByCompose(stringName)
+        },
+        onThemeStyleChanged = { themeHex ->
+            onThemeChangedByCompose(themeHex)
         }
     )
 }

@@ -69,7 +69,8 @@ fun App(
     onChatConsumed: () -> Unit = {},
     galleryLauncher: NativeGalleryLauncher,
     externalTabRoute: NavRoute? = null,
-    onTabChangedBySystem: (NavRoute) -> Unit = {}
+    onTabChangedBySystem: (NavRoute) -> Unit = {},
+    onThemeStyleChanged: (String) -> Unit = {}
 ) {
     val tokenStorage: TokenStorage = koinInject()
     val appIconManager: AppIconManager = koinInject()
@@ -164,6 +165,18 @@ fun App(
         ThemeMode.Light -> false
         ThemeMode.Dark -> true
         ThemeMode.System -> isSystemDark
+    }
+
+    // 2. 👇 ADD/UPDATE THIS LAUNCHEDEFFECT RIGHT HERE:
+    LaunchedEffect(currentThemeStyle, isCurrentlyDark) {
+        val activeHexColor = if (isCurrentlyDark) {
+            currentThemeStyle.darkAccent
+        } else {
+            currentThemeStyle.lightAccent
+        }
+
+        // Sends the raw hex string ("#D4AF37", "#00FF41", etc.) over the bridge
+        onThemeStyleChanged(activeHexColor)
     }
 
     SetStatusBarColors(
