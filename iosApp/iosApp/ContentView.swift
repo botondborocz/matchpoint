@@ -66,14 +66,15 @@ struct ComposeTabViewControllerRepresentable: UIViewControllerRepresentable {
                     self.appState.updateThemeColor(from: hexStr)
                 }
             },
+            // Change this:
             onSubScreenVisibilityChanged: { isSubScreen -> Void in
-                            // 👈 NEW: Dynamically toggle the tab visibility flag
-                            DispatchQueue.main.async {
-                                withAnimation(.easeInOut(duration: 0.25)) {
-                                    self.appState.isTabBarHidden = isSubScreen
-                                }
-                            }
-                        }
+                DispatchQueue.main.async {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        // 👇 FIX: Use .boolValue to extract the primitive from KotlinBoolean
+                        self.appState.isTabBarHidden = isSubScreen.boolValue
+                    }
+                }
+            }
         )
     }
 
