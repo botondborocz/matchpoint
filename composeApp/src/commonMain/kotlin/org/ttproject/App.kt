@@ -70,11 +70,21 @@ fun App(
     galleryLauncher: NativeGalleryLauncher,
     externalTabRoute: NavRoute? = null,
     onTabChangedBySystem: (NavRoute) -> Unit = {},
-    onThemeStyleChanged: (String) -> Unit = {}
+    onThemeStyleChanged: (String) -> Unit = {},
+    onSubScreenVisibilityChanged: (Boolean) -> Unit = {} // 👈 NEW: Callback to notify iOS
 ) {
     val tokenStorage: TokenStorage = koinInject()
     val appIconManager: AppIconManager = koinInject()
     val rootNavController = rememberNavController()
+
+    // 👇 NEW: Listen to navigation changes and tell iOS when we are on a detail screen
+    LaunchedEffect(rootNavController) {
+        rootNavController.addOnDestinationChangedListener { _, destination, _ ->
+            // If the current destination route is NOT HomeBase, it means we pushed a sub-screen!
+            val isDetailScreen = !destination.hasRoute(HomeBase::class)
+            onSubScreenVisibilityChanged(isDetailScreen)
+        }
+    }
 
     var isMapNavBarVisible by remember { mutableStateOf(true) }
     var currentTabRoute by remember { mutableStateOf<NavRoute>(NavRoute.Map) }

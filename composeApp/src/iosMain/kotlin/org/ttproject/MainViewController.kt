@@ -14,7 +14,8 @@ fun TabViewController(
     tabName: String,
     galleryLauncher: NativeGalleryLauncher,
     onTabChangedByCompose: (String) -> Unit,
-    onThemeChangedByCompose: (String) -> Unit
+    onThemeChangedByCompose: (String) -> Unit,
+    onSubScreenVisibilityChanged: (Boolean) -> Unit
 ) = ComposeUIViewController(
     configure = {
         onFocusBehavior = OnFocusBehavior.DoNothing
@@ -48,6 +49,9 @@ fun TabViewController(
         },
         onThemeStyleChanged = { themeHex ->
             onThemeChangedByCompose(themeHex)
+        },
+        onSubScreenVisibilityChanged = { isSubScreen ->
+            onSubScreenVisibilityChanged(isSubScreen) // 👈 Forward up to Swift
         }
     )
 }

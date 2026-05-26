@@ -37,6 +37,7 @@ class AppState: ObservableObject {
     @Published var galleryData: GalleryData? = nil
     @Published var currentTab: String = "map"
     @Published var tabTintColor: Color = .orange // Default initial fallback
+    @Published var isTabBarHidden: Bool = false // 👈 NEW: Controls tab visibility state
 
     func updateThemeColor(from hexString: String) {
         withAnimation(.easeInOut(duration: 0.2)) {
@@ -64,7 +65,15 @@ struct ComposeTabViewControllerRepresentable: UIViewControllerRepresentable {
                 DispatchQueue.main.async {
                     self.appState.updateThemeColor(from: hexStr)
                 }
-            }
+            },
+            onSubScreenVisibilityChanged: { isSubScreen -> Void in
+                            // 👈 NEW: Dynamically toggle the tab visibility flag
+                            DispatchQueue.main.async {
+                                withAnimation(.easeInOut(duration: 0.25)) {
+                                    self.appState.isTabBarHidden = isSubScreen
+                                }
+                            }
+                        }
         )
     }
 
@@ -99,6 +108,7 @@ struct ContentView: View {
                 .tag("profile")
         }
         .tint(appState.tabTintColor) // Applies your dynamic themes seamlessly
+        .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
         .fullScreenCover(item: $appState.galleryData) { data in
             NativeSwiftGalleryView(data: data)
                 .background(TransparentBackground())
