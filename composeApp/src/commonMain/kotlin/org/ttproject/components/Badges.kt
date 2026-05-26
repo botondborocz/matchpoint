@@ -66,16 +66,16 @@ fun mapMetricsToBadges(metrics: UserBadgeMetricsDto?): List<BadgeData> {
             Icons.Default.Radar, safeMetrics.profileSwipes, listOf(
                 BadgeTierDefinition(50, "húzás"), BadgeTierDefinition(500, "húzás"), BadgeTierDefinition(2000, "húzás"), BadgeTierDefinition(10000, "húzás")
             )),
-        BadgeData(
-            "Okos Vágó", "Az AI által sikeresen megvágott és kielemezett edzésvideóid száma.",
-            Icons.Default.ContentCut, safeMetrics.trimmedVideos, listOf(
-                BadgeTierDefinition(1, "videó"), BadgeTierDefinition(10, "videó"), BadgeTierDefinition(50, "videó"), BadgeTierDefinition(200, "videó")
-            )),
-        BadgeData(
-            "Kíváncsi Elme", "Az AI edzőnek feltett szakmai kérdések és indított beszélgetések száma.",
-            Icons.Default.Psychology, safeMetrics.aiQuestions, listOf(
-                BadgeTierDefinition(3, "kérdés"), BadgeTierDefinition(20, "kérdés"), BadgeTierDefinition(100, "kérdés"), BadgeTierDefinition(500, "kérdés")
-            )),
+//        BadgeData(
+//            "Okos Vágó", "Az AI által sikeresen megvágott és kielemezett edzésvideóid száma.",
+//            Icons.Default.ContentCut, safeMetrics.trimmedVideos, listOf(
+//                BadgeTierDefinition(1, "videó"), BadgeTierDefinition(10, "videó"), BadgeTierDefinition(50, "videó"), BadgeTierDefinition(200, "videó")
+//            )),
+//        BadgeData(
+//            "Kíváncsi Elme", "Az AI edzőnek feltett szakmai kérdések és indított beszélgetések száma.",
+//            Icons.Default.Psychology, safeMetrics.aiQuestions, listOf(
+//                BadgeTierDefinition(3, "kérdés"), BadgeTierDefinition(20, "kérdés"), BadgeTierDefinition(100, "kérdés"), BadgeTierDefinition(500, "kérdés")
+//            )),
         BadgeData(
             "Vasakarat", "Egymást követő napok száma (Streak), amikor megnyitottad és használtad az alkalmazást.",
             Icons.Default.LocalFireDepartment, safeMetrics.currentStreak, listOf(
@@ -217,7 +217,7 @@ fun BadgesSection(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        val chunkedBadges = myBadges.chunked(5)
+        val chunkedBadges = myBadges.chunked(4)
         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             chunkedBadges.forEach { rowBadges ->
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {

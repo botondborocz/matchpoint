@@ -3,11 +3,16 @@ package org.ttproject.screens
 import BadgeDetailsDialog
 import BadgesSection
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
@@ -47,7 +52,6 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.DialogProperties
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 import org.ttproject.AppColors
@@ -87,29 +91,30 @@ import org.ttproject.data.TokenStorage
 import org.ttproject.icon.PremiumAppIcon
 import org.ttproject.isIosPlatform
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun ProfileScreen(
     currentLanguage: String = "en",
-    currentAppThemeStyle: AppThemeStyle = LocalAppThemeStyle.current, // 👈 ÚJ
-    currentAppIcon: PremiumAppIcon = PremiumAppIcon.DEFAULT, // 👈 ÚJ
-    isUserPremium: Boolean = true, // 👈 ÚJ: Később kösd be a ProfileState-ből
+    currentAppThemeStyle: AppThemeStyle = LocalAppThemeStyle.current,
+    currentAppIcon: PremiumAppIcon = PremiumAppIcon.DEFAULT,
+    isUserPremium: Boolean = true,
     currentThemeMode: ThemeMode = ThemeMode.System,
     onLogoutClick: () -> Unit = {},
     onChangeLanguage: (String) -> Unit = {},
     onChangeTheme: (ThemeMode) -> Unit = {},
     onChangeAppThemeStyle: (AppThemeStyle) -> Unit = {},
     onChangeAppIcon: (PremiumAppIcon) -> Unit = {},
+    onOverlayActive: (Boolean) -> Unit = {},
     viewModel: ProfileViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var isAvatarExpanded by remember { mutableStateOf(false) }
 
-    // 👇 MODAL STATES
     var isEditUsernameModalOpen by remember { mutableStateOf(false) }
     var isEditBioModalOpen by remember { mutableStateOf(false) }
     var isEditGearModalOpen by remember { mutableStateOf(false) }
-    var isEditBasicInfoModalOpen by remember { mutableStateOf(false) } // 👈 NEW
-    var isMatchCardPreviewOpen by remember { mutableStateOf(false) } // 👈 NEW
+    var isEditBasicInfoModalOpen by remember { mutableStateOf(false) }
+    var isMatchCardPreviewOpen by remember { mutableStateOf(false) }
     var selectedBadge by remember { mutableStateOf<BadgeData?>(null) }
 
     val scope = rememberCoroutineScope()
@@ -125,6 +130,10 @@ fun ProfileScreen(
         }
     )
 
+    LaunchedEffect(isAvatarExpanded, isMatchCardPreviewOpen) {
+        onOverlayActive(isAvatarExpanded || isMatchCardPreviewOpen)
+    }
+
     if (imageToUpload != null) {
         AvatarFramerDialog(
             imageBytes = imageToUpload!!,
@@ -136,7 +145,6 @@ fun ProfileScreen(
         )
     }
 
-    // BADGE DETAILS DIALOG
     if (selectedBadge != null) {
         BadgeDetailsDialog(
             badge = selectedBadge!!,
@@ -175,29 +183,6 @@ fun ProfileScreen(
 
             val scrollState = rememberScrollState()
 
-            // --- DIALOGS ---
-
-            if (isAvatarExpanded) {
-                AvatarPreviewDialog(
-                    username = userData.name ?: "Player",
-                    imageUrl = userData.imageUrl,
-                    onDismissRequest = { isAvatarExpanded = false },
-                    onEditClick = {
-                        singleImagePicker.launch()
-                        isAvatarExpanded = false
-                    }
-                )
-            }
-
-            // 👇 NEW: MATCHCARD PREVIEW DIALOG
-            if (isMatchCardPreviewOpen) {
-                MatchCardPreviewDialog(
-                    profileData = userData,
-                    onDismiss = { isMatchCardPreviewOpen = false }
-                )
-            }
-
-            // USERNAME DIALOG
             if (isEditUsernameModalOpen) {
                 EditUsernameDialog(
                     initialName = userData.name ?: "",
@@ -209,7 +194,6 @@ fun ProfileScreen(
                 )
             }
 
-            // BIO DIALOG
             if (isEditBioModalOpen) {
                 EditBioDialog(
                     initialBio = userData.bio ?: "",
@@ -221,7 +205,6 @@ fun ProfileScreen(
                 )
             }
 
-            // BASIC INFO DIALOG
             if (isEditBasicInfoModalOpen) {
                 EditBasicInfoDialog(
                     initialBirthDate = userData.birthDate ?: "",
@@ -234,7 +217,6 @@ fun ProfileScreen(
                 )
             }
 
-            // GEAR DIALOG
             if (isEditGearModalOpen) {
                 EditGearDialog(
                     initialBlade = userData.blade ?: "",
@@ -248,206 +230,413 @@ fun ProfileScreen(
                 )
             }
 
-            // --- MAIN CONTENT ---
-            Box(modifier = Modifier.fillMaxSize()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(scrollState)
-                        .padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 80.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    AnimatedVisibility(
-                        visible = animateTrigger,
-                        enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { 50 }) {
-                        Column {
-                            ProfileHeader(
-                                profileData = userData,
-                                onAvatarClick = { isAvatarExpanded = true },
-                                onPhotoEditClick = { singleImagePicker.launch() },
-                                onUsernameEditClick = { isEditUsernameModalOpen = true },
-                                onBioEditClick = { isEditBioModalOpen = true },
-                                onPreviewMatchcardClick = {
-                                    isMatchCardPreviewOpen = true
-                                } // 👈 NEW
-                            )
-                            Spacer(modifier = Modifier.height(32.dp))
-                        }
-                    }
+            SharedTransitionLayout {
+                Box(modifier = Modifier.fillMaxSize()) {
 
-                    // 👇 ÚJ: BADGE SECTION (Kitűzők beszúrása ide) 👇
-                    AnimatedVisibility(
-                        visible = animateTrigger,
-                        enter = fadeIn(tween(400, delayMillis = 50)) + slideInVertically(
-                            tween(400, delayMillis = 50)
-                        ) { 50 }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(scrollState)
+                            .padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 80.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Column {
-                            BadgesSection(
-                                metrics = userData.badgeMetrics, // 👈 PASS THE REAL DATA HERE
-                                onBadgeClick = { clickedBadge ->
-                                    selectedBadge = clickedBadge
-                                }
-                            )
-                            Spacer(modifier = Modifier.height(32.dp))
+                        AnimatedVisibility(
+                            visible = animateTrigger,
+                            enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { 50 }
+                        ) {
+                            Column {
+                                ProfileHeader(
+                                    isAvatarExpanded = isAvatarExpanded, // 👈 Triggers source morph
+                                    isMatchCardPreviewOpen = isMatchCardPreviewOpen, // 👈 Triggers source morph
+                                    profileData = userData,
+                                    onAvatarClick = { isAvatarExpanded = true },
+                                    onPhotoEditClick = { singleImagePicker.launch() },
+                                    onUsernameEditClick = { isEditUsernameModalOpen = true },
+                                    onBioEditClick = { isEditBioModalOpen = true },
+                                    onPreviewMatchcardClick = { isMatchCardPreviewOpen = true }
+                                )
+                                Spacer(modifier = Modifier.height(32.dp))
+                            }
+                        }
+
+                        AnimatedVisibility(
+                            visible = animateTrigger,
+                            enter = fadeIn(tween(400, delayMillis = 50)) + slideInVertically(tween(400, delayMillis = 50)) { 50 }
+                        ) {
+                            Column {
+                                BadgesSection(
+                                    metrics = userData.badgeMetrics,
+                                    onBadgeClick = { clickedBadge -> selectedBadge = clickedBadge }
+                                )
+                                Spacer(modifier = Modifier.height(32.dp))
+                            }
+                        }
+
+                        AnimatedVisibility(
+                            visible = animateTrigger,
+                            enter = fadeIn(tween(400, delayMillis = 100)) + slideInVertically(tween(400, delayMillis = 100)) { 50 }) {
+                            Column {
+                                BasicInfoSection(
+                                    profileData = userData,
+                                    onEditClick = { isEditBasicInfoModalOpen = true }
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                            }
+                        }
+
+                        AnimatedVisibility(
+                            visible = animateTrigger,
+                            enter = fadeIn(tween(400, delayMillis = 150)) + slideInVertically(tween(400, delayMillis = 150)) { 50 }) {
+                            Column {
+                                GearSection(
+                                    profileData = userData,
+                                    onGearEditClick = { isEditGearModalOpen = true }
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                            }
+                        }
+
+                        AnimatedVisibility(
+                            visible = animateTrigger,
+                            enter = fadeIn(tween(400, delayMillis = 300)) + slideInVertically(tween(400, delayMillis = 300)) { 50 }) {
+                            Column {
+                                SettingsAndLogout(
+                                    currentLanguage = currentLanguage,
+                                    currentThemeMode = currentThemeMode,
+                                    currentAppThemeStyle = currentAppThemeStyle,
+                                    currentAppIcon = currentAppIcon,
+                                    isUserPremium = isUserPremium,
+                                    onLogoutClick = { viewModel.clearProfile(); onLogoutClick() },
+                                    onChangeLanguage = onChangeLanguage,
+                                    onChangeTheme = onChangeTheme,
+                                    onChangeAppThemeStyle = onChangeAppThemeStyle,
+                                    onChangeAppIcon = onChangeAppIcon,
+                                    viewModel = viewModel,
+                                    snackbarHostState = snackbarHostState
+                                )
+                                Spacer(modifier = Modifier.height(20.dp))
+                            }
                         }
                     }
 
-                    // 👇 NEW: BASIC INFO SECTION
+                    SnackbarHost(
+                        hostState = snackbarHostState,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 90.dp)
+                    )
+
+                    // 🌟 DESTINATION 1: MORPHING AVATAR PREVIEW
                     AnimatedVisibility(
-                        visible = animateTrigger,
-                        enter = fadeIn(tween(400, delayMillis = 100)) + slideInVertically(
-                            tween(
-                                400,
-                                delayMillis = 100
-                            )
-                        ) { 50 }) {
-                        Column {
-                            BasicInfoSection(
-                                profileData = userData,
-                                onEditClick = { isEditBasicInfoModalOpen = true }
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
+                        visible = isAvatarExpanded,
+                        enter = fadeIn(tween(400)),
+                        exit = fadeOut(tween(400)),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        AvatarPreviewOverlay(
+                            animatedVisibilityScope = this,
+                            username = userData.name ?: "Player",
+                            imageUrl = userData.imageUrl,
+                            onDismissRequest = { isAvatarExpanded = false },
+                            onEditClick = {
+                                singleImagePicker.launch()
+                                isAvatarExpanded = false
+                            }
+                        )
                     }
 
+                    // 🌟 DESTINATION 2: MORPHING MATCHCARD PREVIEW
                     AnimatedVisibility(
-                        visible = animateTrigger,
-                        enter = fadeIn(tween(400, delayMillis = 150)) + slideInVertically(
-                            tween(
-                                400,
-                                delayMillis = 150
-                            )
-                        ) { 50 }) {
-                        Column {
-                            GearSection(
-                                profileData = userData,
-                                onGearEditClick = { isEditGearModalOpen = true }
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                        }
-                    }
-
-                    AnimatedVisibility(
-                        visible = animateTrigger,
-                        enter = fadeIn(tween(400, delayMillis = 300)) + slideInVertically(
-                            tween(
-                                400,
-                                delayMillis = 300
-                            )
-                        ) { 50 }) {
-                        Column {
-                            SettingsAndLogout(
-                                currentLanguage = currentLanguage,
-                                currentThemeMode = currentThemeMode,
-                                currentAppThemeStyle = currentAppThemeStyle, // 👈 ÚJ
-                                currentAppIcon = currentAppIcon,
-                                isUserPremium = isUserPremium, // 👈 ÚJ
-                                onLogoutClick = { viewModel.clearProfile(); onLogoutClick() },
-                                onChangeLanguage = onChangeLanguage,
-                                onChangeTheme = onChangeTheme,
-                                onChangeAppThemeStyle = onChangeAppThemeStyle, // 👈 ÚJ
-                                onChangeAppIcon = onChangeAppIcon,
-                                viewModel = viewModel,
-                                snackbarHostState = snackbarHostState
-                            )
-                            Spacer(modifier = Modifier.height(20.dp))
-                        }
+                        visible = isMatchCardPreviewOpen,
+                        enter = fadeIn(tween(400)),
+                        exit = fadeOut(tween(400)),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        MatchCardPreviewOverlay(
+                            animatedVisibilityScope = this,
+                            profileData = userData,
+                            onDismiss = { isMatchCardPreviewOpen = false }
+                        )
                     }
                 }
-                // 👇 4. Add the actual Snackbar UI to the bottom of the screen
-                SnackbarHost(
-                    hostState = snackbarHostState,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 90.dp) // Sits just above your bottom navigation
-                )
             }
         }
     }
 }
 
-// 👇 NEW: MatchCard Preview Overlay
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun MatchCardPreviewDialog(
+private fun SharedTransitionScope.MatchCardPreviewOverlay(
+    animatedVisibilityScope: AnimatedVisibilityScope,
     profileData: ProfileState.Success,
     onDismiss: () -> Unit
 ) {
-    val mappedBadges = mapMetricsToBadges(profileData.badgeMetrics)
-
-    // Map ProfileState to the Player object your MatchCard expects
-    val meAsPlayer = Player(
-        id = "me",
-        username = profileData.name ?: "Player",
-        skillLevel = profileData.skillLevel ?: "Beginner",
-        age = profileData.age ?: 0,
-        elo = profileData.elo,
-        distanceKm = 0,
-        imageUrl = profileData.imageUrl,
-        badgeMetrics = profileData.badgeMetrics
-    )
+    val meAsPlayer = remember(profileData) {
+        Player(
+            id = "me",
+            username = profileData.name ?: "Player",
+            skillLevel = profileData.skillLevel ?: "Beginner",
+            age = profileData.age ?: 0,
+            elo = profileData.elo,
+            distanceKm = 0,
+            imageUrl = profileData.imageUrl,
+            badgeMetrics = profileData.badgeMetrics
+        )
+    }
 
     val cardGradient = Brush.verticalGradient(
         colors = listOf(Color(0xFF3B4CCA), Color(0xFF151C2C))
     )
 
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false) // Allows it to be full screen width
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.85f))
+            .pointerInput(Unit) { detectTapGestures { onDismiss() } },
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.85f))
-                .clickable(
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                    indication = null,
-                    onClick = onDismiss
-                ),
-            contentAlignment = Alignment.Center
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.pointerInput(Unit) { detectTapGestures { /* Block bubbling */ } }
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "THIS IS HOW OTHERS SEE YOU",
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-                Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "THIS IS HOW OTHERS SEE YOU",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.height(16.dp))
 
-                // Standard MatchCard constrained to standard proportions
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.85f)
-                        .aspectRatio(3f / 4f)
-                ) {
-                    MatchCard(
-                        player = meAsPlayer,
-                        backgroundBrush = cardGradient,
-                        modifier = Modifier.fillMaxSize()
+            // 👇 Morph boundary Target
+            Box(
+                modifier = Modifier
+                    .sharedBounds(
+                        sharedContentState = rememberSharedContentState(key = "matchcard_transition"),
+                        animatedVisibilityScope = animatedVisibilityScope
                     )
-                }
+                    .fillMaxWidth(0.85f)
+                    .aspectRatio(3f / 4f)
+            ) {
+                MatchCard(
+                    player = meAsPlayer,
+                    backgroundBrush = cardGradient,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
 
-                Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
-                // Close Button
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.1f))
-                        .clickable { onDismiss() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
-                }
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.1f))
+                    .clickable { onDismiss() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
             }
         }
     }
 }
 
-// 👇 NEW: Edit Basic Info (Age & Level)
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun SharedTransitionScope.AvatarPreviewOverlay(
+    animatedVisibilityScope: AnimatedVisibilityScope,
+    username: String,
+    imageUrl: String?,
+    onEditClick: () -> Unit,
+    onDismissRequest: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.85f))
+            .pointerInput(Unit) { detectTapGestures { onDismissRequest() } },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // 👇 Morph boundary Target
+            Box(
+                modifier = Modifier
+                    .sharedBounds(
+                        sharedContentState = rememberSharedContentState(key = "avatar_transition"),
+                        animatedVisibilityScope = animatedVisibilityScope
+                    )
+                    .fillMaxWidth(0.85f)
+                    .aspectRatio(1f)
+                    .clip(CircleShape)
+                    .background(AppColors.SurfaceDark)
+                    .border(4.dp, Brush.linearGradient(colors = listOf(Color(0xFFFF4B4B), Color(0xFF9C27B0))), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!imageUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = imageUrl,
+                        contentDescription = "Full Screen Profile Picture",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Text(
+                        text = getInitials(username),
+                        color = AppColors.TextPrimary,
+                        fontSize = 80.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(48.dp))
+
+            Button(
+                onClick = {
+                    onEditClick()
+                    onDismissRequest()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.AccentOrange),
+                shape = RoundedCornerShape(24.dp),
+                contentPadding = PaddingValues(horizontal = 32.dp, vertical = 16.dp)
+            ) {
+                Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(12.dp))
+                Text("Upload Photo", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+        }
+
+        IconButton(
+            onClick = onDismissRequest,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 48.dp, end = 24.dp)
+                .background(Color.White.copy(alpha = 0.1f), CircleShape)
+        ) {
+            Icon(Icons.Default.Close, contentDescription = "Close Preview", tint = Color.White)
+        }
+    }
+}
+
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun SharedTransitionScope.ProfileHeader(
+    isAvatarExpanded: Boolean, // 👈 New: Drives source morph state
+    isMatchCardPreviewOpen: Boolean, // 👈 New: Drives source morph state
+    profileData: ProfileState.Success,
+    onPhotoEditClick: () -> Unit,
+    onUsernameEditClick: () -> Unit,
+    onBioEditClick: () -> Unit,
+    onPreviewMatchcardClick: () -> Unit,
+    onAvatarClick: () -> Unit
+) {
+    val username = profileData.name ?: "Player"
+    val imageUrl = profileData.imageUrl
+    val bio = profileData.bio ?: ""
+
+    val avatarGradient = Brush.linearGradient(colors = listOf(Color(0xFFFF4B4B), Color(0xFF9C27B0)))
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // 📦 FIXED SIZE WRAPPER: Prevents layout collapse when the avatar flies out
+        Box(modifier = Modifier.size(100.dp).clickable { onAvatarClick() }) {
+
+            // 👇 Morph boundary Source - Disappears exactly when the big one appears
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !isAvatarExpanded,
+                enter = fadeIn(tween(400)),
+                exit = fadeOut(tween(400))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .sharedBounds(
+                            sharedContentState = rememberSharedContentState(key = "avatar_transition"),
+                            animatedVisibilityScope = this@AnimatedVisibility
+                        )
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                        .background(AppColors.SurfaceDark)
+                        .border(4.dp, avatarGradient, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!imageUrl.isNullOrBlank()) {
+                        AsyncImage(model = imageUrl, contentDescription = "Profile Picture", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alignment = BiasAlignment(0f, 0f))
+                    } else {
+                        Text(text = getInitials(username), color = AppColors.TextPrimary, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            Box(modifier = Modifier.align(Alignment.BottomEnd).offset(x = (-2).dp, y = (-2).dp).clip(CircleShape).background(AppColors.Background).padding(3.dp)) {
+                Box(modifier = Modifier.size(26.dp).clip(CircleShape).clickable { onPhotoEditClick() }.background(AppColors.AccentOrange), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.CameraAlt, contentDescription = "Edit Profile Picture", tint = Color.White, modifier = Modifier.size(14.dp))
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onUsernameEditClick() }.padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Text(text = username, color = AppColors.TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(Icons.Default.Edit, contentDescription = "Edit Username", tint = AppColors.TextGray, modifier = Modifier.size(18.dp))
+        }
+
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onBioEditClick() }
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = bio.takeIf { it.isNotBlank() } ?: "Add a bio...",
+                color = if (bio.isNotBlank()) AppColors.TextPrimary else AppColors.TextGray,
+                fontSize = 14.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 📦 FIXED SIZE WRAPPER: Prevents UI jumping when button leaves
+        Box(modifier = Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
+
+            // 👇 Morph boundary Source - Disappears exactly when the big Matchcard appears
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !isMatchCardPreviewOpen,
+                enter = fadeIn(tween(400)),
+                exit = fadeOut(tween(400))
+            ) {
+                Button(
+                    onClick = { onPreviewMatchcardClick() },
+                    modifier = Modifier.sharedBounds(
+                        sharedContentState = rememberSharedContentState(key = "matchcard_transition"),
+                        animatedVisibilityScope = this@AnimatedVisibility
+                    ),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.AccentOrange.copy(alpha = 0.15f)),
+                    shape = RoundedCornerShape(16.dp),
+                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
+                ) {
+                    Icon(Icons.Default.Visibility, contentDescription = null, tint = AppColors.AccentOrange, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("PREVIEW MATCHCARD", color = AppColors.AccentOrange, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.sp)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+// --- STANDARD LEAF CORE SNEAK DIALOG LAYOUTS RETAINED BELOW (UNTOUCHED) ---
+
 @Composable
 fun EditBasicInfoDialog(
     initialBirthDate: String,
@@ -480,7 +669,6 @@ fun EditBasicInfoDialog(
             Text("Edit Basic Info", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 👇 1. Our new abstracted Date Picker Field
             NativeDatePickerField(
                 value = birthDate,
                 label = "BIRTH DATE",
@@ -489,7 +677,6 @@ fun EditBasicInfoDialog(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 👇 2. Our new abstracted Dropdown Field
             NativeDropdownField(
                 value = level,
                 label = "SKILL LEVEL",
@@ -509,7 +696,6 @@ fun EditBasicInfoDialog(
     }
 }
 
-// 👇 NEW: Basic Info Section UI
 @Composable
 private fun BasicInfoSection(
     profileData: ProfileState.Success,
@@ -538,7 +724,6 @@ private fun BasicInfoSection(
         val skillLevel = profileData.skillLevel ?: "Set level"
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Age Box
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -552,7 +737,6 @@ private fun BasicInfoSection(
                 Text(text = ageDisplay, color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
 
-            // Skill Level Box
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -597,181 +781,10 @@ private fun EditTextField(
 }
 
 @Composable
-private fun ProfileHeader(
-    profileData: ProfileState.Success,
-    onPhotoEditClick: () -> Unit,
-    onUsernameEditClick: () -> Unit,
-    onBioEditClick: () -> Unit,
-    onPreviewMatchcardClick: () -> Unit, // 👈 NEW
-    onAvatarClick: () -> Unit
-) {
-    val username = profileData.name ?: "Player"
-    val imageUrl = profileData.imageUrl
-    val bio = profileData.bio ?: ""
-
-    val avatarGradient = Brush.linearGradient(colors = listOf(Color(0xFFFF4B4B), Color(0xFF9C27B0)))
-
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(modifier = Modifier.size(100.dp).clickable { onAvatarClick() }) {
-            Box(
-                modifier = Modifier.fillMaxSize().clip(CircleShape).background(AppColors.SurfaceDark).border(4.dp, avatarGradient, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                if (!imageUrl.isNullOrBlank()) {
-                    AsyncImage(model = imageUrl, contentDescription = "Profile Picture", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alignment = BiasAlignment(0f, 0f))
-                } else {
-                    Text(text = getInitials(username), color = AppColors.TextPrimary, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            Box(modifier = Modifier.align(Alignment.BottomEnd).offset(x = (-2).dp, y = (-2).dp).clip(CircleShape).background(AppColors.Background).padding(3.dp)) {
-                Box(modifier = Modifier.size(26.dp).clip(CircleShape).clickable { onPhotoEditClick() }.background(AppColors.AccentOrange), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.CameraAlt, contentDescription = "Edit Profile Picture", tint = Color.White, modifier = Modifier.size(14.dp))
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // USERNAME
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onUsernameEditClick() }.padding(horizontal = 8.dp, vertical = 4.dp)
-        ) {
-            Text(text = username, color = AppColors.TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-            Spacer(modifier = Modifier.width(8.dp))
-            Icon(Icons.Default.Edit, contentDescription = "Edit Username", tint = AppColors.TextGray, modifier = Modifier.size(18.dp))
-        }
-
-        // BIO SECTION
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { onBioEditClick() }
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            Text(
-                text = bio.takeIf { it.isNotBlank() } ?: "Add a bio...",
-                color = if (bio.isNotBlank()) AppColors.TextPrimary else AppColors.TextGray,
-                fontSize = 14.sp,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 👇 NEW: PREVIEW MATCHCARD BUTTON
-        Button(
-            onClick = { onPreviewMatchcardClick() },
-            colors = ButtonDefaults.buttonColors(containerColor = AppColors.AccentOrange.copy(alpha = 0.15f)),
-            shape = RoundedCornerShape(16.dp),
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
-            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
-        ) {
-            Icon(Icons.Default.Visibility, contentDescription = null, tint = AppColors.AccentOrange, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("PREVIEW MATCHCARD", color = AppColors.AccentOrange, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.sp)
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-    }
-}
-
-// ... All existing Dialogs (EditUsernameDialog, EditBioDialog, EditGearDialog, AvatarPreviewDialog, AvatarFramerDialog, StatsGrid, GearSection, etc.) stay exactly the same down here!
-
-@Composable
-private fun AvatarPreviewDialog(
-    username: String,
-    imageUrl: String?,
-    onEditClick: () -> Unit,
-    onDismissRequest: () -> Unit
-) {
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onDismissRequest,
-        properties = androidx.compose.ui.window.DialogProperties(
-            usePlatformDefaultWidth = false
-        )
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.8f))
-                .clickable(
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                    indication = null,
-                    onClick = onDismissRequest
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            // --- 2. THE ALMOST FULL-SCREEN PHOTO CARD ---
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .aspectRatio(1f) // Perfect square
-                    .clip(RoundedCornerShape(32.dp))
-                    .background(AppColors.SurfaceDark)
-                    .clickable(enabled = false) {}
-                    .border(2.dp, Brush.linearGradient(colors = listOf(Color(0xFFFF4B4B).copy(alpha = 0.1f), Color(0xFF9C27B0).copy(alpha = 0.1f))), RoundedCornerShape(32.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                if (!imageUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = imageUrl,
-                        contentDescription = "Full Screen Profile Picture",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Text(
-                        text = getInitials(username),
-                        color = AppColors.TextPrimary,
-                        fontSize = 80.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        modifier = Modifier.padding(32.dp)
-                    )
-                }
-            }
-
-            // --- 3. FLOATING CLOSE BUTTON (Top Right) ---
-            IconButton(
-                onClick = onDismissRequest,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 40.dp, end = 24.dp)
-                    .background(Color.Black.copy(alpha = 0.4f), CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close Preview",
-                    tint = Color.White
-                )
-            }
-
-            // --- 4. THE EDIT PHOTO BUTTON (Bottom Center) ---
-            Button(
-                onClick = {
-                    onEditClick()
-                    onDismissRequest()
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 60.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = AppColors.AccentOrange),
-                shape = RoundedCornerShape(24.dp)
-            ) {
-                Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Edit Photo", color = Color.White, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
-
-@Composable
 fun AvatarFramerDialog(
-    imageBytes: ByteArray, // The image they just picked
+    imageBytes: ByteArray,
     onDismiss: () -> Unit,
-    onConfirm: (Float) -> Unit // Returns the Y-Bias they chose
+    onConfirm: (Float) -> Unit
 ) {
     var verticalBias by remember { mutableStateOf(0f) }
 
@@ -790,8 +803,8 @@ fun AvatarFramerDialog(
             Box(
                 modifier = Modifier
                     .fillMaxWidth(0.8f)
-                    .aspectRatio(1f) // Strict 1:1 Square
-                    .clip(CircleShape) // Show it exactly how the profile will look
+                    .aspectRatio(1f)
+                    .clip(CircleShape)
                     .border(2.dp, AppColors.AccentOrange, CircleShape)
             ) {
                 AsyncImage(
@@ -806,10 +819,11 @@ fun AvatarFramerDialog(
             Spacer(modifier = Modifier.height(24.dp))
 
             Text("Adjust Position", color = Color.Gray, fontSize = 14.sp)
+            Spacer(modifier = Modifier.height(4.dp))
             Slider(
                 value = verticalBias,
                 onValueChange = { verticalBias = it },
-                valueRange = -1f..1f, // -1 is Top, 1 is Bottom
+                valueRange = -1f..1f,
                 colors = SliderDefaults.colors(
                     thumbColor = AppColors.AccentOrange,
                     activeTrackColor = AppColors.AccentOrange
@@ -837,7 +851,7 @@ fun AvatarFramerDialog(
 @Composable
 private fun GearSection(
     profileData: ProfileState.Success,
-    onGearEditClick: () -> Unit // 👇 Callback for gear edit
+    onGearEditClick: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -850,7 +864,6 @@ private fun GearSection(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // 👇 Edit Button for gear
             IconButton(onClick = onGearEditClick, modifier = Modifier.size(24.dp)) {
                 Icon(Icons.Default.Edit, contentDescription = "Edit Gear", tint = AppColors.TextGray, modifier = Modifier.size(20.dp))
             }
@@ -925,13 +938,12 @@ private fun SettingsAndLogout(
     onChangeAppThemeStyle: (AppThemeStyle) -> Unit,
     onChangeAppIcon: (PremiumAppIcon) -> Unit,
     viewModel: ProfileViewModel,
-    snackbarHostState: SnackbarHostState, // 👈 Accept the state
+    snackbarHostState: SnackbarHostState,
     tokenStorage: TokenStorage = koinInject()
 ) {
-    val scope = rememberCoroutineScope() // 👈 Add a coroutine scope for the snackbar
+    val scope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // 👇 ITT VAN A TÉMAVÁLASZTÓ KÁRTYA SZEKCIÓ
         PremiumThemeSelector(
             currentThemeStyle = currentAppThemeStyle,
             isUserPremium = isUserPremium,
@@ -965,16 +977,13 @@ private fun SettingsAndLogout(
         Spacer(modifier = Modifier.height(12.dp))
 
         if (isIosPlatform()) {
-            // 👇 The cleanly styled Reset Map Choice Button
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(AppColors.SurfaceDark) // Matches Language/Theme background
+                    .background(AppColors.SurfaceDark)
                     .clickable {
                         tokenStorage.clearMapChoice()
-
-                        // Fire the snackbar action!
                         scope.launch {
                             snackbarHostState.showSnackbar(
                                 message = "Map preference reset successfully",
@@ -983,9 +992,8 @@ private fun SettingsAndLogout(
                         }
                     }
                     .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically // Standard left-alignment
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // More accurate Map icon matching the selector style
                 Icon(
                     Icons.Default.Map,
                     contentDescription = "Reset Map Choice",
@@ -1000,11 +1008,9 @@ private fun SettingsAndLogout(
                     fontWeight = FontWeight.Bold
                 )
             }
-
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        // Logout Button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
