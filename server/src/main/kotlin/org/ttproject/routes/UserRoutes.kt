@@ -136,6 +136,56 @@ fun Route.userRoutes(badgeService: BadgeService) {
                 }
             }
 
+            post("/{playerId}/swipe") {
+                val principal = call.principal<JWTPrincipal>()
+                val currentUserId = principal?.payload?.getClaim("userId")?.asString()
+
+                if (currentUserId == null) {
+                    call.respond(HttpStatusCode.Unauthorized, "Invalid token")
+                    return@post
+                }
+
+                val targetPlayerId = call.parameters["playerId"] ?: return@post call.respond(
+                    HttpStatusCode.BadRequest,
+                    "Missing playerId in URL"
+                )
+
+                val swipeRequest = try {
+                    call.receive<SwipeRequest>()
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, "Invalid JSON format")
+                    return@post
+                }
+
+                val matchService = MatchService()
+                val isMatch = matchService.processSwipe(
+                    swiperId = currentUserId,
+                    targetId = targetPlayerId,
+                    isLiked = swipeRequest.isLiked
+                )
+
+                val swiperUuid = UUID.fromString(currentUserId)
+                val targetUuid = UUID.fromString(targetPlayerId)
+
+                badgeService.incrementMetric(
+                    userIdParam = swiperUuid,
+                    column = UserBadgeMetrics.profileSwipes
+                )
+
+                if (isMatch) {
+                    badgeService.incrementMetric(
+                        userIdParam = swiperUuid,
+                        column = UserBadgeMetrics.successfulMatches
+                    )
+                    badgeService.incrementMetric(
+                        userIdParam = targetUuid,
+                        column = UserBadgeMetrics.successfulMatches
+                    )
+                }
+
+                call.respond(HttpStatusCode.OK, SwipeResponse(isMatch = isMatch))
+            }
+
 // 2. 👇 NEW: DELETE Route to clear out swipe metrics and support premium undo operations
             delete("/{playerId}/swipe") {
                 val principal = call.principal<JWTPrincipal>()

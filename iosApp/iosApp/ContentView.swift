@@ -82,44 +82,94 @@ struct ComposeTabViewControllerRepresentable: UIViewControllerRepresentable {
 }
 
 // MARK: - Main Native Tab Layout View
+struct CustomTabBarItem: View {
+    let tab: String
+    let icon: String
+    let label: String
+    @Binding var selectedTab: String
+    let tintColor: Color
+    
+    var isSelected: Bool {
+        selectedTab == tab
+    }
+    
+    var body: some View {
+        Button(action: {
+            selectedTab = tab
+        }) {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 22, weight: isSelected ? .semibold : .regular))
+                    .foregroundStyle(isSelected ? tintColor : Color.secondary)
+                
+                Text(label)
+                    .font(.system(size: 10, weight: isSelected ? .medium : .regular))
+                    .foregroundStyle(isSelected ? tintColor : Color.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct CustomTabBar: View {
+    @Binding var selectedTab: String
+    let tintColor: Color
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            Divider()
+                .background(Color.primary.opacity(0.1))
+            
+            HStack(spacing: 0) {
+                CustomTabBarItem(tab: "map", icon: "map.fill", label: "Map", selectedTab: $selectedTab, tintColor: tintColor)
+                CustomTabBarItem(tab: "match", icon: "bolt.fill", label: "Match", selectedTab: $selectedTab, tintColor: tintColor)
+                CustomTabBarItem(tab: "messages", icon: "bubble.left.and.bubble.right.fill", label: "Messages", selectedTab: $selectedTab, tintColor: tintColor)
+                CustomTabBarItem(tab: "profile", icon: "person.crop.circle.fill", label: "Profile", selectedTab: $selectedTab, tintColor: tintColor)
+            }
+            .padding(.top, 8)
+            .padding(.bottom, 8)
+        }
+        .background(.ultraThinMaterial)
+    }
+}
+
 struct ContentView: View {
     @StateObject var appState = AppState()
 
     var body: some View {
-        // 🌟 Fix: Wrap the TabView inside an outer GeometryReader and ZStack
-        // to handle the edge-to-edge content sliding animation properly.
         GeometryReader { geometry in
             ZStack(alignment: .bottom) {
-
                 TabView(selection: $appState.currentTab) {
                     ComposeTabViewControllerRepresentable(tabName: "map", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
                         .ignoresSafeArea()
-                        .tabItem { Label("Map", systemImage: "map.fill") }
+                        .toolbar(.hidden, for: .tabBar)
                         .tag("map")
 
                     ComposeTabViewControllerRepresentable(tabName: "match", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
                         .ignoresSafeArea()
-                        .tabItem { Label("Match", systemImage: "bolt.fill") }
+                        .toolbar(.hidden, for: .tabBar)
                         .tag("match")
 
                     ComposeTabViewControllerRepresentable(tabName: "messages", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
                         .ignoresSafeArea()
-                        .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
+                        .toolbar(.hidden, for: .tabBar)
                         .tag("messages")
 
                     ComposeTabViewControllerRepresentable(tabName: "profile", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
                         .ignoresSafeArea()
-                        .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
+                        .toolbar(.hidden, for: .tabBar)
                         .tag("profile")
                 }
-                .tint(appState.tabTintColor)
-                // 👈 1. Force the layout bar to disappear via the core view controller context state modifier
-                .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
-                // 👈 2. Add an explicit frame offset animation so the transition slides off smoothly
-                // instead of snapping instantly and leaving an awkward white block at the bottom
-                .offset(y: appState.isTabBarHidden ? geometry.safeAreaInsets.bottom + 49 : 0)
-                .animation(.spring(response: 0.35, dampingFraction: 0.82), value: appState.isTabBarHidden)
+
+                CustomTabBar(selectedTab: $appState.currentTab, tintColor: appState.tabTintColor)
+                    .offset(y: appState.isTabBarHidden ? 120 + geometry.safeAreaInsets.bottom : 0)
+                    .opacity(appState.isTabBarHidden ? 0.0 : 1.0)
+                    .disabled(appState.isTabBarHidden)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.82), value: appState.isTabBarHidden)
             }
+            .ignoresSafeArea(.keyboard)
         }
         .fullScreenCover(item: $appState.galleryData) { data in
             NativeSwiftGalleryView(data: data)
@@ -127,6 +177,7 @@ struct ContentView: View {
         }
     }
 }
+
 
 // MARK: - UIKIT Bridge Components
 struct TransparentBackground: UIViewRepresentable {

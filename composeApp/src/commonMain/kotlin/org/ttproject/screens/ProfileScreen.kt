@@ -231,11 +231,27 @@ fun ProfileScreen(
             SharedTransitionLayout {
                 Box(modifier = Modifier.fillMaxSize()) {
 
+                    val topPadding = if (isIosPlatform()) {
+                        WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+                    } else {
+                        32.dp
+                    }
+                    val bottomPadding = if (isIosPlatform()) {
+                        0.dp
+                    } else {
+                        80.dp
+                    }
+
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(scrollState)
-                            .padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 80.dp),
+                            .padding(
+                                start = 24.dp,
+                                end = 24.dp,
+                                top = topPadding,
+                                bottom = bottomPadding
+                            ),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         AnimatedVisibility(
@@ -564,7 +580,7 @@ private fun SharedTransitionScope.ProfileHeader(
                     if (!imageUrl.isNullOrBlank()) {
                         AsyncImage(model = imageUrl, contentDescription = "Profile Picture", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alignment = BiasAlignment(0f, 0f))
                     } else {
-                        Text(text = getInitials(username), color = Color.Black, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                        Text(text = getInitials(username), color = AppColors.TextPrimary, fontSize = 32.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -582,7 +598,7 @@ private fun SharedTransitionScope.ProfileHeader(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onUsernameEditClick() }.padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
-            Text(text = username, color = Color.Black, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+            Text(text = username, color = AppColors.TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
             Spacer(modifier = Modifier.width(8.dp))
             Icon(Icons.Default.Edit, contentDescription = "Edit Username", tint = AppColors.TextGray, modifier = Modifier.size(18.dp))
         }
@@ -595,7 +611,7 @@ private fun SharedTransitionScope.ProfileHeader(
         ) {
             Text(
                 text = bio.takeIf { it.isNotBlank() } ?: "Add a bio...",
-                color = if (bio.isNotBlank()) Color.Black else AppColors.TextGray,
+                color = if (bio.isNotBlank()) AppColors.TextPrimary else AppColors.TextGray,
                 fontSize = 14.sp,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
@@ -665,7 +681,7 @@ fun EditBasicInfoDialog(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Edit Basic Info", color = Color.Black, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("Edit Basic Info", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(24.dp))
 
             NativeDatePickerField(
@@ -685,10 +701,10 @@ fun EditBasicInfoDialog(
 
             Spacer(modifier = Modifier.height(24.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text(stringResource(SharedRes.string.cancel), color = Color.Black) }
+                TextButton(onClick = onDismiss) { Text(stringResource(SharedRes.string.cancel), color = AppColors.TextPrimary) }
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(onClick = { onSave(birthDate, level) }, colors = ButtonDefaults.buttonColors(containerColor = AppColors.AccentOrange)) {
-                    Text(stringResource(SharedRes.string.save), color = Color.Black)
+                    Text(stringResource(SharedRes.string.save), color = AppColors.TextPrimary)
                 }
             }
         }
@@ -707,7 +723,7 @@ private fun BasicInfoSection(
         ) {
             Icon(Icons.Default.Person, contentDescription = null, tint = AppColors.TextGray, modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("BASIC INFO", color = Color.Black, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("BASIC INFO", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -733,7 +749,7 @@ private fun BasicInfoSection(
             ) {
                 Text(text = "AGE", color = AppColors.TextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(text = ageDisplay, color = Color.Black, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(text = ageDisplay, color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
 
             Column(
@@ -768,10 +784,10 @@ private fun EditTextField(
             modifier = modifier.fillMaxWidth(),
             singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.Black,
-                unfocusedTextColor = Color.Black,
+                focusedTextColor = AppColors.TextPrimary,
+                unfocusedTextColor = AppColors.TextPrimary,
                 focusedBorderColor = AppColors.AccentOrange,
-                unfocusedBorderColor = Color.Black.copy(alpha = 0.3f),
+                unfocusedBorderColor = AppColors.TextPrimary.copy(alpha = 0.3f),
                 cursorColor = AppColors.AccentOrange
             ),
             shape = RoundedCornerShape(12.dp)
@@ -796,7 +812,7 @@ fun AvatarFramerDialog(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Frame Your Avatar", color = Color.Black, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("Frame Your Avatar", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(24.dp))
 
             Box(
@@ -817,7 +833,7 @@ fun AvatarFramerDialog(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Text("Adjust Position", color = Color.Black, fontSize = 14.sp)
+            Text("Adjust Position", color = AppColors.TextPrimary, fontSize = 14.sp)
             Spacer(modifier = Modifier.height(4.dp))
             Slider(
                 value = verticalBias,
@@ -833,14 +849,14 @@ fun AvatarFramerDialog(
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = Color.Black)
+                    Text("Cancel", color = AppColors.TextPrimary)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(
                     onClick = { onConfirm(verticalBias) },
                     colors = ButtonDefaults.buttonColors(containerColor = AppColors.AccentOrange)
                 ) {
-                    Text("Save & Upload", color = Color.Black)
+                    Text("Save & Upload", color = AppColors.TextPrimary)
                 }
             }
         }
@@ -859,7 +875,7 @@ private fun GearSection(
         ) {
             Icon(Icons.Default.Build, contentDescription = null, tint = AppColors.TextGray, modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text(stringResource(SharedRes.string.my_gear), color = Color.Black, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(SharedRes.string.my_gear), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -919,7 +935,7 @@ private fun GearItem(
         Column {
             Text(text = label, color = AppColors.TextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
             Spacer(modifier = Modifier.height(2.dp))
-            Text(text = value, color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(text = value, color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -963,7 +979,7 @@ private fun SettingsAndLogout(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = if (isUserPremium) "Premium Account Active" else "Upgrade to Premium",
-                    color = Color.Black,
+                    color = AppColors.TextPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -1036,7 +1052,7 @@ private fun SettingsAndLogout(
                 Spacer(modifier = Modifier.width(16.dp))
                 Text(
                     "Reset Map Choice",
-                    color = Color.Black,
+                    color = AppColors.TextPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -1093,7 +1109,7 @@ private fun LanguageSelector(
         ) {
             Icon(Icons.Default.Language, contentDescription = null, tint = TextGray, modifier = Modifier.size(24.dp))
             Spacer(modifier = Modifier.width(16.dp))
-            Text(stringResource(SharedRes.string.language), color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(SharedRes.string.language), color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -1104,7 +1120,7 @@ private fun LanguageSelector(
 
         AnimatedVisibility(visible = expanded, enter = expandVertically(expandFrom = Alignment.Top), exit = shrinkVertically(shrinkTowards = Alignment.Top)) {
             Column(modifier = Modifier.fillMaxWidth().clipToBounds().padding(bottom = 8.dp)) {
-                HorizontalDivider(color = Color.Black.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(color = AppColors.TextPrimary.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp))
                 LanguageOptionRow("English", currentLanguage == "en") { viewModel.changeLanguage("en"); onChangeLanguage("en"); viewModel.fetchUserProfile(); expanded = false }
                 LanguageOptionRow("Magyar", currentLanguage == "hu") { viewModel.changeLanguage("hu"); onChangeLanguage("hu"); viewModel.fetchUserProfile(); expanded = false }
             }
@@ -1114,7 +1130,7 @@ private fun LanguageSelector(
 
 @Composable
 private fun LanguageOptionRow(text: String, isSelected: Boolean, onClick: () -> Unit) {
-    val textColor = if (isSelected) AppColors.AccentOrange else Color.Black
+    val textColor = if (isSelected) AppColors.AccentOrange else AppColors.TextPrimary
     val fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
 
     Row(
@@ -1149,7 +1165,7 @@ private fun ThemeSelector(currentThemeMode: ThemeMode, onChangeTheme: (ThemeMode
         ) {
             Icon(Icons.Default.Palette, contentDescription = null, tint = AppColors.TextGray, modifier = Modifier.size(24.dp))
             Spacer(modifier = Modifier.width(16.dp))
-            Text(stringResource(SharedRes.string.theme), color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(SharedRes.string.theme), color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -1160,7 +1176,7 @@ private fun ThemeSelector(currentThemeMode: ThemeMode, onChangeTheme: (ThemeMode
 
         AnimatedVisibility(visible = expanded, enter = expandVertically(expandFrom = Alignment.Top), exit = shrinkVertically(shrinkTowards = Alignment.Top)) {
             Column(modifier = Modifier.fillMaxWidth().clipToBounds().padding(bottom = 8.dp)) {
-                HorizontalDivider(color = Color.Black.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(color = AppColors.TextPrimary.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp))
                 ThemeOptionRow(stringResource(SharedRes.string.system_default), currentThemeMode == ThemeMode.System) { onChangeTheme(ThemeMode.System) }
                 ThemeOptionRow(stringResource(SharedRes.string.light), currentThemeMode == ThemeMode.Light) { onChangeTheme(ThemeMode.Light) }
                 ThemeOptionRow(stringResource(SharedRes.string.dark), currentThemeMode == ThemeMode.Dark) { onChangeTheme(ThemeMode.Dark) }
@@ -1171,7 +1187,7 @@ private fun ThemeSelector(currentThemeMode: ThemeMode, onChangeTheme: (ThemeMode
 
 @Composable
 private fun ThemeOptionRow(text: String, isSelected: Boolean, onClick: () -> Unit) {
-    val textColor = if (isSelected) AppColors.AccentOrange else Color.Black
+    val textColor = if (isSelected) AppColors.AccentOrange else AppColors.TextPrimary
     val fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
 
     Row(
@@ -1215,7 +1231,7 @@ fun EditUsernameDialog(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Edit Username", color = Color.Black, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("Edit Username", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(24.dp))
 
             EditTextField(
@@ -1226,10 +1242,10 @@ fun EditUsernameDialog(
 
             Spacer(modifier = Modifier.height(24.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text(stringResource(SharedRes.string.cancel), color = Color.Black) }
+                TextButton(onClick = onDismiss) { Text(stringResource(SharedRes.string.cancel), color = AppColors.TextPrimary) }
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(onClick = { onSave(name) }, colors = ButtonDefaults.buttonColors(containerColor = AppColors.AccentOrange)) {
-                    Text(stringResource(SharedRes.string.save), color = Color.Black)
+                    Text(stringResource(SharedRes.string.save), color = AppColors.TextPrimary)
                 }
             }
         }
@@ -1267,7 +1283,7 @@ fun EditBioDialog(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Edit Bio", color = Color.Black, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("Edit Bio", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(24.dp))
 
             OutlinedTextField(
@@ -1280,8 +1296,8 @@ fun EditBioDialog(
                 maxLines = 5,
                 placeholder = { Text("Tell everyone a bit about your playstyle...", color = AppColors.TextGray.copy(alpha = 0.5f)) },
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.Black, unfocusedTextColor = Color.Black,
-                    focusedBorderColor = AppColors.AccentOrange, unfocusedBorderColor = Color.Black.copy(alpha = 0.3f),
+                    focusedTextColor = AppColors.TextPrimary, unfocusedTextColor = AppColors.TextPrimary,
+                    focusedBorderColor = AppColors.AccentOrange, unfocusedBorderColor = AppColors.TextPrimary.copy(alpha = 0.3f),
                     cursorColor = AppColors.AccentOrange
                 ),
                 shape = RoundedCornerShape(12.dp)
@@ -1289,10 +1305,10 @@ fun EditBioDialog(
 
             Spacer(modifier = Modifier.height(24.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text(stringResource(SharedRes.string.cancel), color = Color.Black) }
+                TextButton(onClick = onDismiss) { Text(stringResource(SharedRes.string.cancel), color = AppColors.TextPrimary) }
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(onClick = { onSave(bio) }, colors = ButtonDefaults.buttonColors(containerColor = AppColors.AccentOrange)) {
-                    Text(stringResource(SharedRes.string.save), color = Color.Black)
+                    Text(stringResource(SharedRes.string.save), color = AppColors.TextPrimary)
                 }
             }
         }
@@ -1334,7 +1350,7 @@ fun EditGearDialog(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Edit Gear", color = Color.Black, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("Edit Gear", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(24.dp))
 
             EditTextField(
@@ -1350,10 +1366,10 @@ fun EditGearDialog(
 
             Spacer(modifier = Modifier.height(24.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text(stringResource(SharedRes.string.cancel), color = Color.Black) }
+                TextButton(onClick = onDismiss) { Text(stringResource(SharedRes.string.cancel), color = AppColors.TextPrimary) }
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(onClick = { onSave(blade, forehand, backhand) }, colors = ButtonDefaults.buttonColors(containerColor = AppColors.AccentOrange)) {
-                    Text(stringResource(SharedRes.string.save), color = Color.Black)
+                    Text(stringResource(SharedRes.string.save), color = AppColors.TextPrimary)
                 }
             }
         }

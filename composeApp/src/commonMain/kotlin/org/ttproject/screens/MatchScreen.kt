@@ -11,6 +11,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -511,24 +513,107 @@ fun LikesYouPopupOverlay(
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("No likes yet! Keep swiping.", color = Color.Gray, fontSize = 16.sp)
                     }
-                }
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(displayPlayers.size) { index ->
-                        val player = displayPlayers[index]
-
-                        Box(
-                            modifier = Modifier
-                                .aspectRatio(3f / 4f)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(AppColors.SurfaceDark)
-                                .clickable(enabled = isPremiumUser) { onSelectPlayer(player) }
+                } else {
+                    if (isPremiumUser) {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(2),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxSize()
                         ) {
-                            MatchCardContent(player = player, backgroundBrush = cardGradient)
+                            items(displayPlayers.size) { index ->
+                                val player = displayPlayers[index]
+
+                                Box(
+                                    modifier = Modifier
+                                        .aspectRatio(3f / 4f)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(AppColors.SurfaceDark)
+                                        .clickable { onSelectPlayer(player) }
+                                ) {
+                                    MatchCardContent(player = player, backgroundBrush = cardGradient)
+                                }
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(displayPlayers) { player ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(AppColors.SurfaceDark.copy(alpha = 0.6f))
+                                        .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(16.dp))
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(56.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.White.copy(alpha = 0.05f))
+                                    ) {
+                                        if (!player.imageUrl.isNullOrBlank()) {
+                                            AsyncImage(
+                                                model = player.imageUrl,
+                                                contentDescription = null,
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .blur(16.dp),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                        } else {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(AppColors.AccentOrange.copy(alpha = 0.2f))
+                                                    .blur(16.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(16.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = player.username ?: "Someone Special",
+                                            color = Color.White,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.blur(10.dp)
+                                        )
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+
+                                        Text(
+                                            text = "${player.skillLevel} • ${player.distanceKm} km away",
+                                            color = Color.Gray,
+                                            fontSize = 13.sp,
+                                            modifier = Modifier.blur(8.dp)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(12.dp))
+
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFFFD700).copy(alpha = 0.1f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Star,
+                                            contentDescription = "Locked",
+                                            tint = Color(0xFFFFD700),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

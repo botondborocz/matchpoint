@@ -60,9 +60,8 @@ class UserRepositoryImpl(
         if (response.status.value in 200..299) {
             val userProfile: UserProfile = response.body()
             tokenStorage.saveUserId(userProfile.id)
-            val mergedPremium = userProfile.isPremium || tokenStorage.getPremiumStatus()
-            tokenStorage.savePremiumStatus(mergedPremium)
-            return userProfile.copy(isPremium = mergedPremium)
+            tokenStorage.savePremiumStatus(userProfile.isPremium)
+            return userProfile
         } else if (response.status.value == 401) {
             throw Exception("Session expired. Please log in again.")
         } else {
