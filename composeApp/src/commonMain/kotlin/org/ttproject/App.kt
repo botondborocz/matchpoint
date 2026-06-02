@@ -53,6 +53,11 @@ import org.ttproject.util.SetStatusBarColors
 import org.ttproject.util.ThemeMode
 import org.ttproject.util.changePlatformLanguage
 import org.ttproject.viewmodel.ChatViewModel
+import org.ttproject.viewmodel.LoginViewModel
+import org.ttproject.viewmodel.ProfileViewModel
+import org.ttproject.viewmodel.MatchViewModel
+import org.ttproject.viewmodel.LocationViewModel
+import org.ttproject.viewmodel.MessagesViewModel
 
 enum class AuthRoute {
     Login, Register
@@ -77,17 +82,27 @@ fun App(
     val appIconManager: AppIconManager = koinInject()
     val rootNavController = rememberNavController()
 
-    // 👇 NEW: Listen to navigation changes and tell iOS when we are on a detail screen
-    LaunchedEffect(rootNavController) {
-        rootNavController.addOnDestinationChangedListener { _, destination, _ ->
-            // If the current destination route is NOT HomeBase, it means we pushed a sub-screen!
-            val isDetailScreen = !destination.hasRoute(HomeBase::class)
-            onSubScreenVisibilityChanged(isDetailScreen)
-        }
-    }
+    val loginViewModel: LoginViewModel = koinViewModel()
+    val profileViewModel: ProfileViewModel = koinViewModel()
+    val matchViewModel: MatchViewModel = koinViewModel()
+    val locationViewModel: LocationViewModel = koinViewModel()
+    val messagesViewModel: MessagesViewModel = koinViewModel()
 
     var isMapNavBarVisible by remember { mutableStateOf(true) }
     var currentTabRoute by remember { mutableStateOf<NavRoute>(NavRoute.Map) }
+    var isDetailScreen by remember { mutableStateOf(false) }
+
+    LaunchedEffect(rootNavController) {
+        rootNavController.addOnDestinationChangedListener { _, destination, _ ->
+            isDetailScreen = !destination.hasRoute(HomeBase::class)
+        }
+    }
+
+    LaunchedEffect(isDetailScreen, currentTabRoute, isMapNavBarVisible) {
+        val shouldHideTabBar = isDetailScreen || (currentTabRoute == NavRoute.Map && !isMapNavBarVisible)
+        onSubScreenVisibilityChanged(shouldHideTabBar)
+    }
+
     val loadedTabs = remember { mutableStateListOf<NavRoute>(NavRoute.Map) }
     var isLoggedIn by remember { mutableStateOf(tokenStorage.getToken() != null) }
     var playMessagesAnimation by remember { mutableStateOf(true) }
@@ -269,6 +284,7 @@ fun App(
                                                 NavRoute.Map -> {
                                                     Box(modifier = Modifier.fillMaxSize()) {
                                                         MapScreen(
+                                                            viewModel = locationViewModel,
                                                             bottomNavHeight = frozenBottomPadding,
                                                             systemNavHeight = systemNavPadding,
                                                             onNavBarVisibilityChange = { isVisible ->
@@ -280,6 +296,7 @@ fun App(
                                                 NavRoute.Match -> {
                                                     Box(modifier = Modifier.fillMaxSize().padding(top = innerPadding.calculateTopPadding()).padding(bottom = frozenBottomPadding)) {
                                                         MatchScreen(
+                                                            viewModel = matchViewModel,
                                                             onNavigateToLogin = {
                                                                 currentAuthRoute = AuthRoute.Login
                                                                 onTabNavigate(NavRoute.Profile)
@@ -299,6 +316,7 @@ fun App(
                                                 NavRoute.Messages -> {
                                                     Box(modifier = Modifier.fillMaxSize().padding(top = innerPadding.calculateTopPadding())) {
                                                         MessagesScreen(
+                                                            viewModel = messagesViewModel,
                                                             playAnimation = playMessagesAnimation,
                                                             bottomNavPadding = frozenBottomPadding,
                                                             onNavigateToChat = { chatId, otherUsername, otherUserImageUrl, themeName ->
@@ -315,9 +333,16 @@ fun App(
                                                                 currentLanguage = currentLanguage,
                                                                 currentThemeMode = currentThemeMode,
                                                                 currentAppIcon = currentAppIcon,
+                                                                viewModel = profileViewModel,
                                                                 onLogoutClick = {
                                                                     tokenStorage.clearToken()
-                                                                    tokenStorage.clearLanguage()
+                                                                    tokenStorage.clearUserId()
+                                                                    tokenStorage.clearPremiumStatus()
+                                                                    profileViewModel.clearData()
+                                                                    matchViewModel.clearData()
+                                                                    locationViewModel.clearData()
+                                                                    messagesViewModel.clearData()
+                                                                    loginViewModel.resetState()
                                                                     isLoggedIn = false
                                                                 },
                                                                 onChangeLanguage = { newLangCode ->

@@ -57,9 +57,11 @@ class ProfileViewModel(
         fetchUserProfile()
     }
 
-    fun fetchUserProfile() {
+    fun fetchUserProfile(showLoading: Boolean = true) {
         viewModelScope.launch {
-            _uiState.value = ProfileState.Loading
+            if (showLoading || _uiState.value !is ProfileState.Success) {
+                _uiState.value = ProfileState.Loading
+            }
             try {
                 // 1. Fetch the main profile data
                 val user = userRepository.getMyProfile()
@@ -82,7 +84,9 @@ class ProfileViewModel(
                     badgeMetrics = metrics, isPremium = user.isPremium
                 )
             } catch (e: Exception) {
-                _uiState.value = ProfileState.Error("Failed to load profile: ${e.message}")
+                if (_uiState.value !is ProfileState.Success) {
+                    _uiState.value = ProfileState.Error("Failed to load profile: ${e.message}")
+                }
             }
         }
     }
@@ -124,8 +128,9 @@ class ProfileViewModel(
         }
     }
 
-    fun clearProfile() {
+    fun clearData() {
         _uiState.value = ProfileState.Loading
+        _updateState.value = UpdateState.Idle
     }
 
     fun changeLanguage(newLanguage: String) {

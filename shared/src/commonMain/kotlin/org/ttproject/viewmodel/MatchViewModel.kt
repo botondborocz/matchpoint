@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.ttproject.data.Player
 import org.ttproject.repository.MatchRepository
+import org.ttproject.repository.UserRepository
 import org.ttproject.util.NotificationEventBus
 
 sealed class MatchUiState {
@@ -18,7 +19,8 @@ sealed class MatchUiState {
 }
 
 class MatchViewModel(
-    private val repository: MatchRepository
+    private val repository: MatchRepository,
+    private val userRepository: UserRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<MatchUiState>(MatchUiState.Loading)
@@ -32,26 +34,68 @@ class MatchViewModel(
     val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
     private var lastSwipedPlayer: Player? = null
 
+    private val _isPremiumUser = MutableStateFlow(false)
+    val isPremiumUser: StateFlow<Boolean> = _isPremiumUser.asStateFlow()
+
     init {
         loadPlayers()
+        checkPremiumStatus()
     }
 
-    fun loadPlayers() {
+    fun checkPremiumStatus() {
         viewModelScope.launch {
-            _uiState.value = MatchUiState.Loading
+            try {
+                val profile = userRepository.getMyProfile()
+                _isPremiumUser.value = profile.isPremium
+            } catch (e: Exception) {
+                _isPremiumUser.value = false
+            }
+        }
+    }
+
+    fun togglePremiumStatus() {
+        viewModelScope.launch {
+            val result = userRepository.togglePremiumStatus()
+            if (result.isSuccess) {
+                val newStatus = result.getOrNull() ?: false
+                _isPremiumUser.value = newStatus
+                loadLikesFeed()
+                loadPlayers()
+            }
+        }
+    }
+
+    fun loadPlayers(showLoading: Boolean = true) {
+        viewModelScope.launch {
+            if (showLoading || _uiState.value !is MatchUiState.Success) {
+                _uiState.value = MatchUiState.Loading
+            }
             try {
                 val players = repository.getNearbyPlayers()
                 _uiState.value = MatchUiState.Success(players)
             } catch (e: Exception) {
-                _uiState.value = MatchUiState.Error(e.message ?: "Unknown error")
+                if (_uiState.value !is MatchUiState.Success) {
+                    _uiState.value = MatchUiState.Error(e.message ?: "Unknown error")
+                }
             }
         }
+    }
+
+    fun clearData() {
+        _uiState.value = MatchUiState.Loading
+        _matchedPlayer.value = null
+        _canUndo.value = false
+        lastSwipedPlayer = null
+        _isPremiumUser.value = false
+        _likedMePlayers.value = emptyList()
+        _isShowingLikesTab.value = false
     }
 
     fun onPlayerSwiped(player: Player, isLiked: Boolean) {
         // Save swipe context state variables locally before updating the stack array
         lastSwipedPlayer = player
-        _canUndo.value = player.isPremium // 👈 Only premium users get to activate this tracking hook
+        _canUndo.value = true // 👈 Available for everyone to click (opens paywall if not premium)
+
 
         _uiState.update { currentState ->
             if (currentState is MatchUiState.Success) {

@@ -25,4 +25,7 @@ class IosTokenStorage : TokenStorage {
     override fun getAppTheme(): String? = vault.string("app_theme")
     override fun saveAppIcon(iconAlias: String) { vault.set("app_icon", iconAlias) }
     override fun getAppIcon(): String? = vault.string("app_icon")
+    override fun savePremiumStatus(isPremium: Boolean) { vault.set("local_premium", isPremium.toString()) }
+    override fun getPremiumStatus(): Boolean = vault.string("local_premium")?.toBoolean() ?: false
+    override fun clearPremiumStatus() { vault.deleteObject("local_premium") }
 }

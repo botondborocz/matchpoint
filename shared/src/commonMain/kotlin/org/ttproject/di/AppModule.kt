@@ -34,7 +34,7 @@ val appModule = module {
     single<LocationRepository> { LocationRepositoryImpl(get(), get()) }
     single<ChatRepository> { ChatRepositoryImpl(get(), get()) }
     viewModel { LoginViewModel(get()) }
-    viewModel { MatchViewModel(get()) }
+    viewModel { MatchViewModel(get(), get()) }
     viewModel { ProfileViewModel(get(), get(), get()) }
     viewModel { LocationViewModel(get()) }
     viewModel { ChatViewModel(get(), get(), get()) }

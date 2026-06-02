@@ -99,7 +99,7 @@ struct ContentView: View {
 
                     ComposeTabViewControllerRepresentable(tabName: "match", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
                         .ignoresSafeArea()
-                        .tabItem { Label("Match", systemImage: "sportscourt.fill") }
+                        .tabItem { Label("Match", systemImage: "bolt.fill") }
                         .tag("match")
 
                     ComposeTabViewControllerRepresentable(tabName: "messages", launcher: IOSGalleryLauncher(appState: appState), appState: appState)

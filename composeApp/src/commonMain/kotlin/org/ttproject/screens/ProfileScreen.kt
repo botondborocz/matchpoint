@@ -153,9 +153,7 @@ fun ProfileScreen(
     }
 
     LaunchedEffect(Unit) {
-        if (viewModel.uiState.value !is ProfileState.Success) {
-            viewModel.fetchUserProfile()
-        }
+        viewModel.fetchUserProfile(showLoading = false)
     }
 
     when (uiState) {
@@ -306,7 +304,7 @@ fun ProfileScreen(
                                     currentAppThemeStyle = currentAppThemeStyle,
                                     currentAppIcon = currentAppIcon,
                                     isUserPremium = userData.isPremium,
-                                    onLogoutClick = { viewModel.clearProfile(); onLogoutClick() },
+                                    onLogoutClick = { viewModel.clearData(); onLogoutClick() },
                                     onChangeLanguage = onChangeLanguage,
                                     onChangeTheme = onChangeTheme,
                                     onChangeAppThemeStyle = onChangeAppThemeStyle,

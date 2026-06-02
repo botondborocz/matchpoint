@@ -20,4 +20,7 @@ interface TokenStorage {
     fun getAppTheme(): String?
     fun saveAppIcon(iconAlias: String)
     fun getAppIcon(): String?
+    fun savePremiumStatus(isPremium: Boolean)
+    fun getPremiumStatus(): Boolean
+    fun clearPremiumStatus()
 }

@@ -24,6 +24,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
@@ -66,16 +67,20 @@ fun MatchScreen(
 ) {
     var isVisible by remember { mutableStateOf(false) }
     var isLikesPopupOpen by remember { mutableStateOf(false) }
+    var isPaywallDialogOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         isVisible = true
+        viewModel.loadPlayers(showLoading = false)
         viewModel.loadLikesFeed()
+        viewModel.checkPremiumStatus()
     }
 
     val uiState by viewModel.uiState.collectAsState()
     val matchedPlayer by viewModel.matchedPlayer.collectAsState()
     val canUndo by viewModel.canUndo.collectAsState()
     val likedMePlayers by viewModel.likedMePlayers.collectAsState()
+    val isPremiumUser by viewModel.isPremiumUser.collectAsState()
 
     val cardGradient = Brush.verticalGradient(
         colors = listOf(Color(0xFF3B4CCA), Color(0xFF151C2C))
@@ -264,7 +269,13 @@ fun MatchScreen(
                         onLike = { triggerSwipe(true) },
                         onPass = { triggerSwipe(false) },
                         canUndo = canUndo,
-                        onUndo = { viewModel.undoLastSwipe() }
+                        onUndo = {
+                            if (isPremiumUser) {
+                                viewModel.undoLastSwipe()
+                            } else {
+                                isPaywallDialogOpen = true
+                            }
+                        }
                     )
                 }
             }
@@ -279,11 +290,13 @@ fun MatchScreen(
         ) {
             LikesYouPopupOverlay(
                 players = likedMePlayers,
+                isPremiumUser = isPremiumUser,
                 cardGradient = cardGradient,
                 onDismiss = { isLikesPopupOpen = false },
                 onSelectPlayer = { player ->
                     isLikesPopupOpen = false
-                }
+                },
+                onUpgradeClick = { viewModel.togglePremiumStatus() }
             )
         }
 
@@ -370,6 +383,51 @@ fun MatchScreen(
                 MatchCelebrationOverlay(player = player, onKeepSwiping = { viewModel.dismissMatchPopup() }, onSendMessage = { onNavigateToMessages(); viewModel.dismissMatchPopup() })
             }
         }
+
+        if (isPaywallDialogOpen) {
+            androidx.compose.ui.window.Dialog(onDismissRequest = { isPaywallDialogOpen = false }) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(Color(0xFF111622))
+                        .border(1.dp, AppColors.AccentOrange.copy(alpha = 0.2f), RoundedCornerShape(28.dp))
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Unlock Premium",
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Undo your last swipe and see who liked you with our Premium plan!",
+                        color = Color.LightGray,
+                        fontSize = 15.sp,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 22.sp
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = {
+                            viewModel.togglePremiumStatus()
+                            isPaywallDialogOpen = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.AccentOrange),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Go Premium (Debug)", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(onClick = { isPaywallDialogOpen = false }) {
+                        Text("Maybe Later", color = Color.LightGray)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -379,13 +437,12 @@ fun MatchScreen(
 @Composable
 fun LikesYouPopupOverlay(
     players: List<Player>,
+    isPremiumUser: Boolean,
     cardGradient: Brush,
     onDismiss: () -> Unit,
-    onSelectPlayer: (Player) -> Unit
+    onSelectPlayer: (Player) -> Unit,
+    onUpgradeClick: () -> Unit
 ) {
-    // Determine target premium status parameters cleanly
-    val isPremiumUser = players.firstOrNull()?.isPremium == true
-
     // 🌟 FIX: If a free user has 0 database likes, generate a premium blurred
     // teaser wall of fake players so they see an alluring pool of hidden matches!
     val displayPlayers = remember(players, isPremiumUser) {
@@ -450,6 +507,11 @@ fun LikesYouPopupOverlay(
             Spacer(modifier = Modifier.height(16.dp))
 
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                if (displayPlayers.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No likes yet! Keep swiping.", color = Color.Gray, fontSize = 16.sp)
+                    }
+                }
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -500,7 +562,7 @@ fun LikesYouPopupOverlay(
                             )
                             Spacer(modifier = Modifier.height(20.dp))
                             Button(
-                                onClick = { /* Direct to payments handler */ },
+                                onClick = onUpgradeClick,
                                 colors = ButtonDefaults.buttonColors(containerColor = AppColors.AccentOrange),
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.fillMaxWidth()

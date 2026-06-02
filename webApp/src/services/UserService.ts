@@ -12,6 +12,7 @@ export interface UserProfile {
     blade? : string;
     rubberFh? : string;
     rubberBh? : string;
+    isPremium?: boolean;
 }
 
 // Module-level variable acts as our in-memory cache
@@ -76,12 +77,12 @@ export const fetchNearbyPlayers = async (): Promise<Player[]> => {
         id: backendPlayer.id,
         username: backendPlayer.username,
         skillLevel: backendPlayer.skillLevel,
-        // ⚠️ Fallbacks: Your current Ktor endpoint doesn't return these 3 fields yet!
-        // You'll want to add them to your Ktor 'PlayerResponse' data class later.
         age: backendPlayer.age || 25,
         elo: backendPlayer.elo || 1200,
-        distanceKm: 0, // Default to 0 since we didn't send GPS coordinates
-        imageUrl: backendPlayer.imageUrl
+        distanceKm: 0,
+        imageUrl: backendPlayer.imageUrl,
+        isPremium: backendPlayer.isPremium,
+        hasSwipedMeRight: backendPlayer.hasSwipedMeRight
     }));
 };
 
@@ -102,4 +103,69 @@ export const submitSwipe = async (targetPlayerId: string, isLiked: boolean): Pro
     }
 
     return response.json();
+};
+
+export const fetchLikes = async (): Promise<Player[]> => {
+    const token = localStorage.getItem("auth_token");
+    if (!token) throw new Error("No auth token found.");
+
+    const response = await fetch(`${SERVER_IP}/api/users/likes`, {
+        method: "GET",
+        headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to fetch likes: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.map((backendPlayer: any) => ({
+        id: backendPlayer.id,
+        username: backendPlayer.username,
+        skillLevel: backendPlayer.skillLevel,
+        age: backendPlayer.age || 25,
+        elo: backendPlayer.elo || 1200,
+        distanceKm: 0,
+        imageUrl: backendPlayer.imageUrl,
+        isPremium: backendPlayer.isPremium,
+        hasSwipedMeRight: backendPlayer.hasSwipedMeRight
+    }));
+};
+
+export const undoSwipe = async (targetPlayerId: string): Promise<boolean> => {
+    const token = localStorage.getItem("auth_token");
+    if (!token) throw new Error("No auth token found.");
+
+    const response = await fetch(`${SERVER_IP}/api/users/${targetPlayerId}/swipe`, {
+        method: "DELETE",
+        headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+        }
+    });
+
+    return response.ok;
+};
+
+export const togglePremiumStatus = async (): Promise<boolean> => {
+    const token = localStorage.getItem("auth_token");
+    if (!token) throw new Error("No auth token found");
+
+    const response = await fetch(`${SERVER_IP}/api/users/me/toggle-premium`, {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error("Failed to toggle premium");
+    }
+
+    const data = await response.json();
+    return data.isPremium;
 };

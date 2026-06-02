@@ -45,6 +45,11 @@ class LocationViewModel(
         }
     }
 
+    fun clearData() {
+        _uiState.value = LocationsUiState.Loading
+        _clubReviews.value = emptyList()
+    }
+
     fun submitNewTable(
         lat: Double,
         lng: Double,

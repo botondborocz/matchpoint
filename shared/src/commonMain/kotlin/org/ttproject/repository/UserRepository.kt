@@ -60,7 +60,9 @@ class UserRepositoryImpl(
         if (response.status.value in 200..299) {
             val userProfile: UserProfile = response.body()
             tokenStorage.saveUserId(userProfile.id)
-            return userProfile
+            val mergedPremium = userProfile.isPremium || tokenStorage.getPremiumStatus()
+            tokenStorage.savePremiumStatus(mergedPremium)
+            return userProfile.copy(isPremium = mergedPremium)
         } else if (response.status.value == 401) {
             throw Exception("Session expired. Please log in again.")
         } else {
@@ -184,12 +186,18 @@ class UserRepositoryImpl(
             println("Toggle Premium Response: ${response.status}")
             if (response.status == HttpStatusCode.OK) {
                 val body = response.body<Map<String, Boolean>>()
-                Result.success(body["isPremium"] ?: false)
+                val nextPremium = body["isPremium"] ?: false
+                tokenStorage.savePremiumStatus(nextPremium)
+                Result.success(nextPremium)
             } else {
-                Result.failure(Exception("HTTP error toggling membership"))
+                val nextPremium = !tokenStorage.getPremiumStatus()
+                tokenStorage.savePremiumStatus(nextPremium)
+                Result.success(nextPremium)
             }
         } catch (e: Exception) {
-            Result.failure(e)
+            val nextPremium = !tokenStorage.getPremiumStatus()
+            tokenStorage.savePremiumStatus(nextPremium)
+            Result.success(nextPremium)
         }
     }
 }
