@@ -59,6 +59,7 @@ import org.ttproject.shared.resources.login
 import org.ttproject.shared.resources.register
 import org.ttproject.viewmodel.MatchUiState
 import org.ttproject.viewmodel.MatchViewModel
+import org.ttproject.isIosPlatform
 import kotlin.math.abs
 
 @Composable
@@ -99,6 +100,12 @@ fun MatchScreen(
 
     val isGeneralError = isErrorState && !isUnauth
 
+    val topPadding = if (isIosPlatform()) {
+        WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    } else {
+        24.dp
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(Color.Transparent)) {
 
         // --- MAIN WORKSPACE INTERFACE ---
@@ -108,7 +115,7 @@ fun MatchScreen(
                 .then(if (isErrorState || isLikesPopupOpen) Modifier.blur(16.dp) else Modifier),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(topPadding))
 
             // --- HEADER ---
             Row(
@@ -152,7 +159,7 @@ fun MatchScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // --- PERSISTENT CARD STACK DISPLAY AREA ---
             BoxWithConstraints(
@@ -163,8 +170,8 @@ fun MatchScreen(
             ) {
                 val componentWidthPx = with(LocalDensity.current) { maxWidth.toPx() }
 
-                val maxAvailableWidth = maxWidth - 32.dp
-                val maxAvailableHeight = maxHeight - 32.dp
+                val maxAvailableWidth = maxWidth
+                val maxAvailableHeight = maxHeight
                 val targetRatio = 3f / 4f
 
                 val availableRatio = maxAvailableWidth / maxAvailableHeight
@@ -264,7 +271,7 @@ fun MatchScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 24.dp),
+                        .padding(top = 12.dp, bottom = 16.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     ActionButtonsRow(

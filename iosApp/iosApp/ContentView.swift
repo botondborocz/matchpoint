@@ -81,94 +81,37 @@ struct ComposeTabViewControllerRepresentable: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
 }
 
-// MARK: - Main Native Tab Layout View
-struct CustomTabBarItem: View {
-    let tab: String
-    let icon: String
-    let label: String
-    @Binding var selectedTab: String
-    let tintColor: Color
-    
-    var isSelected: Bool {
-        selectedTab == tab
-    }
-    
-    var body: some View {
-        Button(action: {
-            selectedTab = tab
-        }) {
-            VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.system(size: 22, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? tintColor : Color.secondary)
-                
-                Text(label)
-                    .font(.system(size: 10, weight: isSelected ? .medium : .regular))
-                    .foregroundStyle(isSelected ? tintColor : Color.secondary)
-            }
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-struct CustomTabBar: View {
-    @Binding var selectedTab: String
-    let tintColor: Color
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            Divider()
-                .background(Color.primary.opacity(0.1))
-            
-            HStack(spacing: 0) {
-                CustomTabBarItem(tab: "map", icon: "map.fill", label: "Map", selectedTab: $selectedTab, tintColor: tintColor)
-                CustomTabBarItem(tab: "match", icon: "bolt.fill", label: "Match", selectedTab: $selectedTab, tintColor: tintColor)
-                CustomTabBarItem(tab: "messages", icon: "bubble.left.and.bubble.right.fill", label: "Messages", selectedTab: $selectedTab, tintColor: tintColor)
-                CustomTabBarItem(tab: "profile", icon: "person.crop.circle.fill", label: "Profile", selectedTab: $selectedTab, tintColor: tintColor)
-            }
-            .padding(.top, 8)
-            .padding(.bottom, 8)
-        }
-        .background(.ultraThinMaterial)
-    }
-}
-
 struct ContentView: View {
     @StateObject var appState = AppState()
 
     var body: some View {
         GeometryReader { geometry in
-            ZStack(alignment: .bottom) {
-                TabView(selection: $appState.currentTab) {
-                    ComposeTabViewControllerRepresentable(tabName: "map", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
-                        .ignoresSafeArea()
-                        .toolbar(.hidden, for: .tabBar)
-                        .tag("map")
+            TabView(selection: $appState.currentTab) {
+                ComposeTabViewControllerRepresentable(tabName: "map", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                    .ignoresSafeArea()
+                    .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
+                    .tabItem { Label("Map", systemImage: "map.fill") }
+                    .tag("map")
 
-                    ComposeTabViewControllerRepresentable(tabName: "match", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
-                        .ignoresSafeArea()
-                        .toolbar(.hidden, for: .tabBar)
-                        .tag("match")
+                ComposeTabViewControllerRepresentable(tabName: "match", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                    .ignoresSafeArea()
+                    .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
+                    .tabItem { Label("Match", systemImage: "bolt.fill") }
+                    .tag("match")
 
-                    ComposeTabViewControllerRepresentable(tabName: "messages", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
-                        .ignoresSafeArea()
-                        .toolbar(.hidden, for: .tabBar)
-                        .tag("messages")
+                ComposeTabViewControllerRepresentable(tabName: "messages", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                    .ignoresSafeArea()
+                    .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
+                    .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
+                    .tag("messages")
 
-                    ComposeTabViewControllerRepresentable(tabName: "profile", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
-                        .ignoresSafeArea()
-                        .toolbar(.hidden, for: .tabBar)
-                        .tag("profile")
-                }
-
-                CustomTabBar(selectedTab: $appState.currentTab, tintColor: appState.tabTintColor)
-                    .offset(y: appState.isTabBarHidden ? 120 + geometry.safeAreaInsets.bottom : 0)
-                    .opacity(appState.isTabBarHidden ? 0.0 : 1.0)
-                    .disabled(appState.isTabBarHidden)
-                    .animation(.spring(response: 0.35, dampingFraction: 0.82), value: appState.isTabBarHidden)
+                ComposeTabViewControllerRepresentable(tabName: "profile", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                    .ignoresSafeArea()
+                    .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
+                    .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
+                    .tag("profile")
             }
+            .tint(appState.tabTintColor)
             .ignoresSafeArea(.keyboard)
         }
         .fullScreenCover(item: $appState.galleryData) { data in
