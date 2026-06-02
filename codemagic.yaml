@@ -27,6 +27,31 @@ workflows:
           echo "kotlin.native.cacheKind=none" >> gradle.properties
           echo "org.gradle.daemon=false" >> gradle.properties
 
+
+      - name: Configure iOS 18 Alternate Icons in Xcode
+        script: |
+          gem install xcodeproj
+          ruby -e "
+          require 'xcodeproj'
+          
+          project_path = 'iosApp/iosApp.xcodeproj'
+          project = Xcodeproj::Project.open(project_path)
+          target = project.targets.find { |t| t.name == 'iosApp' } || project.targets.first
+          
+          # Define the exact names of your .appiconset folders (without the extension)
+          alternate_icons = 'AdrenalinIcon ChampionshipIcon CyberIcon GoldIcon IceIcon IceIconExtra LightIcon StealthIcon SynthwaveIcon SynthwaveIconExtra'
+          
+          target.build_configurations.each do |config|
+            # Tell Xcode to compile these as alternate icons
+            config.build_settings['ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES'] = alternate_icons
+            # Ensure it bundles them into the final app
+            config.build_settings['ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS'] = 'YES'
+          end
+          
+          project.save
+          puts 'Successfully updated Xcode build settings for iOS 18 Alternate Icons!'
+          "
+
       - name: Build Unsigned iOS App
         script: |
           set -e 

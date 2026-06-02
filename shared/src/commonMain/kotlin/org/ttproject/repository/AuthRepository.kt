@@ -46,6 +46,7 @@ class AuthRepositoryImpl(
                 Result.failure(Exception("Invalid credentials"))
             }
         } catch (e: Exception) {
+            println(e.message)
             Result.failure(e)
         }
     }

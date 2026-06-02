@@ -7,7 +7,8 @@ import {
   Activity,
   Rss,
   Newspaper,
-  MessageCircle
+  MessageCircle,
+  Zap
 } from 'lucide-react'; // 👈 Added ChevronLeft and ChevronRight
 import { SharedRes } from '../../shared/SharedRes';
 import { useTranslation } from 'react-i18next';
@@ -55,11 +56,17 @@ const SideBar: React.FC<SidebarProps> = ({ isOpen, onClose, isMobile, isCollapse
   // 👇 Force login and register routes to highlight the Profile tab
   const activeTab = ['login', 'register', 'profile'].includes(rawPath)
     ? 'profile'
+    : rawPath.includes('chat') || rawPath.includes('messages')
+    ? 'messages'
     : rawPath;
+
+  console.log(activeTab);
+  console.log(rawPath.includes('chat') ? 'messages' : rawPath);
+  
 
   const menuItems: NavItem[] = [
     { id: 'map', label: t('map'), icon: Map },
-    { id: 'match', label: t('match'), icon: Flame },
+    { id: 'match', label: t('match'), icon: Zap },
     { id: 'coach', label: t('ai_coach'), icon: Brain, isPro: true },
     // { id: 'home', label: t('home'), icon: Home },
     // { id: 'feed', label: t('feed'), icon: LayoutList },
@@ -90,9 +97,9 @@ const SideBar: React.FC<SidebarProps> = ({ isOpen, onClose, isMobile, isCollapse
         <div className="logo-section">
           {/* Note: I changed the image path to use an absolute path so it works on any route */}
           {isDarkMode ? (
-            <img src="/assets/match_logo_long.png" alt="Match Logo" className="logo-image" />)
+            <img src="/assets/matchpoint_logo_long_dark.png" alt="Match Logo" className="logo-image" />)
             : (
-              <img src="/assets/match_logo_long_dark.png" alt="Match Logo" className="logo-image" />
+              <img src="/assets/matchpoint_logo_long_light.png" alt="Match Logo" className="logo-image" />
             )
           }
 

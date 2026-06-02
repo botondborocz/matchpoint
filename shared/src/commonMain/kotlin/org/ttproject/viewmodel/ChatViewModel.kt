@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import org.ttproject.data.ReactionDto
 import org.ttproject.data.UserProfile
 import org.ttproject.repository.UserRepository
+import org.ttproject.util.generateVideoThumbnail
 
 class ChatViewModel(
     private val repository: ChatRepository,
@@ -127,6 +128,102 @@ class ChatViewModel(
         viewModelScope.launch {
             userRepository.getUserProfile(username).onSuccess { profile ->
                 _otherUserProfile.value = profile
+            }
+        }
+    }
+
+    // 👇 Accepts a List of ByteArrays
+    // 👇 Accepts a List of ByteArrays from the Gallery Picker
+    fun sendImagesMessage(connectionId: String, mediaBytes: List<ByteArray>, replyToMessageId: String?) {
+        if (mediaBytes.isEmpty()) return
+
+        viewModelScope.launch {
+            // TODO: Optional _isUploading.value = true
+
+            val imageBytesList = mutableListOf<ByteArray>()
+
+            // 1. Sort the incoming files using Magic Bytes
+            mediaBytes.forEach { bytes ->
+
+                val isVideo = bytes.size > 8 &&
+                        bytes[4].toInt().toChar() == 'f' &&
+                        bytes[5].toInt().toChar() == 't' &&
+                        bytes[6].toInt().toChar() == 'y' &&
+                        bytes[7].toInt().toChar() == 'p'
+
+                if (isVideo) {
+                    // 2. It's a video! Route it to our dedicated video pipeline
+                    // so it generates a local thumbnail and uploads properly.
+                    sendVideoMessage(connectionId, bytes, replyToMessageId)
+                } else {
+                    // 3. It's an image! Queue it up for the bulk collage upload.
+                    imageBytesList.add(bytes)
+                }
+            }
+
+            // 4. Upload all remaining true images as a grouped collage message
+            if (imageBytesList.isNotEmpty()) {
+                repository.uploadChatImages(connectionId, imageBytesList).onSuccess { urls ->
+                    val tag = if (urls.size == 1) "[IMAGE]" else "[IMAGES]"
+                    val joinedUrls = urls.joinToString(",")
+                    repository.sendMessage("$tag$joinedUrls", replyToMessageId)
+                }.onFailure {
+                    it.printStackTrace()
+                }
+            }
+
+            // TODO: Optional _isUploading.value = false
+        }
+    }
+
+    fun sendVideoMessage(connectionId: String, videoBytes: ByteArray, replyToMessageId: String?) {
+        viewModelScope.launch {
+            // TODO: Set _isUploading = true here
+
+            // 1. Generate the thumbnail locally
+            val thumbnailBytes = generateVideoThumbnail(videoBytes)
+
+            println("📸 THUMBNAIL DEBUG: ${if (thumbnailBytes != null) "✅ SUCCESS! Extracted ${thumbnailBytes.size / 1024} KB JPEG" else "❌ FAILED! Extractor returned null"}")
+
+            // 2. Prepare the list of files to upload
+            val filesToUpload = if (thumbnailBytes != null) {
+                listOf(thumbnailBytes, videoBytes) // Upload both!
+            } else {
+                listOf(videoBytes) // Fallback if extraction fails
+            }
+
+            // 3. Upload them simultaneously
+            repository.uploadChatImages(connectionId, filesToUpload).onSuccess { urls ->
+
+                // 4. Extract the URLs from the backend response
+                val videoUrl = urls.find { it.contains(".mp4") } ?: ""
+                val thumbUrl = urls.find { it.contains(".jpg") || it.contains(".jpeg") } ?: ""
+
+                // 5. Blast the formatted string to the WebSocket!
+                val payload = if (thumbUrl.isNotBlank()) {
+                    "[VIDEO]$thumbUrl,$videoUrl"
+                } else {
+                    "[VIDEO]$videoUrl" // Fallback UI will just show a black box with a play button
+                }
+
+                repository.sendMessage(payload, replyToMessageId)
+
+            }.onFailure {
+                it.printStackTrace()
+            }
+
+            // TODO: Set _isUploading = false here
+        }
+    }
+
+    fun sendVoiceMessage(connectionId: String, audioBytes: ByteArray, replyToMessageId: String?) {
+        viewModelScope.launch {
+            // Upload to a dedicated voice endpoint (or reuse the images one)
+            repository.uploadAudioMessage(connectionId, audioBytes).onSuccess { url ->
+                val payload = "[VOICE]$url"
+                repository.sendMessage(payload, replyToMessageId)
+            }.onFailure {
+                it.printStackTrace()
             }
         }
     }

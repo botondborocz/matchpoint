@@ -2,7 +2,8 @@
 
 /* --- THEME VARIABLES --- */
 /* Combine :root and .light so the light theme is the default AND explicitly selectable */
-:root, .light {
+:root,
+.light {
   /* LIGHT THEME */
   --bg-dark: var(--hexBackgroundLight);
   --surface-dark: var(--hexSurfaceLight);
@@ -93,7 +94,7 @@ body {
 
 /* --- THE NEW COLLAPSED STATE --- */
 .sidebar.desktop.collapsed {
-  width: 80px; 
+  width: 80px;
 }
 
 /* Hide the logo image smoothly */
@@ -131,13 +132,14 @@ body {
 }
 
 .sidebar.collapsed .collapse-btn {
-  margin-left: 0; /* Centers it when text/logo is gone */
+  margin-left: 0;
+  /* Centers it when text/logo is gone */
 }
 
 /* --- ANIMATING THE TEXT OUT --- */
 /* Add these transitions to your existing text classes */
-.nav-text, 
-.pro-badge, 
+.nav-text,
+.pro-badge,
 .user-info {
   transition: opacity 0.2s ease, width 0.2s ease;
   white-space: nowrap;
@@ -161,13 +163,15 @@ body {
 }
 
 .sidebar.collapsed .avatar {
-  margin-right: 0; /* Removes the gap since there's no text next to it */
+  margin-right: 0;
+  /* Removes the gap since there's no text next to it */
 }
 
 /* Ensure the SVG icons never shrink when the sidebar collapses */
 .nav-item svg {
   flex-shrink: 0;
-  min-width: 20px; /* Matches the size={20} you set in the component */
+  min-width: 20px;
+  /* Matches the size={20} you set in the component */
 }
 
 /* Optional: Add a smooth rotation animation to the hamburger menu when clicked */
@@ -198,13 +202,6 @@ body {
   display: flex;
   align-items: center;
   padding: 24px;
-}
-
-.logo-image {
-  height: 32px;
-  width: auto;
-  object-fit: contain;
-  display: block;
 }
 
 /* --- Sidebar Navigation Styles --- */
@@ -339,30 +336,54 @@ body {
 }
 
 /* --- Mobile TopBar & Overlay --- */
+/* --- Corrected Mobile TopBar --- */
 .mobile-topbar {
   height: var(--header-height);
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 0 16px;
   background-color: var(--surface-dark);
   border-bottom: 1px solid var(--border-color);
-  position: fixed;
+  
+  /* 👇 1. Must be FIXED to stay at the top without creating a gap */
+  position: fixed; 
   top: 0;
+  left: 0;
   z-index: 100;
+  
   transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
-.mobile-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.6);
-  z-index: 150;
-  animation: fadeIn 0.2s;
+.topbar-title {
+  /* 👇 2. Absolute positioning stays perfectly centered inside the fixed header */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  
+  margin: 0;
+  display: flex;
+  align-items: center;
+  pointer-events: none; /* Allows clicks through the title area to the bar if needed */
+}
+
+.logo-image {
+  height: 28px;
+  width: auto;
+  object-fit: contain;
+}
+
+.icon-btn {
+  /* 👇 3. Ensure the menu button sits on top of the absolute title layer */
+  position: relative;
+  z-index: 101; 
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
 }
 
 /* --- Bottom Navigation --- */
@@ -467,27 +488,6 @@ body {
   position: absolute;
   top: 16px;
   right: 16px;
-}
-
-.topbar-title {
-  font-size: 16px;
-  margin: 0;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.topbar-avatar {
-  width: 32px;
-  height: 32px;
-  background: var(--surface-active);
-  border: 1px solid var(--border-color);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: bold;
-  color: white;
 }
 
 @keyframes fadeIn {

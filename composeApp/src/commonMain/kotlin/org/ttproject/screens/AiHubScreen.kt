@@ -11,6 +11,11 @@ import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -18,13 +23,19 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.ttproject.AppColors
+import org.ttproject.util.LiveActivityController
 
 @Composable
 fun AiHubScreen(
     onNavigateToAiChat: () -> Unit,
     onNavigateToVideoAnalysis: () -> Unit
 ) {
+    val scope = rememberCoroutineScope()
+    // State to show the user the UI is busy
+    var isProcessing by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -54,10 +65,31 @@ fun AiHubScreen(
         )
 
         AiFeatureCard(
-            title = "Auto-Cutter",
+            title = if (isProcessing) "Processing Video..." else "Auto-Cutter",
             description = "Automatically extract your best points from match footage.",
             icon = Icons.Default.VideoLibrary,
-            onClick = {} // Future feature
+            onClick = {
+                if (!isProcessing) {
+                    isProcessing = true
+                    scope.launch {
+                        // Simulate a 30-second task
+                        for (i in 1..100) {
+                            LiveActivityController.updateProgress(
+                                percent = i,
+                                message = "Analyzing frame $i of 100..."
+                            )
+                            delay(300) // 300ms * 100 = 30 seconds
+                        }
+
+                        LiveActivityController.updateProgress(
+                            percent = 100,
+                            message = "Video ready!",
+                            isComplete = true
+                        )
+                        isProcessing = false
+                    }
+                }
+            }
         )
     }
 }

@@ -4,13 +4,19 @@ import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.plugins.websocket.*
+import io.ktor.client.request.forms.MultiPartFormDataContent
+import io.ktor.client.request.forms.formData
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 import io.ktor.websocket.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.ttproject.ORACLE_IP
@@ -41,6 +47,8 @@ interface ChatRepository {
     suspend fun savePushToken(fcmToken: String)
     suspend fun markMessagesAsRead(chatId: String)
     suspend fun updateChatTheme(connectionId: String, themeName: String)
+    suspend fun uploadChatImages(connectionId: String, images: List<ByteArray>): Result<List<String>>
+    suspend fun uploadAudioMessage(connectionId: String, audioBytes: ByteArray): Result<String>
 }
 
 class ChatRepositoryImpl (
@@ -211,6 +219,82 @@ class ChatRepositoryImpl (
         } catch (e: Exception) {
             e.printStackTrace()
             // Fail silently, the theme just won't persist if offline
+        }
+    }
+
+    override suspend fun uploadChatImages(connectionId: String, images: List<ByteArray>): Result<List<String>> {
+        val token = tokenStorage.getToken() ?: return Result.failure(Exception("No token"))
+
+        return try {
+            val response = client.post("${SERVER_IP}/api/connections/$connectionId/images") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+                setBody(
+                    MultiPartFormDataContent(
+                        formData {
+                            images.forEachIndexed { index, imageBytes ->
+
+                                // 👇 1. THE FIX: Detect MP4s right before we send them!
+                                val isVideo = imageBytes.size > 8 &&
+                                        imageBytes[4].toInt().toChar() == 'f' &&
+                                        imageBytes[5].toInt().toChar() == 't' &&
+                                        imageBytes[6].toInt().toChar() == 'y' &&
+                                        imageBytes[7].toInt().toChar() == 'p'
+
+                                val mimeType = if (isVideo) "video/mp4" else "image/jpeg"
+                                val extension = if (isVideo) "mp4" else "jpg"
+
+                                // 👇 2. Send the correct dynamic headers!
+                                append("media_$index", imageBytes, Headers.build {
+                                    append(HttpHeaders.ContentType, mimeType)
+                                    append(HttpHeaders.ContentDisposition, "filename=\"chat_media_$index.$extension\"")
+                                })
+                            }
+                        }
+                    )
+                )
+            }
+
+            if (response.status.isSuccess()) {
+                val responseText = response.bodyAsText()
+                val jsonArray = Json.parseToJsonElement(responseText).jsonObject["imageUrls"]!!.jsonArray
+                val imageUrls = jsonArray.map { it.jsonPrimitive.content }
+
+                Result.success(imageUrls)
+            } else {
+                Result.failure(Exception("Upload failed. Status: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun uploadAudioMessage(connectionId: String, audioBytes: ByteArray): Result<String> {
+        val token = tokenStorage.getToken() ?: return Result.failure(Exception("No token"))
+
+        return try {
+            val response = client.post("${SERVER_IP}/api/connections/$connectionId/voice") {
+                header(HttpHeaders.Authorization, "Bearer $token")
+                setBody(
+                    MultiPartFormDataContent(
+                        formData {
+                            append("voice_note", audioBytes, Headers.build {
+                                append(HttpHeaders.ContentType, "audio/m4a") // Standard format for iOS/Android voice notes
+                                append(HttpHeaders.ContentDisposition, "filename=\"voice_note.m4a\"")
+                            })
+                        }
+                    )
+                )
+            }
+            if (response.status.isSuccess()) {
+                val responseText = response.bodyAsText()
+                val url = Json.parseToJsonElement(responseText).jsonObject["audioUrl"]!!.jsonPrimitive.content
+                Result.success(url)
+            } else {
+                Result.failure(Exception("Upload failed"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 

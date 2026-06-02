@@ -24,6 +24,8 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import org.ttproject.components.NativeGalleryLauncher // 👈 Ensure this import is visible
+import org.ttproject.util.LiveActivityController
 
 class MainActivity : ComponentActivity() {
     private var pendingChatId by mutableStateOf<String?>(null)
@@ -32,13 +34,12 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        LiveActivityController.applicationContext = this.applicationContext
 
         val smallestWidth = resources.configuration.smallestScreenWidthDp
         if (smallestWidth < 600) {
-            // It's a phone (or small foldable front screen)! Lock to Portrait.
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         } else {
-            // It's a tablet! Let it rotate freely.
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
 
@@ -49,41 +50,49 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // 👇 ADD THIS TO CREATE THE HIGH PRIORITY CHANNEL
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channelId = "chat_messages"
             val channelName = "Chat Messages"
-            // IMPORTANCE_HIGH is the magic word that makes it drop down!
             val importance = NotificationManager.IMPORTANCE_HIGH
             val channel = NotificationChannel(channelId, channelName, importance).apply {
                 description = "Notifications for new chat messages"
             }
             val notificationManager: NotificationManager =
-                getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(channel)
         }
 
         pendingChatId = intent.extras?.getString("chatId")
 
+        // 👇 1. Create a safe anonymous stub for the gallery launcher interface on Android
+        val androidGalleryLauncher = object : NativeGalleryLauncher {
+            override fun openGallery(
+                images: List<String>,
+                initialIndex: Int,
+                isMineList: List<Boolean>,
+                onDelete: (String) -> Unit,
+                onReport: (String, String) -> Unit
+            ) {
+                // If you implement a full screen gallery screen inside commonMain Compose later,
+                // this Android trigger block can safely remain an empty stub.
+            }
+        }
+
         setContent {
             App(
                 pendingChatId = pendingChatId,
-                onChatConsumed = { pendingChatId = null } // Reset after navigating
+                onChatConsumed = { pendingChatId = null },
+                galleryLauncher = androidGalleryLauncher,       // 👈 Pass your Android implementation stub
+                externalTabRoute = null,                        // 👈 Android controls routing internally via Compose
+                onTabChangedBySystem = {},                      // 👈 No-op on Android
+                onThemeStyleChanged = {},                       // 👈 No-op on Android
+                onSubScreenVisibilityChanged = {}               // 👈 No-op on Android
             )
         }
     }
 
-    // 👇 2. Check if the app was ALREADY OPEN in the background when clicked
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         pendingChatId = intent.extras?.getString("chatId")
     }
-}
-
-
-
-@Preview
-@Composable
-fun AppAndroidPreview() {
-    App()
 }

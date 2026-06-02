@@ -2,12 +2,16 @@ import { Player } from '../components/Screens/MatchScreen';
 import { SERVER_IP } from "../constants";
 
 export interface UserProfile {
+    imageUrl: string;
     id: string;
     name: string;
     email: string;
     elo: number;
     winRate: string;
     preferredLanguage: string;
+    blade? : string;
+    rubberFh? : string;
+    rubberBh? : string;
 }
 
 // Module-level variable acts as our in-memory cache
@@ -76,7 +80,8 @@ export const fetchNearbyPlayers = async (): Promise<Player[]> => {
         // You'll want to add them to your Ktor 'PlayerResponse' data class later.
         age: backendPlayer.age || 25,
         elo: backendPlayer.elo || 1200,
-        distanceKm: 0 // Default to 0 since we didn't send GPS coordinates
+        distanceKm: 0, // Default to 0 since we didn't send GPS coordinates
+        imageUrl: backendPlayer.imageUrl
     }));
 };
 

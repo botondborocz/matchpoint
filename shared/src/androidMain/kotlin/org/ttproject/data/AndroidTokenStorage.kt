@@ -22,4 +22,8 @@ class AndroidTokenStorage(context: Context) : TokenStorage {
     override fun saveMapChoice(choice: String) { vault.set("map_choice", choice) }
     override fun getMapChoice(): String? = vault.string("map_choice") ?: "google"
     override fun clearMapChoice() { vault.deleteObject("map_choice") }
+    override fun saveAppTheme(theme: String) { vault.set("app_theme", theme) }
+    override fun getAppTheme(): String? = vault.string("app_theme") ?: "default"
+    override fun saveAppIcon(iconAlias: String) { vault.set("app_icon", iconAlias) }
+    override fun getAppIcon(): String? = vault.string("app_icon") ?: "default"
 }

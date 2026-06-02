@@ -6,6 +6,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import ttproject.composeapp.generated.resources.Res
+import ttproject.composeapp.generated.resources.abstract_paddle
+import ttproject.composeapp.generated.resources.abstract_paddle_2
+import ttproject.composeapp.generated.resources.paddels
+import ttproject.composeapp.generated.resources.paddles_2
+import ttproject.composeapp.generated.resources.pro_arena
 
 // 👇 1. Helper function that mirrors your AppColors animation logic
 @Composable
@@ -27,7 +33,8 @@ data class ChatTheme(
     val darkMyBubble: Color,
     val lightMyBubble: Color,
     val darkOtherBubble: Color,
-    val lightOtherBubble: Color = Color.White // White is the standard for modern Light UI
+    val lightOtherBubble: Color = Color.White, // White is the standard for modern Light UI
+    val backgroundImage: Any? = null // 👈 Add this (can be PainterResource or URL)
 ) {
     // These properties animate dynamically whenever called from a Compose context!
     val backgroundBrush: Brush
@@ -66,6 +73,45 @@ object ChatThemeManager {
             lightMyBubble = SharedTheme.hexAccentOrangeLight.toColor(),
             darkOtherBubble = SharedTheme.hexSurfaceDark.toColor(),
             lightOtherBubble = SharedTheme.hexSurfaceLight.toColor()
+        ),
+        ChatTheme(
+            name = "Pro Arena",
+            // Deep shadowy teal and black to match the arena floor and dark lighting
+            darkBgColors = listOf(Color(0xFF071A15), Color(0xFF000000)),
+            // Crisp light gray/blue to reflect the glowing stadium signs
+            lightBgColors = listOf(Color(0xFFE8F0F2), Color(0xFFCFD8DC)),
+            // The rich blue of the ping pong tables under the spotlights
+            darkMyBubble = Color(0xFF1E56A0),
+            lightMyBubble = Color(0xFF154380),
+            // A dark, slightly transparent teal-gray for contrast
+            darkOtherBubble = Color(0xFF172A2B).copy(alpha = 0.8f),
+            backgroundImage = Res.drawable.pro_arena
+        ),
+        ChatTheme(
+            name = "Ping Pong Table",
+            // Deep table blue for dark mode backgrounds
+            darkBgColors = listOf(Color(0xFF1F3A5F), Color(0xFF11223A)),
+            // Warm wood and brick tones for light mode backgrounds
+            lightBgColors = listOf(Color(0xFFF3E5D8), Color(0xFFE6D2BA)),
+            // The vibrant red from the paddle
+            darkMyBubble = Color(0xFFE53935),
+            lightMyBubble = Color(0xFFC62828),
+            // A muted version of the table blue for the other person's bubble
+            darkOtherBubble = Color(0xFF284872).copy(alpha = 0.8f),
+            backgroundImage = Res.drawable.paddles_2
+        ),
+        ChatTheme(
+            name = "Abstract Paddle",
+            // Deep, dark cyber-spaces (almost black with a hint of navy)
+            darkBgColors = listOf(Color(0xFF090A0F), Color(0xFF111424)),
+            // Icy, high-contrast grays for light mode
+            lightBgColors = listOf(Color(0xFFE3E8F0), Color(0xFFCFD8E3)),
+            // The intense neon red/pink glowing from the center of the paddle
+            darkMyBubble = Color(0xFFFF1744),
+            lightMyBubble = Color(0xFFD50000),
+            // A dark glass-like bubble tinted with the neon cyan/blue from the image
+            darkOtherBubble = Color(0xFF0B192C).copy(alpha = 0.8f),
+            backgroundImage = Res.drawable.abstract_paddle_2
         ),
         ChatTheme(
             name = "Midnight",

@@ -11,10 +11,14 @@ import io.ktor.server.response.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.PartData
+import io.ktor.http.content.forEachPart
+import io.ktor.http.content.streamProvider
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.principal
 import io.ktor.server.request.receive
+import io.ktor.server.request.receiveMultipart
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Op
@@ -38,6 +42,7 @@ import org.ttproject.database.tables.Connections
 import org.ttproject.database.tables.MessageReactions
 import org.ttproject.database.tables.Messages
 import org.ttproject.database.tables.Users
+import org.ttproject.services.BadgeService
 import org.ttproject.services.ConnectionManager
 import java.lang.reflect.Array.set
 import java.time.Instant
@@ -46,7 +51,7 @@ import java.util.UUID
 // You will need a simple class to manage your active WebSocket connections
 val connectionManager = ConnectionManager()
 
-fun Route.messageRoutes() {
+fun Route.messageRoutes(badgeService: BadgeService) {
 
     authenticate("auth-jwt") {
         get("/api/connections") {
@@ -201,7 +206,7 @@ fun Route.messageRoutes() {
                 val senderId = UUID.fromString(senderIdStr)
 
                 // 👇 FETCH RECEIVER ID AND SENDER NAME ONCE WHEN THEY CONNECT
-                val (receiverId, senderName) = transaction {
+                val (receiverId, senderName, senderImageUrl) = transaction {
                     val connRow = Connections.select { Connections.id eq connectionId }.singleOrNull()
                         ?: throw Exception("Connection not found")
 
@@ -210,8 +215,8 @@ fun Route.messageRoutes() {
                     val rId = if (u1 == senderId) u2 else u1
 
                     val sName = Users.slice(Users.username).select { Users.id eq senderId }.singleOrNull()?.get(Users.username) ?: "Someone"
-
-                    Pair(rId, sName)
+                    val senderImageUrl = Users.slice(Users.profileImageUrl).select { Users.id eq senderId }.singleOrNull()?.get(Users.profileImageUrl)
+                    Triple(rId, sName, senderImageUrl)
                 }
 
                 // 👇 Pass the senderId to the manager
@@ -259,6 +264,11 @@ fun Route.messageRoutes() {
                                             } get Messages.id
                                         }
 
+                                        badgeService.incrementMetric(
+                                            userIdParam = senderId,
+                                            column = org.ttproject.database.tables.UserBadgeMetrics.sentMessages
+                                        )
+
                                         // 👇 Use the new ConnectionManager function!
                                         if (!connectionManager.isUserConnected(
                                                 connectionId,
@@ -304,6 +314,7 @@ fun Route.messageRoutes() {
                                                         // We send raw data, forcing the Android app to wake up and handle it.
                                                         .putData("chatId", connectionId.toString())
                                                         .putData("senderName", senderName)
+                                                        .putData("senderImageUrl", senderImageUrl ?: "")
                                                         .putData("text", textContent)
                                                         .build()
 
@@ -431,6 +442,97 @@ fun Route.messageRoutes() {
                 }
 
                 call.respond(HttpStatusCode.OK, "Theme updated successfully")
+            }
+            // --------------------------------------------------------
+            // 4. UPLOAD MULTIPLE CHAT IMAGES
+            // --------------------------------------------------------
+            post("/images") {
+                val connectionId = call.parameters["connectionId"] ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing connection ID")
+                val principal = call.principal<JWTPrincipal>()
+                val userId = principal?.payload?.getClaim("userId")?.asString() ?: return@post call.respond(HttpStatusCode.Unauthorized)
+
+                val uploadedUrls = mutableListOf<String>()
+
+                try {
+                    val bucket = com.google.firebase.cloud.StorageClient.getInstance().bucket()
+                    val multipartData = call.receiveMultipart()
+
+                    // Loop through EVERY file attached to the request
+                    multipartData.forEachPart { part ->
+                        if (part is PartData.FileItem) {
+                            val fileBytes = part.streamProvider().readBytes()
+
+                            // 👇 THE FIX: Bulletproof MP4 detection using "Magic Bytes"
+                            // Every MP4 file contains the string "ftyp" starting at byte 4.
+                            val isVideo = fileBytes.size > 8 &&
+                                    fileBytes[4].toInt().toChar() == 'f' &&
+                                    fileBytes[5].toInt().toChar() == 't' &&
+                                    fileBytes[6].toInt().toChar() == 'y' &&
+                                    fileBytes[7].toInt().toChar() == 'p'
+
+                            val extension = if (isVideo) "mp4" else "jpg"
+                            val mimeType = if (isVideo) "video/mp4" else "image/jpeg"
+
+                            val uniqueId = java.util.UUID.randomUUID().toString().take(6)
+                            val fileName = "chat_media/${connectionId}_${System.currentTimeMillis()}_$uniqueId.$extension"
+
+                            bucket.create(fileName, fileBytes, mimeType)
+
+                            val encodedFilePath = java.net.URLEncoder.encode(fileName, java.nio.charset.StandardCharsets.UTF_8.toString())
+                            val publicDownloadUrl = "https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/$encodedFilePath?alt=media"
+
+                            uploadedUrls.add(publicDownloadUrl)
+                        }
+                        part.dispose()
+                    }
+
+                    if (uploadedUrls.isNotEmpty()) {
+                        call.respond(HttpStatusCode.OK, mapOf("imageUrls" to uploadedUrls))
+                    } else {
+                        call.respond(HttpStatusCode.BadRequest, "No image files provided")
+                    }
+
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    call.respond(HttpStatusCode.InternalServerError, "Failed to upload images")
+                }
+            }
+
+            // --------------------------------------------------------
+            // 5. UPLOAD VOICE NOTE
+            // --------------------------------------------------------
+            post("/voice") {
+                val connectionId = call.parameters["connectionId"] ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing connection ID")
+
+                try {
+                    val bucket = com.google.firebase.cloud.StorageClient.getInstance().bucket()
+                    val multipartData = call.receiveMultipart()
+                    var publicDownloadUrl = ""
+
+                    multipartData.forEachPart { part ->
+                        if (part is PartData.FileItem) {
+                            val audioBytes = part.streamProvider().readBytes()
+                            val uniqueId = java.util.UUID.randomUUID().toString().take(6)
+                            val fileName = "chat_audio/${connectionId}_${System.currentTimeMillis()}_$uniqueId.m4a"
+
+                            bucket.create(fileName, audioBytes, "audio/m4a")
+
+                            val encodedFilePath = java.net.URLEncoder.encode(fileName, java.nio.charset.StandardCharsets.UTF_8.toString())
+                            publicDownloadUrl = "https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/$encodedFilePath?alt=media"
+                        }
+                        part.dispose()
+                    }
+
+                    if (publicDownloadUrl.isNotBlank()) {
+                        call.respond(HttpStatusCode.OK, mapOf("audioUrl" to publicDownloadUrl))
+                    } else {
+                        call.respond(HttpStatusCode.BadRequest, "No audio file provided")
+                    }
+
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    call.respond(HttpStatusCode.InternalServerError, "Failed to upload audio")
+                }
             }
         }
     }

@@ -1,0 +1,750 @@
+/* --- LAYOUT --- */
+.chat-screen-wrapper {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    width: 100%;
+    background-color: var(--bg-dark);
+    color: var(--text-primary);
+    overflow: hidden;
+    background: var(--theme-bg, var(--bg-dark));
+}
+
+/* --- HEADER --- */
+.chat-header, .chat-header-ios {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    background-color: rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(156, 163, 175, 0.2);
+    z-index: 10;
+}
+.chat-header-ios { padding: 0.75rem; }
+
+.theme-btn { margin-left: auto; color: var(--theme-my-bubble); }
+
+.icon-btn, .icon-btn-ios {
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 0.5rem;
+    margin-left: -0.5rem;
+}
+
+.chat-header-user {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-left: 0.5rem;
+}
+
+.chat-avatar {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    background-color: var(--surface-dark);
+    color: var(--accent-orange);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    font-weight: 700;
+}
+
+.chat-avatar-image {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    background-color: var(--surface-dark);
+}
+
+.chat-title { font-size: 1.125rem; font-weight: 700; }
+
+/* --- MESSAGES AREA --- */
+.chat-messages-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    scrollbar-width: none;
+}
+.chat-messages-container::-webkit-scrollbar { display: none; }
+
+.message-cluster {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    margin-bottom: 0;
+}
+.message-cluster.is-me { align-items: flex-end; }
+.message-cluster.is-them { align-items: flex-start; }
+
+.time-header {
+    align-self: center;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin: 1rem 0 0.5rem 0;
+}
+
+.toggleable-time {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    text-align: center;
+    width: 100%;
+}
+.toggleable-time.visible { max-height: 20px; opacity: 1; margin-top: 0.5rem; }
+
+/* --- GESTURE SWIPE WRAPPERS --- */
+.message-swipe-container {
+    position: relative;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.message-cluster.is-me .message-swipe-container { align-items: flex-end; }
+.message-cluster.is-them .message-swipe-container { align-items: flex-start; }
+
+.message-bubble-wrapper {
+    max-width: 75%;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 2;
+    touch-action: pan-y; 
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none; 
+}
+
+.message-cluster.is-me .message-bubble-wrapper { align-self: flex-end; }
+.message-cluster.is-them .message-bubble-wrapper { align-self: flex-start; }
+
+.tight-gap { margin-bottom: 0.25rem; }
+.loose-gap { margin-bottom: 1rem; }
+
+/* --- REVEALED MOBILE SWIPE ICON --- */
+.swipe-reply-icon {
+    position: absolute;
+    top: 0; bottom: 0; margin: auto; /* 👇 Perfect vertical alignment regardless of wrapper height */
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+    pointer-events: none;
+}
+.swipe-reply-icon.right { right: 0; padding-right: 1rem; }
+.swipe-reply-icon.left { left: 0; padding-left: 1rem; }
+
+.swipe-reply-circle {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: var(--surface-dark);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+/* --- DESKTOP HOVER ACTIONS --- */
+.message-actions {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 0.25rem;
+    background-color: var(--surface-dark);
+    padding: 0.25rem;
+    border-radius: 1rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    border: 1px solid rgba(156, 163, 175, 0.2);
+    z-index: 5;
+}
+.actions-left { right: 100%; margin-right: 0.5rem; }
+.actions-right { left: 100%; margin-left: 0.5rem; }
+
+.message-actions button {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.4rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s, color 0.2s;
+}
+.message-actions button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+@media (hover: hover) {
+    .message-swipe-container:hover .message-actions {
+        opacity: 1;
+        pointer-events: auto;
+    }
+}
+.message-actions.force-visible { opacity: 1; pointer-events: auto; }
+
+/* --- REACTION POPOVERS --- */
+
+/* Base popover style */
+.reaction-menu-popover {
+    display: flex;
+    gap: 0.35rem; /* Tighter gap to guarantee 6 emojis fit */
+    background-color: var(--surface-dark);
+    padding: 0.4rem 0.5rem;
+    border-radius: 2rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 50;
+    border: 1px solid rgba(156, 163, 175, 0.2);
+    width: max-content; 
+}
+
+.reaction-emoji-btn {
+    background: none;
+    border: none;
+    font-size: 1.4rem; /* Downsized slightly for small phones */
+    cursor: pointer;
+    transition: transform 0.2s ease;
+    padding: 0.2rem;
+    border-radius: 50%;
+}
+.reaction-emoji-btn:hover { transform: scale(1.3); }
+.reaction-emoji-btn.active { background-color: rgba(255, 255, 255, 0.1); }
+
+
+/* 📱 MOBILE POPOVER: Above the bubble */
+.mobile-popover {
+    position: absolute;
+    bottom: calc(100% + 4px); /* Sits right above the message */
+    max-width: 90vw; /* Hard safety limit */
+}
+
+/* 👇 CRITICAL: Anchoring to opposite edges to prevent clipping off screen! */
+.message-cluster.is-me .mobile-popover {
+    right: 0; /* Expands inwards to the left */
+    transform-origin: bottom right;
+    animation: popoverFadeInRight 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.message-cluster.is-them .mobile-popover {
+    left: 0; /* Expands inwards to the right */
+    transform-origin: bottom left;
+    animation: popoverFadeInLeft 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+
+/* 💻 DESKTOP POPOVER: Springs from the action icon */
+.reaction-action-container {
+    position: relative;
+    display: flex;
+}
+.desktop-popover {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%); /* Directly over the smile icon */
+    transform-origin: bottom center;
+    animation: popoverFadeInUp 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Animations */
+@keyframes popoverFadeInRight { from { opacity: 0; transform: scale(0.9) translateX(10px); } to { opacity: 1; transform: scale(1) translateX(0); } }
+@keyframes popoverFadeInLeft { from { opacity: 0; transform: scale(0.9) translateX(-10px); } to { opacity: 1; transform: scale(1) translateX(0); } }
+@keyframes popoverFadeInUp { from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.9); } to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
+
+/* Intelligent Toggling */
+@media (hover: hover) and (pointer: fine) {
+    .mobile-popover { display: none !important; }
+}
+@media (hover: none) and (pointer: coarse) {
+    .desktop-popover { display: none !important; }
+}
+
+/* --- BUBBLES --- */
+.message-bubble {
+    padding: 0.75rem 1rem;
+    font-size: 0.9375rem;
+    line-height: 1.4;
+    word-wrap: break-word;
+    cursor: pointer;
+    transition: background-color 0.2s ease, filter 0.2s ease;
+    -webkit-touch-callout: none;
+}
+
+/* 3. The Chat Bubbles */
+.message-cluster.is-me .message-bubble { 
+    background-color: var(--theme-my-bubble); /* 👈 Replaces accent-orange */
+    color: white; 
+}
+.message-cluster.is-them .message-bubble { 
+    background-color: var(--theme-other-bubble); /* 👈 Replaces surface-dark */
+    color: var(--text-primary); 
+}
+.message-bubble.selected { filter: brightness(0.85); }
+
+/* Edge-to-Edge Media Modifiers */
+.message-bubble.media-edge-to-edge {
+    background-color: transparent !important;
+    padding: 0 !important;
+    overflow: hidden;
+    border: 1px solid rgba(156, 163, 175, 0.15);
+}
+
+/* --- REACTIONS BADGE --- */
+.reactions-badge {
+    position: absolute;
+    bottom: -0.75rem;
+    background-color: var(--surface-dark);
+    border-radius: 1rem;
+    padding: 0.15rem 0.4rem;
+    display: flex;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    border: 2px solid var(--bg-dark);
+    z-index: 2;
+    align-items: center;
+}
+.message-cluster.is-me .reactions-badge { right: 1rem; }
+.message-cluster.is-them .reactions-badge { left: 1rem; }
+.reactions-badge span { display: flex; align-items: center; gap: 0.2rem; }
+.reactions-badge .my-reaction { background-color: rgba(255, 255, 255, 0.1); border-radius: 1rem; padding: 0 0.2rem; }
+.reaction-count { font-weight: bold; color: var(--text-primary); font-size: 0.75rem; }
+
+.clickable-badge { cursor: pointer; transition: transform 0.2s ease, filter 0.2s ease; }
+.clickable-badge:hover { transform: scale(1.05); filter: brightness(1.2); }
+
+/* --- QUOTE BOXES --- */
+.quote-box {
+    background-color: rgba(0, 0, 0, 0.15);
+    border-left: 3px solid rgba(255, 255, 255, 0.5);
+    padding: 0.4rem 0.5rem;
+    border-radius: 0.25rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+}
+.quote-sender { font-weight: bold; font-size: 0.75rem; opacity: 0.9; margin-bottom: 0.1rem; }
+.quote-text { opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.message-cluster.is-them .quote-box { border-color: var(--theme-my-bubble); }
+.message-cluster.is-them .quote-sender { color: var(--theme-my-bubble); }
+
+.quote-box.quote-floating {
+    margin: 8px 8px 4px 8px;
+    background-color: rgba(0, 0, 0, 0.65);
+    border-color: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(8px);
+}
+.quote-floating .quote-sender, .quote-floating .quote-text { color: white !important; }
+
+/* --- CUSTOM VOICE PLAYER & SLIDER --- */
+.voice-player {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 220px;
+    max-width: 100%;
+    padding: 0.25rem 0.25rem 0.25rem 0;
+}
+.voice-play-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+}
+.voice-play-btn:active { transform: scale(0.9); }
+.play-offset { margin-left: 2px; }
+
+.voice-progress-container { flex: 1; display: flex; flex-direction: column; gap: 4px; padding-top: 4px; }
+.voice-time { font-size: 0.65rem; align-self: flex-end; opacity: 0.8; font-variant-numeric: tabular-nums; margin-top: -2px; }
+
+/* The Range Slider replacing the static div */
+.voice-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+.voice-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    cursor: pointer;
+}
+.voice-slider:disabled {
+    cursor: default;
+}
+/* Hide thumb when paused so it looks like a clean line */
+.voice-slider:disabled::-webkit-slider-thumb {
+    display: none; 
+}
+
+.voice-me .voice-play-btn { background-color: rgba(255, 255, 255, 0.25); color: white; }
+.voice-me .voice-play-btn:hover { background-color: rgba(255, 255, 255, 0.35); }
+.voice-me .voice-time { color: rgba(255, 255, 255, 0.8); }
+.voice-me .voice-slider::-webkit-slider-thumb { background: white; }
+
+.voice-them .voice-play-btn { background-color: rgba(156, 163, 175, 0.2); color: var(--text-primary); }
+.voice-them .voice-play-btn:hover { background-color: rgba(156, 163, 175, 0.3); }
+.voice-them .voice-time { color: var(--text-secondary); }
+.voice-them .voice-slider::-webkit-slider-thumb { background: var(--theme-my-bubble); }
+.voice-them .voice-progress-fill { background-color: var(--theme-my-bubble); }
+
+
+/* --- MEDIA GRID LAYOUTS --- */
+.zoomable { cursor: zoom-in; }
+
+.media-single { display: block; width: 100%; max-width: 280px; max-height: 350px; object-fit: cover; background-color: var(--surface-dark); }
+.media-grid-2 { display: flex; width: 100%; max-width: 280px; height: 200px; gap: 2px; }
+.media-grid-2 img { flex: 1; width: 50%; object-fit: cover; background-color: var(--surface-dark); }
+.media-grid-3 { display: flex; flex-direction: column; width: 100%; max-width: 280px; height: 280px; gap: 2px; }
+.media-top-full { flex: 1; width: 100%; height: 50%; object-fit: cover; }
+.media-grid-4 { display: flex; flex-direction: column; width: 100%; max-width: 280px; height: 280px; gap: 2px; }
+.media-row { display: flex; flex: 1; width: 100%; height: 50%; gap: 2px; }
+.media-row img { flex: 1; width: 50%; object-fit: cover; background-color: var(--surface-dark); }
+
+.media-more-wrapper { position: relative; flex: 1; width: 50%; height: 100%; }
+.media-more-wrapper img { width: 100%; height: 100%; }
+.media-more-overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    color: white; display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: bold;
+}
+.pointer-none { pointer-events: none; }
+
+
+/* --- INPUT FOOTER --- */
+.chat-input-container { 
+    padding: 0.75rem 1rem; 
+    background-color: transparent;
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom)); 
+}
+.chat-input-wrapper { 
+    display: flex; 
+    flex-direction: column; 
+    width: 100%; 
+    gap: 0.5rem; 
+}
+
+/* 👇 The New Floating Island */
+.unified-input-island {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    /* 👇 Reduced height and padding for a tighter mobile look */
+    min-height: 40px; 
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(156, 163, 175, 0.2);
+    border-radius: 24px;
+    padding: 2px 6px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.unified-input-island:focus-within {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-color: var(--theme-my-bubble);
+}
+
+.chat-input-form {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    overflow: hidden; /* Important for sliding animation */
+}
+
+.left-action-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    overflow: hidden;
+    transition: max-width 0.4s cubic-bezier(0.4, 0, 0.2, 1), 
+                opacity 0.3s ease;
+}
+
+.left-action-group.expanded {
+    max-width: 80px;
+    opacity: 1;
+}
+
+.left-action-group.collapsed {
+    max-width: 0;
+    opacity: 0;
+}
+
+/* THE EXPAND ARROW */
+.expand-btn {
+    background: none;
+    border: none;
+    color: var(--theme-my-bubble);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    animation: slideInLeft 0.3s ease-out;
+}
+
+.chat-text-input {
+    flex: 1;
+    background-color: transparent;
+    border: none;
+    /* 👇 Tighter vertical padding */
+    padding: 6px 10px;
+    color: var(--text-primary);
+    font-size: 15px;
+    outline: none;
+    min-width: 0;
+}
+
+/* Action Icons (Attach & Mic) */
+.chat-icon-btn {
+    background: none; 
+    border: none; 
+    color: var(--theme-my-bubble);
+    cursor: pointer; 
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex; 
+    align-items: center; 
+    justify-content: center;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+.chat-icon-btn:hover:not(:disabled) { 
+    color: var(--theme-my-bubble);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+.chat-icon-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* Send Button */
+.chat-send-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.chat-send-btn.active {
+    background-color: var(--theme-my-bubble);
+    color: white;
+    transform: scale(1);
+    opacity: 1;
+}
+.chat-send-btn.inactive {
+    background-color: transparent;
+    color: var(--text-secondary);
+    opacity: 0.5;
+    cursor: default;
+    transform: scale(0.9); /* Slightly smaller when inactive */
+}
+
+.chat-send-btn.active:hover {
+    filter: brightness(1.1);
+    transform: scale(1.05);
+}
+.send-icon { margin-left: 2px; }
+/* Animations */
+@keyframes slideInLeft {
+    from { transform: translateX(-10px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* --- ACTIVE RECORDING UI --- */
+.recording-ui-container {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.cancel-record-btn {
+    background: none; border: none; color: #ff4b4b;
+    cursor: pointer; padding: 0.5rem; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    transition: background-color 0.2s;
+    width: 32px;
+    height: 32px;
+}
+.cancel-record-btn:hover { background-color: rgba(255, 75, 75, 0.1); }
+
+.recording-indicator-pill {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    background-color: var(--surface-dark);
+    border-radius: 16px;
+    gap: 0.75rem;
+    height: 32px;
+    padding: 0 12px;
+    
+}
+
+.recording-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: #ff4b4b;
+    animation: blink 1s infinite alternate;
+}
+
+.recording-text {
+    color: white;
+    font-size: 0.9rem;
+    flex: 1;
+}
+
+.recording-timer {
+    color: var(--theme-my-bubble);
+    font-weight: bold;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.send-record-btn {
+    width: 36px; height: 36px; border-radius: 50%; 
+    background-color: var(--theme-my-bubble); color: white;
+    border: none; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: transform 0.2s;
+}
+.send-record-btn:active { transform: scale(0.9); }
+
+@keyframes blink {
+    from { opacity: 1; }
+    to { opacity: 0.3; }
+}
+
+/* --- REPLY PREVIEW BAR --- */
+.reply-preview-bar {
+    display: flex; align-items: center; background-color: var(--surface-dark);
+    padding: 0.5rem 1rem; border-radius: 1rem; border-left: 4px solid var(--theme-my-bubble);
+    gap: 1rem; width: 100%; box-sizing: border-box; animation: slideInUp 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.reply-preview-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.reply-preview-name { font-weight: bold; font-size: 0.75rem; color: var(--theme-my-bubble); }
+.reply-preview-text { font-size: 0.85rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reply-cancel-btn { background: none; border: none; color: var(--text-secondary); cursor: pointer; }
+.reply-cancel-btn:hover { color: var(--text-primary); }
+
+
+/* --- BOTTOM SHEET --- */
+.reaction-sheet-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6); z-index: 1000; display: flex;
+    align-items: flex-end; justify-content: center; animation: fadeInOverlay 0.2s ease-out forwards;
+}
+.reaction-sheet-content {
+    background-color: var(--bg-dark); width: 100%; max-width: 600px;
+    border-top-left-radius: 1.5rem; border-top-right-radius: 1.5rem; padding: 1.5rem;
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.3); border-top: 1px solid rgba(156, 163, 175, 0.2);
+    animation: slideUpSheet 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.reaction-sheet-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid rgba(156, 163, 175, 0.1);
+}
+.reaction-sheet-header h3 { margin: 0; font-size: 1.125rem; color: var(--text-primary); }
+.reaction-sheet-header button {
+    background: none; border: none; color: var(--text-secondary); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; border-radius: 50%;
+    padding: 0.25rem; transition: background-color 0.2s;
+}
+.reaction-sheet-header button:hover { background-color: rgba(255, 255, 255, 0.1); color: var(--text-primary); }
+.reaction-sheet-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: 50vh; overflow-y: auto; }
+.reaction-sheet-item { display: flex; align-items: center; padding: 0.75rem 0; gap: 1rem; }
+.reaction-sheet-emoji { font-size: 1.5rem; background-color: var(--surface-dark); width: 3rem; height: 3rem; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+.reaction-sheet-info { flex: 1; display: flex; flex-direction: column; }
+.reaction-sheet-name { font-size: 1rem; font-weight: 500; color: var(--text-primary); }
+.reaction-sheet-hint { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.15rem; }
+.reaction-sheet-remove-btn { background-color: rgba(255, 75, 75, 0.1); color: #ff4b4b; border: none; padding: 0.5rem 1rem; border-radius: 1rem; font-size: 0.85rem; font-weight: bold; cursor: pointer; transition: background-color 0.2s; }
+.reaction-sheet-remove-btn:hover { background-color: rgba(255, 75, 75, 0.2); }
+
+/* --- FULLSCREEN IMAGE OVERLAY --- */
+.fullscreen-image-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(0, 0, 0, 0.95);
+    z-index: 2000;
+    display: flex; align-items: center; justify-content: center;
+    cursor: zoom-out;
+    animation: fadeInOverlay 0.2s ease-out forwards;
+}
+.fullscreen-image-overlay img {
+    max-width: 100vw;
+    max-height: 100dvh;
+    object-fit: contain;
+}
+.fullscreen-close-btn {
+    position: absolute;
+    top: 1rem; right: 1rem;
+    background: rgba(0, 0, 0, 0.4);
+    color: white;
+    border: none; border-radius: 50%;
+    padding: 0.5rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+}
+.fullscreen-close-btn:hover { background: rgba(0, 0, 0, 0.6); }
+
+@keyframes fadeInOverlay { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUpSheet { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes slideInUp { from { opacity: 0; transform: translateY(10px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.spinner { animation: spin 1s linear infinite; color: var(--accent-orange); }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* 7. Theme Bottom Sheet Specifics */
+.theme-sheet .reaction-sheet-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.theme-list-item {
+    display: flex; align-items: center; padding: 0.75rem 1rem; gap: 1rem;
+    border-radius: 1rem; cursor: pointer; transition: background-color 0.2s;
+}
+.theme-list-item.selected { background-color: rgba(255, 255, 255, 0.05); }
+.theme-preview-circle {
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 2px solid transparent;
+}
+.theme-name { flex: 1; font-weight: 500; font-size: 1rem; color: var(--text-primary); }
+.theme-list-item.selected .theme-name { font-weight: bold; }

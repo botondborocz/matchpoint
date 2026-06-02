@@ -12,7 +12,11 @@ import org.ttproject.database.tables.Locations
 import org.ttproject.database.tables.Matches
 import org.ttproject.database.tables.MessageReactions
 import org.ttproject.database.tables.Messages
+import org.ttproject.database.tables.ReportedMedia
+import org.ttproject.database.tables.ReviewTags
+import org.ttproject.database.tables.Reviews
 import org.ttproject.database.tables.Swipes
+import org.ttproject.database.tables.UserBadgeMetrics
 import org.ttproject.database.tables.Users
 
 // 1. Define the 1-table schema
@@ -40,10 +44,19 @@ fun initDatabase() {
     val dataSource = HikariDataSource(config)
     Database.connect(dataSource)
 
+//    transaction {
+//        // 👇 ADD THIS LINE TEMPORARILY: This wipes the old tables!
+//        SchemaUtils.drop(Reviews, ReviewTags)
+//
+//        // This rebuilds them with the new CASCADE and Unique rules
+//        SchemaUtils.create(Reviews, ReviewTags)
+//    }
+
     // 3. Automatically create the table if it doesn't exist yet
     transaction {
-        SchemaUtils.createMissingTablesAndColumns(Users, Swipes, Locations, Matches, Connections, Messages,
-            MessageReactions, AiAnalyses)
+        SchemaUtils.createMissingTablesAndColumns(Users, Swipes, Locations, Reviews, ReviewTags, Matches, Connections, Messages,
+            MessageReactions, AiAnalyses, UserBadgeMetrics,
+            ReportedMedia)
     }
 
     insertDummyData()

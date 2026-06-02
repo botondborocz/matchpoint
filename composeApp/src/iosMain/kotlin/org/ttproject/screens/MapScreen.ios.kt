@@ -26,6 +26,7 @@ import platform.UIKit.UIImageSymbolWeightBold
 import platform.UIKit.UIUserInterfaceStyle
 import platform.darwin.NSObject
 import kotlinx.cinterop.useContents
+import org.ttproject.AppColors
 import platform.CoreLocation.kCLAuthorizationStatusNotDetermined
 import platform.CoreLocation.kCLAuthorizationStatusAuthorizedAlways
 import platform.CoreLocation.kCLAuthorizationStatusAuthorizedWhenInUse
@@ -46,6 +47,7 @@ actual fun NativeMap(
     val currentOnMarkerClick by rememberUpdatedState(onMarkerClick)
     val currentOnBoundsChanged by rememberUpdatedState(onBoundsChanged)
 
+    val currentAccentColor by rememberUpdatedState(AppColors.AccentOrange)
     var lastHandledTrigger by remember { mutableStateOf(0) }
 
     // 👇 1. Just initialize the manager, DO NOT request permission yet!
@@ -71,14 +73,8 @@ actual fun NativeMap(
             }
 
             override fun mapView(mapView: MKMapView, viewForAnnotation: MKAnnotationProtocol): MKAnnotationView? {
+                if (viewForAnnotation is MKUserLocation) return null
 
-                // 👇 2. THE FIX: Return null for the User Location.
-                // This tells iOS to use the native, animated, pulsing blue dot with the halo!
-                if (viewForAnnotation is MKUserLocation) {
-                    return null
-                }
-
-                // B. CUSTOM CLUB PINS
                 val identifier = "CustomOrangePin"
                 var annotationView = mapView.dequeueReusableAnnotationViewWithIdentifier(identifier) as? MKMarkerAnnotationView
 
@@ -89,9 +85,15 @@ actual fun NativeMap(
                     annotationView.annotation = viewForAnnotation
                 }
 
-                annotationView.markerTintColor = UIColor.colorWithRed(1.0, 0.482, 0.259, 1.0)
-                annotationView.glyphText = "🏓"
+                // 👇 2. Read from our state variable, NOT directly from AppColors!
+                annotationView.markerTintColor = UIColor.colorWithRed(
+                    red = currentAccentColor.red.toDouble(),
+                    green = currentAccentColor.green.toDouble(),
+                    blue = currentAccentColor.blue.toDouble(),
+                    alpha = currentAccentColor.alpha.toDouble()
+                )
 
+                annotationView.glyphText = "🏓"
                 return annotationView
             }
         }
@@ -132,9 +134,26 @@ actual fun NativeMap(
             mapView.layoutMargins = UIEdgeInsetsMake(0.0, 0.0, bottomPadding.value.toDouble(), 0.0)
             mapView.overrideUserInterfaceStyle = if (isDark) UIUserInterfaceStyle.UIUserInterfaceStyleDark else UIUserInterfaceStyle.UIUserInterfaceStyleLight
 
-            // 3. PLOT MARKERS
+            // 👇 1. GRAB THE LATEST COLOR
+            val currentUIColor = UIColor.colorWithRed(
+                red = currentAccentColor.red.toDouble(),
+                green = currentAccentColor.green.toDouble(),
+                blue = currentAccentColor.blue.toDouble(),
+                alpha = currentAccentColor.alpha.toDouble()
+            )
+
             val existingCustomPins = mapView.annotations.filter { it !is MKUserLocation }
 
+            // 👇 2. FORCE COLOR UPDATE ON VISIBLE PINS
+            // This actively re-paints the pins that are currently on the screen
+            existingCustomPins.forEach { annotation ->
+                val view = mapView.viewForAnnotation(annotation as MKAnnotationProtocol) as? MKMarkerAnnotationView
+                if (view != null) {
+                    view.markerTintColor = currentUIColor
+                }
+            }
+
+            // 3. PLOT NEW MARKERS (Your existing logic)
             if (existingCustomPins.size != locations.size) {
                 mapView.removeAnnotations(existingCustomPins)
 
@@ -147,7 +166,7 @@ actual fun NativeMap(
                 }
             }
 
-            // 4. ZOOM TO SELECTED CLUB
+            // 4. ZOOM TO SELECTED CLUB (Your existing logic)
             if (selectedClub != null) {
                 val annotationToSelect = mapView.annotations.firstOrNull {
                     (it as? MKAnnotationProtocol)?.title == selectedClub.id
@@ -165,15 +184,13 @@ actual fun NativeMap(
                 }
             }
 
-            // 👇 5. DEFERRED LOCATION PROMPT & ZOOM
+            // 5. DEFERRED LOCATION PROMPT & ZOOM (Your existing logic)
             if (userLocationTrigger > lastHandledTrigger) {
                 lastHandledTrigger = userLocationTrigger
 
-                // If they haven't been asked yet, prompt them!
                 if (locationManager.authorizationStatus == kCLAuthorizationStatusNotDetermined) {
                     locationManager.requestWhenInUseAuthorization()
                 } else {
-                    // If they already said yes, zoom to them!
                     val userLoc = mapView.userLocation.location
                     if (userLoc != null) {
                         val region = MKCoordinateRegionMakeWithDistance(userLoc.coordinate, 1000.0, 1000.0)

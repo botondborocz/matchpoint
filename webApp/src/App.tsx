@@ -12,6 +12,9 @@ import './App.css';
 import MatchScreen from './components/Screens/MatchScreen';
 import RegisterScreen from './components/Screens/RegisterScreen';
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import ChatDetail from './components/Screens/ChatDetail';
+import ChatDetailScreen from './components/Screens/ChatDetail';
+import MessagesScreen from './components/Screens/MessagesScreen';
 
 function AppContent() {
   // 1. Theme Injection
@@ -92,6 +95,11 @@ function AppContent() {
           {/* <Route path="/home" element={<HomeScreen />} /> */}
           <Route path="/map" element={<MapScreen />} />
           <Route path="/match" element={<MatchScreen />} />
+          {/* <Route path="/messages" element={<ChatDetailScreen />} /> */}
+          <Route path="/messages" element={<MessagesScreen />} />
+        
+          {/* The :chatId captures the ID from the URL! */}
+          <Route path="/chat/:chatId" element={<ChatDetailScreen />} />
           
           {/* The Gateway Tab */}
           <Route 
