@@ -86,30 +86,41 @@ struct ContentView: View {
     @StateObject var appState = AppState()
 
     var body: some View {
-        TabView(selection: $appState.currentTab) {
+        // 🌟 Fix: Wrap the TabView inside an outer GeometryReader and ZStack
+        // to handle the edge-to-edge content sliding animation properly.
+        GeometryReader { geometry in
+            ZStack(alignment: .bottom) {
 
-            ComposeTabViewControllerRepresentable(tabName: "map", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
-                .ignoresSafeArea()
-                .tabItem { Label("Map", systemImage: "map.fill") }
-                .tag("map")
+                TabView(selection: $appState.currentTab) {
+                    ComposeTabViewControllerRepresentable(tabName: "map", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                        .ignoresSafeArea()
+                        .tabItem { Label("Map", systemImage: "map.fill") }
+                        .tag("map")
 
-            ComposeTabViewControllerRepresentable(tabName: "match", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
-                .ignoresSafeArea()
-                .tabItem { Label("Match", systemImage: "sportscourt.fill") }
-                .tag("match")
+                    ComposeTabViewControllerRepresentable(tabName: "match", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                        .ignoresSafeArea()
+                        .tabItem { Label("Match", systemImage: "sportscourt.fill") }
+                        .tag("match")
 
-            ComposeTabViewControllerRepresentable(tabName: "messages", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
-                .ignoresSafeArea()
-                .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
-                .tag("messages")
+                    ComposeTabViewControllerRepresentable(tabName: "messages", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                        .ignoresSafeArea()
+                        .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
+                        .tag("messages")
 
-            ComposeTabViewControllerRepresentable(tabName: "profile", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
-                .ignoresSafeArea()
-                .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
-                .tag("profile")
+                    ComposeTabViewControllerRepresentable(tabName: "profile", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                        .ignoresSafeArea()
+                        .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
+                        .tag("profile")
+                }
+                .tint(appState.tabTintColor)
+                // 👈 1. Force the layout bar to disappear via the core view controller context state modifier
+                .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
+                // 👈 2. Add an explicit frame offset animation so the transition slides off smoothly
+                // instead of snapping instantly and leaving an awkward white block at the bottom
+                .offset(y: appState.isTabBarHidden ? geometry.safeAreaInsets.bottom + 49 : 0)
+                .animation(.spring(response: 0.35, dampingFraction: 0.82), value: appState.isTabBarHidden)
+            }
         }
-        .tint(appState.tabTintColor) // Applies your dynamic themes seamlessly
-        .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
         .fullScreenCover(item: $appState.galleryData) { data in
             NativeSwiftGalleryView(data: data)
                 .background(TransparentBackground())

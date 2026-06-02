@@ -16,5 +16,7 @@ data class Player(
     val elo: Int = (1000..2000).random(),
     val distanceKm: Int = (1..10).random(),
     val imageUrl: String? = null,
-    val badgeMetrics: UserBadgeMetricsDto? = null
+    val badgeMetrics: UserBadgeMetricsDto? = null,
+    val isPremium: Boolean = false,
+    val hasSwipedMeRight: Boolean = false
 )

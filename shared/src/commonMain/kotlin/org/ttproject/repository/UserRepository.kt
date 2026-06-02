@@ -13,6 +13,7 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import org.ttproject.SERVER_IP
@@ -36,6 +37,7 @@ interface UserRepository {
 
     // 👇 ADDED: Fetch Badge Metrics
     suspend fun getBadgeMetrics(): UserBadgeMetricsDto
+    suspend fun togglePremiumStatus(): Result<Boolean>
 }
 
 // 2. The Implementation
@@ -170,6 +172,24 @@ class UserRepositoryImpl(
             throw Exception("Session expired. Please log in again.")
         } else {
             throw Exception("Failed to fetch badge metrics. Server returned: ${response.status}")
+        }
+    }
+
+    override suspend fun togglePremiumStatus(): Result<Boolean> {
+        val token = tokenStorage.getToken() ?: return Result.failure(Exception("No token found"))
+        return try {
+            val response = httpClient.post("${SERVER_IP}/api/users/me/toggle-premium") {
+                bearerAuth(token)
+            }
+            println("Toggle Premium Response: ${response.status}")
+            if (response.status == HttpStatusCode.OK) {
+                val body = response.body<Map<String, Boolean>>()
+                Result.success(body["isPremium"] ?: false)
+            } else {
+                Result.failure(Exception("HTTP error toggling membership"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 }

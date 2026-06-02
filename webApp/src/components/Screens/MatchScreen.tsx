@@ -48,6 +48,7 @@ export default function MatchScreen() {
         setIsLoading(true);
         fetchNearbyPlayers()
             .then((data) => {
+                console.log(data)
                 setPlayers(data);
                 setIsLoading(false);
             })
@@ -115,7 +116,7 @@ export default function MatchScreen() {
         // 2. Fire off the network request in the background
         try {
             const result = await submitSwipe(targetPlayerId, isLiked);
-            
+
             // If the backend says it's a mutual match, show the celebration!
             if (result.isMatch) {
                 setMatchedPlayer(topPlayer);
@@ -130,7 +131,7 @@ export default function MatchScreen() {
             setPlayers(prev => prev.slice(1)); // Remove the top player we just swiped
             setDragPos({ x: 0, y: 0 });        // Reset positions for next card
             setExitAnim(null);                 // Clear animation state
-        }, 300); 
+        }, 300);
     };
 
     return (
@@ -157,7 +158,7 @@ export default function MatchScreen() {
                         <p className="text-muted">No more matches nearby!</p>
                     ) : (
                         // 3. Show the cards if we have data!
-                        <> 
+                        <>
                             <div className={`card-stack-wrapper ${!hasSwiped ? 'animate-spring-up' : ''}`}>
                                 {/* 1. The Background Card (Next Player) */}
                                 {nextPlayer && (
@@ -251,13 +252,16 @@ export default function MatchScreen() {
 
 // 1. Add the animate prop
 function MatchCardContent({ player, animate = false }: { player: Player, animate?: boolean }) {
+    console.log(player);
     return (
         <>
-            <img
-                src={player.imageUrl || 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?auto=format&fit=crop&q=80&w=800'}
-                alt={`${player.username}'s profile`}
-                className="card-image"
-            />
+            {player.imageUrl && (
+                <img
+                    src={player.imageUrl}
+                    alt={`${player.username}'s profile`}
+                    className="card-image"
+                />
+            )}
             <div className="card-gradient-overlay" />
 
             <div className="card-content-inner">

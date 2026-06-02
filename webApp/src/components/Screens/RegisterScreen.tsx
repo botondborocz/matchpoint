@@ -94,13 +94,13 @@ export default function RegisterScreen({ onLoginSuccess }: RegisterScreenProps) 
                 <div className="fade-in-up" style={{ textAlign: 'center' }}>
                     {isDarkMode ? (
                         <img
-                            src="../../../assets/match_logo_long.png"
+                            src="../../../assets/matchpoint_logo_long_dark.png"
                             alt="Match Logo"
                             className="auth-logo"
                         />)
                         : (
                             <img
-                                src="../../../assets/match_logo_long_dark.png"
+                                src="../../../assets/matchpoint_logo_long_light.png"
                                 alt="Match Logo"
                                 className="auth-logo"
                             />

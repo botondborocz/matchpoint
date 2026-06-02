@@ -16,11 +16,13 @@ import io.ktor.server.routing.*
 import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.SqlExpressionBuilder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.ttproject.database.tables.Users
 import org.ttproject.utils.calculateDistanceKm
 import org.jetbrains.exposed.sql.and
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.update
@@ -57,17 +59,32 @@ fun Route.userRoutes(badgeService: BadgeService) {
                     call.respond(HttpStatusCode.Unauthorized, "Invalid token")
                     return@get
                 }
-                // Read the coordinates from the URL (e.g., /users/nearby?lat=47.5&lng=19.1)
+
+                val currentUserUuid = UUID.fromString(currentUserId)
+
+                // Check if the requesting user is premium right from our base context
+                val isCurrentUserPremium = transaction {
+                    Users.selectAll().where { Users.id eq currentUserUuid }
+                        .singleOrNull()?.get(Users.isPremium) == true // 👈 (Assumes your schema holds an isPremium col)
+                }
+
                 val userLat = call.request.queryParameters["lat"]?.toDoubleOrNull()
                 val userLng = call.request.queryParameters["lng"]?.toDoubleOrNull()
 
+                // Query outbound targets safely
                 val allPlayers = transaction {
-                    // 👇 Use a LEFT JOIN to fetch Users AND their Badges in one single, fast query!
-                    Users.leftJoin(org.ttproject.database.tables.UserBadgeMetrics)
+                    Users.leftJoin(UserBadgeMetrics)
                         .selectAll()
                         .map { row ->
+                            val targetId = row[Users.id].toString()
 
-                            // 1. Extract the badge metrics if they exist for this user
+                            // Check if this specific target user has swiped current user right
+                            val hasSwipedMe = Swipes.selectAll().where {
+                                (Swipes.swiperId eq UUID.fromString(targetId)) and
+                                        (Swipes.swipedId eq currentUserUuid) and
+                                        (Swipes.isLiked eq true)
+                            }.count() > 0
+
                             val metricsDto = if (row.getOrNull(UserBadgeMetrics.userId) != null) {
                                 org.ttproject.data.UserBadgeMetricsDto(
                                     addedTables = row[UserBadgeMetrics.addedTables],
@@ -84,182 +101,241 @@ fun Route.userRoutes(badgeService: BadgeService) {
                                 )
                             } else null
 
-                            // 2. Map to the PlayerResponse
                             PlayerResponse(
-                                id = row[Users.id].toString(),
+                                id = targetId,
                                 username = row[Users.username] ?: "Player",
                                 skillLevel = row[Users.skillLevel]?.name ?: "Beginner",
                                 lat = row[Users.lastLat],
                                 lng = row[Users.lastLng],
                                 imageUrl = row[Users.profileImageUrl],
-                                // 👇 Attach the badges to send to the frontend!
-                                badgeMetrics = metricsDto
+                                badgeMetrics = metricsDto,
+                                isPremium = isCurrentUserPremium, // 👈 Tells app client if content can be unmasked
+                                hasSwipedMeRight = hasSwipedMe    // 👈 Controls layout blurring logic
                             )
                         }.filter { it.id != currentUserId }
                 }
 
                 val alreadySwipedPlayers = transaction {
                     Swipes.selectAll().where {
-                        (Swipes.swiperId eq UUID.fromString(currentUserId)) and
+                        (Swipes.swiperId eq currentUserUuid) and
                                 (Swipes.swipedId inList allPlayers.map { UUID.fromString(it.id) })
-                    }.map {
-                        it[Swipes.swipedId].toString()
-                    }.toSet()
+                    }.map { it[Swipes.swipedId].toString() }.toSet()
                 }
 
-                val freshPlayers = allPlayers.filterNot { player ->
-                    alreadySwipedPlayers.contains(player.id)
-                }
+                val freshPlayers = allPlayers.filterNot { alreadySwipedPlayers.contains(it.id) }
 
                 if (userLat != null && userLng != null) {
-                    // 📍 SORT BY DISTANCE
                     val sortedPlayers = freshPlayers.sortedBy { player ->
                         if (player.lat != null && player.lng != null) {
                             calculateDistanceKm(userLat, userLng, player.lat!!, player.lng!!)
-                        } else {
-                            Double.MAX_VALUE // Put users with no location at the very bottom
-                        }
+                        } else { Double.MAX_VALUE }
                     }
                     call.respond(sortedPlayers)
                 } else {
-                    // 🎲 RANDOM SHUFFLE
                     call.respond(freshPlayers.shuffled())
                 }
             }
 
-            post("/{playerId}/swipe") {
-                // 1. Get the ID of the user who is swiping (from the JWT token)
+// 2. 👇 NEW: DELETE Route to clear out swipe metrics and support premium undo operations
+            delete("/{playerId}/swipe") {
                 val principal = call.principal<JWTPrincipal>()
                 val currentUserId = principal?.payload?.getClaim("userId")?.asString()
 
                 if (currentUserId == null) {
                     call.respond(HttpStatusCode.Unauthorized, "Invalid token")
-                    return@post
+                    return@delete
                 }
 
-                // 2. Get the ID of the player they are swiping ON (from the URL)
-                val targetPlayerId = call.parameters["playerId"]
-                if (targetPlayerId == null) {
-                    call.respond(HttpStatusCode.BadRequest, "Missing playerId in URL")
-                    return@post
-                }
+                val targetPlayerId = call.parameters["playerId"] ?: return@delete call.respond(HttpStatusCode.BadRequest, "Missing targets")
 
-                // 3. Get the swipe action (Like or Pass) from the JSON body
-                val swipeRequest = call.receive<SwipeRequest>()
-
-                val matchService = MatchService()
-
-                // 4. Send this to your database service to process
-                val isMatch = matchService.processSwipe(
-                    swiperId = currentUserId,
-                    targetId = targetPlayerId,
-                    isLiked = swipeRequest.isLiked
-                )
-
-                // 👇 NEW: BADGE INCREMENT LOGIC
                 val swiperUuid = UUID.fromString(currentUserId)
                 val targetUuid = UUID.fromString(targetPlayerId)
 
-                // Every swipe counts towards the "Radar" badge for the person swiping
-                badgeService.incrementMetric(
-                    userIdParam = swiperUuid,
-                    column = UserBadgeMetrics.profileSwipes
-                )
-
-                // If they matched, reward BOTH players with the "Jégtörő" (Ice Breaker) badge progress!
-                if (isMatch) {
-                    badgeService.incrementMetric(
-                        userIdParam = swiperUuid,
-                        column = UserBadgeMetrics.successfulMatches
-                    )
-                    badgeService.incrementMetric(
-                        userIdParam = targetUuid,
-                        column = UserBadgeMetrics.successfulMatches
-                    )
-                }
-                // 👆 END NEW LOGIC
-
-                // 5. Reply to the mobile app!
-                call.respond(HttpStatusCode.OK, SwipeResponse(isMatch = isMatch))
-            }
-
-            get("/me") {
-                val principal = call.principal<JWTPrincipal>()
-                val userIdStr = principal?.payload?.getClaim("userId")?.asString()
-                    ?: return@get call.respond(HttpStatusCode.Unauthorized, "Invalid token: Missing user ID")
-
-                // 2. Now it's safe to convert to UUID!
-                val userId = UUID.fromString(userIdStr)
-
-                // 3. Update the streak (Optionally extract timezone from header here)
-                val userTimezone = call.request.headers["X-Timezone"] ?: "UTC"
-                badgeService.updateStreak(userId, userTimezone)
-
-                val userProfile = transaction {
-                    Users.selectAll().where { Users.id eq UUID.fromString(userIdStr) }
-                        .singleOrNull()?.let { row ->
-                            UserProfile(
-                                id = row[Users.id].toString(),
-                                name = row[Users.username],
-                                email = row[Users.email],
-                                elo = row[Users.eloRating],
-                                winRate = "50%",
-                                preferredLanguage = row[Users.preferred_language],
-                                imageUrl = row[Users.profileImageUrl],
-                                blade = row[Users.gearBlade],
-                                rubberFh = row[Users.gearRubberFh],
-                                rubberBh = row[Users.gearRubberBh],
-                                // 👇 Add the new DB pulls
-                                bio = row[Users.bio],
-                                skillLevel = row[Users.skillLevel]?.name,
-                                birthDate =  row[Users.birthDate],
-                                age = calculateAge(row[Users.birthDate]) // Calculate on the fly!
-                            )
-                        }
+                // Security Verification step: Verify pricing subscription tiers match execution scope limits
+                val isPremium = transaction {
+                    Users.selectAll().where { Users.id eq swiperUuid }.singleOrNull()?.get(Users.isPremium) == true
                 }
 
-                if (userProfile != null) {
-                    call.respond(userProfile)
-                } else {
-                    call.respond(HttpStatusCode.NotFound, "User not found")
+                if (!isPremium) {
+                    call.respond(HttpStatusCode.Forbidden, "Undo is a Premium subscription feature.")
+                    return@delete
                 }
-            }
 
-            put("/me") {
-                val principal = call.principal<JWTPrincipal>()
-                val userId = principal?.payload?.getClaim("userId")?.asString() ?: return@put call.respond(HttpStatusCode.Unauthorized)
-
-                val request = try { call.receive<UpdateProfileRequest>() } catch (e: Exception) { return@put call.respond(HttpStatusCode.BadRequest, "Invalid JSON") }
-
-                try {
-                    val userUuid = UUID.fromString(userId)
-                    val isNameTaken = transaction {
-                        Users.selectAll().where { (Users.username eq request.name) and (Users.id neq userUuid) }.count() > 0
+                val rowsDeleted = transaction {
+                    // Erase record out of database tables cleanly
+                    Swipes.deleteWhere {
+                        (Swipes.swiperId eq swiperUuid) and (Swipes.swipedId eq targetUuid)
                     }
+                }
 
-                    if (isNameTaken) {
-                        return@put call.respond(HttpStatusCode.Conflict, "Username is already taken.")
-                    }
-
-                    val updatedRows = transaction {
-                        Users.update({ Users.id eq userUuid }) {
-                            it[username] = request.name
-                            it[gearBlade] = request.blade
-                            it[gearRubberFh] = request.forehand
-                            it[gearRubberBh] = request.backhand
-                            // 👇 Add the new fields to the update query!
-                            it[bio] = request.bio
-                            it[birthDate] = request.birthDate
-                            it[skillLevel] = request.skillLevel?.let { levelStr ->
-                                try { org.ttproject.database.tables.SkillLevel.valueOf(levelStr) } catch (e: Exception) { null }
+                if (rowsDeleted > 0) {
+                    // Decrement profile metric targets cleanly to keep stats perfectly synched
+                    transaction {
+                        UserBadgeMetrics.update({ UserBadgeMetrics.userId eq swiperUuid }) {
+                            with(SqlExpressionBuilder) {
+                                it[profileSwipes] = profileSwipes - 1
                             }
                         }
                     }
+                    call.respond(HttpStatusCode.OK, "Swipe action reverted successfully.")
+                } else {
+                    call.respond(HttpStatusCode.NotFound, "No matching record found to undo.")
+                }
+            }
 
-                    if (updatedRows > 0) call.respond(HttpStatusCode.OK, mapOf("message" to "Profile updated!"))
-                    else call.respond(HttpStatusCode.NotFound, "User not found.")
-                } catch (e: Exception) {
-                    call.respond(HttpStatusCode.InternalServerError, "Database error: ${e.message}")
+            // Add this route right inside your authenticated "/api/users" block in userRoutes.kt
+
+            get("/likes") {
+                val principal = call.principal<JWTPrincipal>()
+                val currentUserId = principal?.payload?.getClaim("userId")?.asString()
+
+                if (currentUserId == null) {
+                    return@get call.respond(HttpStatusCode.Unauthorized, "Invalid token")
+                }
+
+                val currentUserUuid = UUID.fromString(currentUserId)
+
+                // Check if the current user is premium
+                val isPremiumUser = transaction {
+                    Users.selectAll().where { Users.id eq currentUserUuid }
+                        .singleOrNull()?.getOrNull(Users.isPremium) == true
+                }
+
+                val peopleWhoLikedMe = transaction {
+                    // ✂️ REMOVED: myOutboundSwipes query mapping block completely
+
+                    (Swipes innerJoin Users)
+                        .selectAll().where { (Swipes.swipedId eq currentUserUuid) and (Swipes.isLiked eq true) }
+                        .map { row ->
+                            val senderId = row[Users.id]
+
+                            PlayerResponse(
+                                id = senderId.toString(),
+                                // PAYWALL SECURITY MASK: Unmasked for premium, placeholder text for free tiers
+                                username = if (isPremiumUser) row[Users.username] else "Premium User",
+                                skillLevel = row[Users.skillLevel]?.name ?: "Beginner",
+                                lat = null,
+                                lng = null,
+                                imageUrl = row[Users.profileImageUrl],
+                                isPremium = isPremiumUser,
+                                hasSwipedMeRight = true
+                            )
+                        } // ✂️ REMOVED: .filterNot { ... } trailing condition block completely
+                }
+
+                call.respond(peopleWhoLikedMe)
+            }
+
+            // Inside your route("/api/users") block:
+
+            route("/me") {
+
+                // 1. GET Profile
+                get {
+                    val principal = call.principal<JWTPrincipal>()
+                    val userIdStr = principal?.payload?.getClaim("userId")?.asString()
+                        ?: return@get call.respond(HttpStatusCode.Unauthorized, "Invalid token: Missing user ID")
+
+                    val userId = UUID.fromString(userIdStr)
+                    val userTimezone = call.request.headers["X-Timezone"] ?: "UTC"
+                    badgeService.updateStreak(userId, userTimezone)
+
+                    val userProfile = transaction {
+                        Users.selectAll().where { Users.id eq UUID.fromString(userIdStr) }
+                            .singleOrNull()?.let { row ->
+                                UserProfile(
+                                    id = row[Users.id].toString(),
+                                    name = row[Users.username],
+                                    email = row[Users.email],
+                                    elo = row[Users.eloRating],
+                                    winRate = "50%",
+                                    preferredLanguage = row[Users.preferred_language],
+                                    imageUrl = row[Users.profileImageUrl],
+                                    blade = row[Users.gearBlade],
+                                    rubberFh = row[Users.gearRubberFh],
+                                    rubberBh = row[Users.gearRubberBh],
+                                    bio = row[Users.bio],
+                                    skillLevel = row[Users.skillLevel]?.name,
+                                    birthDate =  row[Users.birthDate],
+                                    age = calculateAge(row[Users.birthDate]),
+                                    isPremium = row.getOrNull(Users.isPremium) == true
+                                )
+                            }
+                    }
+
+                    if (userProfile != null) {
+                        call.respond(userProfile)
+                    } else {
+                        call.respond(HttpStatusCode.NotFound, "User not found")
+                    }
+                }
+
+                // 2. PUT Profile Update
+                put {
+                    val principal = call.principal<JWTPrincipal>()
+                    val userId = principal?.payload?.getClaim("userId")?.asString()
+                        ?: return@put call.respond(HttpStatusCode.Unauthorized)
+
+                    val request = try { call.receive<UpdateProfileRequest>() } catch (e: Exception) {
+                        return@put call.respond(HttpStatusCode.BadRequest, "Invalid JSON")
+                    }
+
+                    try {
+                        val userUuid = UUID.fromString(userId)
+                        val isNameTaken = transaction {
+                            Users.selectAll().where { (Users.username eq request.name) and (Users.id neq userUuid) }.count() > 0
+                        }
+
+                        if (isNameTaken) {
+                            return@put call.respond(HttpStatusCode.Conflict, "Username is already taken.")
+                        }
+
+                        val updatedRows = transaction {
+                            Users.update({ Users.id eq userUuid }) {
+                                it[username] = request.name
+                                it[gearBlade] = request.blade
+                                it[gearRubberFh] = request.forehand
+                                it[gearRubberBh] = request.backhand
+                                it[bio] = request.bio
+                                it[birthDate] = request.birthDate
+                                it[skillLevel] = request.skillLevel?.let { levelStr ->
+                                    try { org.ttproject.database.tables.SkillLevel.valueOf(levelStr) } catch (e: Exception) { null }
+                                }
+                            }
+                        }
+
+                        if (updatedRows > 0) call.respond(HttpStatusCode.OK, mapOf("message" to "Profile updated!"))
+                        else call.respond(HttpStatusCode.NotFound, "User not found.")
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.InternalServerError, "Database error: ${e.message}")
+                    }
+                }
+
+                // 3. POST Premium Toggle (Your 404 Fix)
+                post("/toggle-premium") {
+                    val principal = call.principal<JWTPrincipal>()
+                    val userIdStr = principal?.payload?.getClaim("userId")?.asString()
+                        ?: return@post call.respond(HttpStatusCode.Unauthorized, "Invalid token")
+
+                    val userUuid = UUID.fromString(userIdStr)
+
+                    try {
+                        val updatedPremiumState = transaction {
+                            val currentPremium = Users.selectAll().where { Users.id eq userUuid }
+                                .singleOrNull()?.let { it[Users.isPremium] } == true
+
+                            val nextPremium = !currentPremium
+
+                            Users.update({ Users.id eq userUuid }) {
+                                it[Users.isPremium] = nextPremium
+                            }
+                            nextPremium
+                        }
+
+                        call.respond(HttpStatusCode.OK, mapOf("isPremium" to updatedPremiumState))
+                    } catch (e: Exception) {
+                        call.respond(HttpStatusCode.InternalServerError, "Database error: ${e.message}")
+                    }
                 }
             }
 
@@ -285,7 +361,8 @@ fun Route.userRoutes(badgeService: BadgeService) {
                                 rubberBh = row[Users.gearRubberBh],
                                 bio = row[Users.bio],
                                 skillLevel = row[Users.skillLevel]?.name,
-                                age = calculateAge(row[Users.birthDate])
+                                age = calculateAge(row[Users.birthDate]),
+                                isPremium = false
                             )
                         }
                 }

@@ -18,7 +18,8 @@ data class UserProfile(
     val bio: String? = null,
     val birthDate: String? = null,
     val skillLevel: String? = null,
-    val age: Int? = null
+    val age: Int? = null,
+    val isPremium: Boolean = false
 )
 
 @Serializable
@@ -41,5 +42,7 @@ data class PlayerResponse(
     val lng: Double?,
     val preferredLanguage: String? = null,
     val imageUrl: String? = null,
-    val badgeMetrics: UserBadgeMetricsDto? = null
+    val badgeMetrics: UserBadgeMetricsDto? = null,
+    val isPremium: Boolean = false,
+    val hasSwipedMeRight: Boolean = false
 )

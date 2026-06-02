@@ -390,3 +390,233 @@
         transform: translateY(0);
     }
 }
+
+/* =======================================================
+   AVATAR IMAGE & EDIT BUBBLE
+   ======================================================= */
+   .avatar-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.clickable-avatar {
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.clickable-avatar:active {
+    transform: scale(0.95);
+}
+
+.avatar-image {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    /* object-position is handled inline via React */
+}
+
+.avatar-edit-bubble {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    background-color: var(--accent-orange);
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 3px solid var(--bg-dark); /* Creates the "cutout" effect */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* =======================================================
+   CROP / FRAME DIALOG MODAL
+   ======================================================= */
+.crop-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 24px;
+}
+
+.crop-modal-card {
+    background-color: var(--surface-dark);
+    border-radius: 24px;
+    padding: 32px 24px;
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.close-modal-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: rgba(0,0,0,0.3);
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    cursor: pointer;
+}
+
+.crop-title {
+    color: var(--text-primary);
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0 0 24px 0;
+}
+
+/* The 1:1 Preview constraints */
+.crop-preview-box {
+    width: 80%;
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    border: 2px solid var(--accent-orange);
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.crop-preview-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    /* object-position is handled inline via React */
+}
+
+.crop-subtitle {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin: 0 0 12px 0;
+}
+
+/* Slider Styling */
+.bias-slider {
+    width: 100%;
+    accent-color: var(--accent-orange);
+    margin-bottom: 32px;
+}
+
+/* Actions */
+.crop-actions {
+    display: flex;
+    width: 100%;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.crop-cancel-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-weight: 600;
+    padding: 12px 16px;
+    cursor: pointer;
+}
+
+.crop-save-btn {
+    background-color: var(--accent-orange);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 12px 24px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.crop-save-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+/* =======================================================
+   EDIT PROFILE SPECIFICS
+   ======================================================= */
+   .username-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 8px;
+    transition: background-color 0.2s ease;
+}
+
+.username-row:active {
+    background-color: var(--surface-active);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .username-row:hover {
+        background-color: var(--surface-hover);
+    }
+}
+
+.edit-icon-btn {
+    opacity: 0.6;
+}
+
+.justify-between {
+    justify-content: space-between;
+}
+
+/* Edit Form Inputs */
+.edit-form-container {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-align: left;
+    width: 100%;
+}
+
+.input-group label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.edit-input {
+    width: 100%;
+    background-color: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(156, 163, 175, 0.3);
+    border-radius: 12px;
+    padding: 12px 16px;
+    color: var(--text-primary);
+    font-size: 16px;
+    outline: none;
+    transition: border-color 0.2s ease;
+}
+
+.edit-input:focus {
+    border-color: var(--accent-orange);
+}
+
+.mb-0 { margin-bottom: 0; }
+.mt-3 { margin-top: 12px; }
+.mt-6 { margin-top: 24px; }

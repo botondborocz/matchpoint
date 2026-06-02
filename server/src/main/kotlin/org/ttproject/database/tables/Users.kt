@@ -35,6 +35,8 @@ object Users : Table("users") {
 
     val isAdmin = bool("is_admin").default(false)
 
+    val isPremium = bool("is_premium").default(false)
+
     val createdAt = timestamp("created_at")
 
     override val primaryKey = PrimaryKey(id)

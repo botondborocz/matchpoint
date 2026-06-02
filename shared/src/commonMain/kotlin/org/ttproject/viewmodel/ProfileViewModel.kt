@@ -28,7 +28,8 @@ sealed class ProfileState {
         val birthDate: String? = null,
         val skillLevel: String? = null,
         val age: Int? = null,
-        val badgeMetrics: UserBadgeMetricsDto? = null // 👈 ADD THIS
+        val badgeMetrics: UserBadgeMetricsDto? = null,
+        val isPremium: Boolean
     ) : ProfileState()
     data class Error(val message: String) : ProfileState()
 }
@@ -78,7 +79,7 @@ class ProfileViewModel(
                     blade = user.blade, rubberFh = user.rubberFh, rubberBh = user.rubberBh,
                     bio = user.bio, birthDate = user.birthDate,
                     skillLevel = user.skillLevel, age = user.age,
-                    badgeMetrics = metrics // 👈 Pass the fetched metrics here!
+                    badgeMetrics = metrics, isPremium = user.isPremium
                 )
             } catch (e: Exception) {
                 _uiState.value = ProfileState.Error("Failed to load profile: ${e.message}")
@@ -164,6 +165,22 @@ class ProfileViewModel(
             } catch (e: Exception) {
                 e.printStackTrace()
                 _updateState.value = UpdateState.Error("Nem sikerült megváltoztatni az ikont.")
+            }
+        }
+    }
+
+    fun togglePremiumStatus() {
+        viewModelScope.launch {
+            _updateState.value = UpdateState.Loading
+            val result = userRepository.togglePremiumStatus()
+            println("Toggle Premium Result: $result") // Debug log to check the result
+
+            if (result.isSuccess) {
+                _updateState.value = UpdateState.Success
+                fetchUserProfile() // 🌟 Boom: Re-fetches user profile to update all screens instantly
+            } else {
+                val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+                _updateState.value = UpdateState.Error(errorMsg)
             }
         }
     }
