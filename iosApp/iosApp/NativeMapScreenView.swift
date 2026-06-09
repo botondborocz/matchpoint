@@ -835,24 +835,24 @@ struct NativeMapScreenView: View {
                                                 .fill(colorAccent.opacity(0.2))
                                                 .frame(width: 32, height: 32)
                                                 .overlay(
-                                                    Text(String((review.authorName).prefix(2)).uppercased())
+                                                    Text(String((review.username).prefix(2)).uppercased())
                                                         .font(.system(size: 12, weight: .bold))
                                                         .foregroundColor(colorAccent)
                                                 )
                                             
                                             VStack(alignment: .leading, spacing: 2) {
-                                                Text(review.authorName)
+                                                Text(review.username)
                                                     .font(.system(size: 14, weight: .bold))
                                                     .foregroundColor(.white)
-                                                Text(review.timeAgo)
+                                                Text(timeAgo(from: review.createdAt))
                                                     .font(.system(size: 11))
                                                     .foregroundColor(.gray)
                                             }
                                             Spacer()
                                         }
                                         
-                                        if !review.text.isEmpty {
-                                            Text(review.text)
+                                        if let textContent = review.textContent, !textContent.isEmpty {
+                                            Text(textContent)
                                                 .font(.system(size: 14))
                                                 .foregroundColor(.white)
                                         }
@@ -943,6 +943,13 @@ struct NativeMapScreenView: View {
         if let url = URL(string: urlStr) {
             UIApplication.shared.open(url)
         }
+    }
+
+    private func timeAgo(from millisecondTimestamp: Int64) -> String {
+        let date = Date(timeIntervalSince1970: Double(millisecondTimestamp) / 1000.0)
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 

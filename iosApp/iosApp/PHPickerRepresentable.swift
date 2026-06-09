@@ -39,11 +39,13 @@ struct PHPickerRepresentable: UIViewControllerRepresentable {
             for provider in itemProviders {
                 if provider.canLoadObject(ofClass: UIImage.self) {
                     group.enter()
-                    provider.loadObject(ofClass: UIImage.self) { [weak self] image, error in
-                        defer { group.leave() }
-                        if let uiImage = image as? UIImage,
-                           let data = uiImage.jpegData(compressionQuality: 0.8) {
-                            selectedDataList.append(data)
+                    provider.loadObject(ofClass: UIImage.self) { image, error in
+                        DispatchQueue.main.async {
+                            if let uiImage = image as? UIImage,
+                               let data = uiImage.jpegData(compressionQuality: 0.8) {
+                                selectedDataList.append(data)
+                            }
+                            group.leave()
                         }
                     }
                 }
