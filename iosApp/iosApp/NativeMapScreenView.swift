@@ -565,7 +565,7 @@ struct NativeMapScreenView: View {
                         let isSelected = selectedTags.contains(opt)
                         if isSelected {
                             Button(action: {
-                                withAnimation(.spring(response: 0.25, dampingFraction: 0.825)) {
+                                withAnimation(.spring(duration: 0.25, bounce: 0.175)) {
                                     selectedTags.remove(opt)
                                 }
                             }) {
