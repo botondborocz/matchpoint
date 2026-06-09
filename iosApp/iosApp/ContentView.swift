@@ -1,6 +1,11 @@
 import UIKit
 import SwiftUI
 import ComposeApp
+import shared
+
+// MARK: - Native Gallery Bridge Models
+// ... (previous contents unmodified)
+
 
 // MARK: - Native Gallery Bridge Models
 struct GalleryData: Identifiable {
@@ -84,10 +89,14 @@ struct ComposeTabViewControllerRepresentable: UIViewControllerRepresentable {
 struct ContentView: View {
     @StateObject var appState = AppState()
 
+    init() {
+        KoinHelper.shared.safeInitKoin()
+    }
+
     var body: some View {
         GeometryReader { geometry in
             TabView(selection: $appState.currentTab) {
-                ComposeTabViewControllerRepresentable(tabName: "map", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                NativeMapScreenView(appState: appState)
                     .ignoresSafeArea()
                     .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
                     .tabItem { Label("Map", systemImage: "map.fill") }
