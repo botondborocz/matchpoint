@@ -527,8 +527,8 @@ struct NativeMapScreenView: View {
             if !selectedTags.isEmpty {
                 // Map indoor/outdoor options to loc.type
                 for filter in selectedTags {
-                    if filter == "Indoor" && loc.type != .indoor { return false }
-                    if filter == "Outdoor" && loc.type != .outdoor { return false }
+                    if filter == "Indoor" && loc.type != LocationType.indoor { return false }
+                    if filter == "Outdoor" && loc.type != LocationType.outdoor { return false }
                     if filter == "Free" && !loc.isFree { return false }
                     if filter == "Paid" && loc.isFree { return false }
                     
@@ -764,7 +764,7 @@ struct NativeMapScreenView: View {
                         // Amenities & Info
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
-                                Label(club.type == .indoor ? "Indoor Arena" : "Outdoor Space", systemImage: club.type == .indoor ? "house.fill" : "leaf.fill")
+                                Label(club.type == LocationType.indoor ? "Indoor Arena" : "Outdoor Space", systemImage: club.type == LocationType.indoor ? "house.fill" : "leaf.fill")
                                 Spacer()
                                 Text(club.isFree ? "Free Access" : "Paid Arena")
                                     .fontWeight(.bold)
