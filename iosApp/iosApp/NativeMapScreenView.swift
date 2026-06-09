@@ -284,17 +284,17 @@ struct NativeMapScreenView: View {
                         // Search bar
                         HStack(spacing: 8) {
                             Image(systemName: "magnifyingglass")
-                                .foregroundColor(.gray)
+                                .foregroundColor(.secondary)
                             
                             TextField("Search venues...", text: $searchQuery)
-                                .foregroundColor(.white)
+                                .foregroundColor(.primary)
                                 .accentColor(colorAccent)
                                 .font(.system(size: 15))
                             
                             if !searchQuery.isEmpty {
                                 Button(action: { searchQuery = "" }) {
                                     Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.gray)
+                                        .foregroundColor(.secondary)
                                 }
                             }
                             
@@ -304,22 +304,22 @@ struct NativeMapScreenView: View {
                                 }
                             }) {
                                 Image(systemName: "slider.horizontal.3")
-                                    .foregroundColor(isFilterPanelExpanded || !selectedTags.isEmpty ? colorAccent : .gray)
+                                    .foregroundColor(isFilterPanelExpanded || !selectedTags.isEmpty ? colorAccent : .secondary)
                                     .padding(8)
                                     .background(isFilterPanelExpanded || !selectedTags.isEmpty ? colorAccent.opacity(0.2) : Color.clear, in: Circle())
                             }
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
-                        .background(colorSurface.opacity(0.95))
-                        .cornerRadius(24)
-                        .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.white.opacity(0.1), lineWidth: 1))
+                        .glassEffect(.regular)
+                        .clipShape(RoundedRectangle(cornerRadius: 24))
+                        .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.primary.opacity(0.1), lineWidth: 1))
                         .shadow(radius: 6)
                         
                         // Filters drawer
                         if isFilterPanelExpanded {
                             VStack(alignment: .leading, spacing: 12) {
-                                Divider().background(Color.white.opacity(0.1))
+                                Divider().background(Color.primary.opacity(0.1))
                                 
                                 ScrollView {
                                     VStack(alignment: .leading, spacing: 14) {
@@ -333,8 +333,9 @@ struct NativeMapScreenView: View {
                                 .frame(maxHeight: 220)
                             }
                             .padding([.horizontal, .bottom])
-                            .background(colorSurface.opacity(0.95))
-                            .cornerRadius(24)
+                            .padding(.top, 10)
+                            .glassEffect(.regular)
+                            .clipShape(RoundedRectangle(cornerRadius: 24))
                             .shadow(radius: 6)
                         }
                     }
@@ -354,7 +355,8 @@ struct NativeMapScreenView: View {
                                 .font(.system(size: 18))
                                 .foregroundColor(colorAccent)
                                 .frame(width: 48, height: 48)
-                                .background(colorSurface, in: RoundedRectangle(cornerRadius: 16))
+                                .glassEffect(.regular)
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
                                 .shadow(radius: 4)
                         }
                         
@@ -368,7 +370,8 @@ struct NativeMapScreenView: View {
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(colorAccent)
                                 .frame(width: 48, height: 48)
-                                .background(colorSurface, in: RoundedRectangle(cornerRadius: 16))
+                                .glassEffect(.regular)
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
                                 .shadow(radius: 4)
                         }
                     }
@@ -549,7 +552,7 @@ struct NativeMapScreenView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(.system(size: 11, weight: .bold))
-                .foregroundColor(.gray)
+                .foregroundColor(.secondary)
                 .padding(.leading, 4)
             
             ScrollView(.horizontal, showsIndicators: false) {
@@ -558,10 +561,18 @@ struct NativeMapScreenView: View {
                         let isSelected = selectedTags.contains(opt)
                         Text(opt)
                             .font(.system(size: 14))
-                            .foregroundColor(.white)
+                            .foregroundColor(isSelected ? .white : .primary)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
-                            .background(isSelected ? colorAccent : colorSurface, in: Capsule())
+                            .background(
+                                ZStack {
+                                    if isSelected {
+                                        Capsule().fill(colorAccent)
+                                    } else {
+                                        Capsule().glassEffect(.clear)
+                                    }
+                                }
+                            )
                             .onTapGesture {
                                 withAnimation(.spring(response: 0.25)) {
                                     if isSelected {
@@ -582,13 +593,13 @@ struct NativeMapScreenView: View {
         VStack(spacing: 0) {
             // Header handle
             Capsule()
-                .fill(Color.gray.opacity(0.5))
+                .fill(Color.secondary)
                 .frame(width: 40, height: 4)
                 .padding(.vertical, 12)
             
             Text("Nearby Clubs")
                 .font(.system(size: 20, weight: .bold))
-                .foregroundColor(.white)
+                .foregroundColor(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal)
                 .padding(.bottom, 8)
@@ -596,17 +607,17 @@ struct NativeMapScreenView: View {
             ScrollView {
                 VStack(spacing: 12) {
                     if isUiLoading && locations.isEmpty {
-                        ProgressView().tint(.white).padding()
+                        ProgressView().padding()
                     } else if filteredLocations.isEmpty {
                         Text("No table tennis clubs found.")
-                            .foregroundColor(.gray)
+                            .foregroundColor(.secondary)
                             .font(.system(size: 14))
                             .padding()
                     } else {
                         ForEach(filteredLocations, id: \.id) { loc in
                             HStack(spacing: 16) {
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color(hex: "#333947"))
+                                    .fill(Color.black.opacity(0.3))
                                     .frame(width: 50, height: 50)
                                     .overlay(
                                         Text("🏓").font(.title)
@@ -615,17 +626,17 @@ struct NativeMapScreenView: View {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(loc.name)
                                         .font(.system(size: 16, weight: .bold))
-                                        .foregroundColor(.white)
+                                        .foregroundColor(.primary)
                                     
                                     Text("\(formattedDistance(lat: loc.latitude, lng: loc.longitude)) • \(loc.tableCount) Tables")
                                         .font(.system(size: 14))
-                                        .foregroundColor(.gray)
+                                        .foregroundColor(.secondary)
                                 }
                                 Spacer()
                             }
                             .padding(.horizontal)
                             .padding(.vertical, 8)
-                            .background(colorSurface)
+                            .background(Color.black.opacity(0.15))
                             .cornerRadius(12)
                             .onTapGesture {
                                 withAnimation(.spring()) {
@@ -637,13 +648,15 @@ struct NativeMapScreenView: View {
                     }
                 }
                 .padding(.horizontal)
-                .padding(.bottom, 40)
+                .padding(.bottom, 20)
             }
         }
         .frame(height: currentSheetState.height(screenHeight: screenHeight))
-        .background(colorBackground)
-        .cornerRadius(24, corners: [.topLeft, .topRight])
-        .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: -2)
+        .glassEffect(.regular)
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 20)
+        .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 5)
     }
     
     // MARK: - Selected Club Card / Full Details
@@ -655,7 +668,7 @@ struct NativeMapScreenView: View {
             // Drag handle at top if details is expanded
             if isDetailsExpanded {
                 Capsule()
-                    .fill(Color.gray.opacity(0.5))
+                    .fill(Color.secondary)
                     .frame(width: 40, height: 4)
                     .padding(.vertical, 12)
             }
@@ -668,11 +681,11 @@ struct NativeMapScreenView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(club.name)
                                 .font(.system(size: isDetailsExpanded ? 22 : 18, weight: .bold))
-                                .foregroundColor(.white)
+                                .foregroundColor(.primary)
                             
                             Text("\(formattedDistance(lat: club.latitude, lng: club.longitude)) • \(club.tableCount) Tables")
                                 .font(.system(size: 14))
-                                .foregroundColor(.gray)
+                                .foregroundColor(.secondary)
                         }
                         Spacer()
                         Button(action: {
@@ -683,7 +696,7 @@ struct NativeMapScreenView: View {
                         }) {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.title3)
-                                .foregroundColor(.gray)
+                                .foregroundColor(.secondary)
                         }
                     }
                     .padding(.horizontal)
@@ -702,10 +715,10 @@ struct NativeMapScreenView: View {
                                 }
                             }
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(.primary)
                             .frame(maxWidth: .infinity)
                             .frame(height: 38)
-                            .background(colorSurface, in: RoundedRectangle(cornerRadius: 10))
+                            .background(Color.black.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
                             
                             Button("Navigate") {
                                 handleNavigationClick(club: club)
@@ -746,9 +759,9 @@ struct NativeMapScreenView: View {
                                                     }
                                             } else {
                                                 RoundedRectangle(cornerRadius: 12)
-                                                    .fill(colorSurface)
+                                                    .fill(Color.black.opacity(0.15))
                                                     .frame(width: 140, height: 140)
-                                                    .overlay(ProgressView().tint(.white))
+                                                    .overlay(ProgressView().tint(.primary))
                                             }
                                         }
                                     }
@@ -771,16 +784,16 @@ struct NativeMapScreenView: View {
                                     .foregroundColor(colorAccent)
                             }
                             .font(.system(size: 15))
-                            .foregroundColor(.white)
+                            .foregroundColor(.primary)
                             
                             if let created = club.createdBy {
                                 Text("Added by: \(created)")
                                     .font(.system(size: 13))
-                                    .foregroundColor(.gray)
+                                    .foregroundColor(.secondary)
                             }
                         }
                         .padding()
-                        .background(colorSurface, in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color.black.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
                         .padding(.horizontal)
                         
                         // Navigation action button
@@ -803,7 +816,7 @@ struct NativeMapScreenView: View {
                         HStack {
                             Text("Player Reviews")
                                 .font(.system(size: 18, weight: .bold))
-                                .foregroundColor(.white)
+                                .foregroundColor(.primary)
                             Spacer()
                             Button(action: {
                                 isAddingReview = true
@@ -823,7 +836,7 @@ struct NativeMapScreenView: View {
                         VStack(spacing: 12) {
                             if reviews.isEmpty {
                                 Text("No reviews yet. Be the first to share details!")
-                                    .foregroundColor(.gray)
+                                    .foregroundColor(.secondary)
                                     .font(.system(size: 14))
                                     .padding()
                                     .frame(maxWidth: .infinity, alignment: .center)
@@ -843,10 +856,10 @@ struct NativeMapScreenView: View {
                                             VStack(alignment: .leading, spacing: 2) {
                                                 Text(review.username)
                                                     .font(.system(size: 14, weight: .bold))
-                                                    .foregroundColor(.white)
+                                                    .foregroundColor(.primary)
                                                 Text(timeAgo(from: review.createdAt))
                                                     .font(.system(size: 11))
-                                                    .foregroundColor(.gray)
+                                                    .foregroundColor(.secondary)
                                             }
                                             Spacer()
                                         }
@@ -854,7 +867,7 @@ struct NativeMapScreenView: View {
                                         if let textContent = review.textContent, !textContent.isEmpty {
                                             Text(textContent)
                                                 .font(.system(size: 14))
-                                                .foregroundColor(.white)
+                                                .foregroundColor(.primary)
                                         }
                                         
                                         // Review Tags
@@ -863,16 +876,16 @@ struct NativeMapScreenView: View {
                                                 ForEach(review.tags, id: \.self) { tag in
                                                     Text(tag)
                                                         .font(.system(size: 11))
-                                                        .foregroundColor(.white.opacity(0.8))
+                                                        .foregroundColor(.primary.opacity(0.8))
                                                         .padding(.horizontal, 8)
                                                         .padding(.vertical, 4)
-                                                        .background(Color.white.opacity(0.1), in: Capsule())
+                                                        .background(Color.primary.opacity(0.1), in: Capsule())
                                                 }
                                             }
                                         }
                                     }
                                     .padding()
-                                    .background(colorSurface, in: RoundedRectangle(cornerRadius: 12))
+                                    .background(Color.black.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
                                     .padding(.horizontal)
                                 }
                             }
@@ -882,10 +895,12 @@ struct NativeMapScreenView: View {
                 }
             }
         }
-        .frame(height: isDetailsExpanded ? screenHeight : 150)
-        .background(colorBackground)
-        .cornerRadius(isDetailsExpanded ? 0 : 20)
-        .shadow(radius: 8)
+        .frame(height: isDetailsExpanded ? screenHeight * 0.9 : 150)
+        .glassEffect(.regular)
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 20)
+        .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 5)
         .offset(y: detailsDragOffset)
         .gesture(
             isDetailsExpanded ? DragGesture()
@@ -968,7 +983,7 @@ struct PhotosPickerBox: View {
                 if isUploading {
                     Text("Uploading photos...")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.gray)
+                        .foregroundColor(.secondary)
                 } else {
                     Text("Add Club Photos")
                         .font(.system(size: 14, weight: .bold))
@@ -977,7 +992,7 @@ struct PhotosPickerBox: View {
             }
             .frame(maxWidth: .infinity)
             .padding()
-            .background(Color(hex: "#162032"), in: RoundedRectangle(cornerRadius: 12))
+            .background(Color.black.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(Color(hex: "#FF6B35").opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [4]))
@@ -1308,5 +1323,18 @@ struct RoundedCornerShapeHelper: Shape {
     func path(in rect: CGRect) -> Path {
         let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
         return Path(path.cgPath)
+    }
+}
+
+// MARK: - Liquid Glass (iOS 26 Concept)
+enum GlassType {
+    case regular, clear
+}
+
+extension View {
+    func glassEffect(_ type: GlassType) -> some View {
+        self.background(
+            (type == .regular ? Material.regular : Material.ultraThin)
+        )
     }
 }
