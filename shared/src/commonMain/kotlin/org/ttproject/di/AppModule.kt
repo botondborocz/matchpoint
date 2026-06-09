@@ -27,7 +27,7 @@ val appModule = module {
     // Loads the Android or iOS specific dependencies!
     includes(platformModule)
 
-    single { createHttpClient() }
+    single { createHttpClient(provideHttpClientEngine()) }
     single<AuthRepository> { AuthRepositoryImpl(get(), get()) }
     single<MatchRepository> { MatchRepositoryImpl(get(), get()) }
     single<UserRepository> { UserRepositoryImpl(get(), get()) }

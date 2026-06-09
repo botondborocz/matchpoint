@@ -88,9 +88,17 @@ kotlin {
             implementation("androidx.credentials:credentials:1.2.2")
             implementation("androidx.credentials:credentials-play-services-auth:1.2.2")
             implementation("com.google.android.libraries.identity.googleid:googleid:1.1.0")
+            implementation("io.ktor:ktor-client-okhttp:3.3.0")
         }
         iosMain.dependencies {
             implementation("com.liftric:kvault:1.12.0")
+            implementation("io.ktor:ktor-client-darwin:3.3.0")
+        }
+        jvmMain.dependencies {
+            implementation("io.ktor:ktor-client-okhttp:3.3.0")
+        }
+        jsMain.dependencies {
+            implementation("io.ktor:ktor-client-js:3.3.0")
         }
     }
 }
