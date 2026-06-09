@@ -165,7 +165,9 @@ struct NativeMapScreenView: View {
     // Map control
     @State private var centerCoordinate = CLLocationCoordinate2D(latitude: 47.4979, longitude: 19.0402)
     @State private var mapRegion = MKCoordinateRegion()
-    @State private var trackingUserLocation = false
+    @State private var trackingUserLocation = true
+    
+    @Namespace private var glassNamespace
     @State private var userCoordinate: CLLocationCoordinate2D? = nil
     
     // Filters and Search
@@ -280,7 +282,7 @@ struct NativeMapScreenView: View {
                 
                 // MARK: 3. Search and Filters Floating Capsule
                 if !isPickingLocation && selectedLocation == nil {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 12) {
                         // Search bar
                         HStack(spacing: 8) {
                             Image(systemName: "magnifyingglass")
@@ -299,6 +301,13 @@ struct NativeMapScreenView: View {
                             }
                             
                             Button(action: {
+                                // Dictation action placeholder
+                            }) {
+                                Image(systemName: "mic.fill")
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Button(action: {
                                 withAnimation(.spring()) {
                                     isFilterPanelExpanded.toggle()
                                 }
@@ -311,9 +320,9 @@ struct NativeMapScreenView: View {
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
-                        .glassEffect(.regular)
-                        .clipShape(RoundedRectangle(cornerRadius: 24))
-                        .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.primary.opacity(0.1), lineWidth: 1))
+                        .glassEffect(.regular.interactive(), in: Capsule())
+                        .glassEffectID("searchBar", in: glassNamespace)
+                        .overlay(Capsule().stroke(Color.primary.opacity(0.1), lineWidth: 1))
                         .shadow(radius: 6)
                         
                         // Filters drawer
@@ -334,8 +343,7 @@ struct NativeMapScreenView: View {
                             }
                             .padding([.horizontal, .bottom])
                             .padding(.top, 10)
-                            .glassEffect(.regular)
-                            .clipShape(RoundedRectangle(cornerRadius: 24))
+                            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
                             .shadow(radius: 6)
                         }
                     }
@@ -346,7 +354,7 @@ struct NativeMapScreenView: View {
                 
                 // MARK: 4. Floating Action Buttons (FABs)
                 if selectedLocation == nil && !isPickingLocation {
-                    VStack(spacing: 12) {
+                    VStack(spacing: 16) {
                         Button(action: {
                             trackingUserLocation = true
                             locationManager.requestWhenInUseAuthorization()
@@ -355,10 +363,8 @@ struct NativeMapScreenView: View {
                                 .font(.system(size: 18))
                                 .foregroundColor(colorAccent)
                                 .frame(width: 48, height: 48)
-                                .glassEffect(.regular)
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-                                .shadow(radius: 4)
                         }
+                        .buttonStyle(.glassProminent)
                         
                         Button(action: {
                             withAnimation {
@@ -370,10 +376,8 @@ struct NativeMapScreenView: View {
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(colorAccent)
                                 .frame(width: 48, height: 48)
-                                .glassEffect(.regular)
-                                .clipShape(RoundedRectangle(cornerRadius: 16))
-                                .shadow(radius: 4)
                         }
+                        .buttonStyle(.glassProminent)
                     }
                     .padding(.trailing, 16)
                     .padding(.bottom, currentSheetState.height(screenHeight: screenHeight) + 16)
@@ -559,29 +563,31 @@ struct NativeMapScreenView: View {
                 HStack(spacing: 8) {
                     ForEach(options, id: \.self) { opt in
                         let isSelected = selectedTags.contains(opt)
-                        Text(opt)
-                            .font(.system(size: 14))
-                            .foregroundColor(isSelected ? .white : .primary)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(
-                                ZStack {
-                                    if isSelected {
-                                        Capsule().fill(colorAccent)
-                                    } else {
-                                        Capsule().glassEffect(.clear)
-                                    }
-                                }
-                            )
-                            .onTapGesture {
+                        if isSelected {
+                            Button(action: {
                                 withAnimation(.spring(response: 0.25)) {
-                                    if isSelected {
-                                        selectedTags.remove(opt)
-                                    } else {
-                                        selectedTags.insert(opt)
-                                    }
+                                    selectedTags.remove(opt)
                                 }
+                            }) {
+                                Text(opt)
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.white)
                             }
+                            .buttonStyle(.borderedProminent)
+                            .tint(colorAccent)
+                            .clipShape(Capsule())
+                        } else {
+                            Button(action: {
+                                withAnimation(.spring(response: 0.25)) {
+                                    selectedTags.insert(opt)
+                                }
+                            }) {
+                                Text(opt)
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.primary)
+                            }
+                            .buttonStyle(.glass)
+                        }
                     }
                 }
             }
@@ -1323,18 +1329,5 @@ struct RoundedCornerShapeHelper: Shape {
     func path(in rect: CGRect) -> Path {
         let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
         return Path(path.cgPath)
-    }
-}
-
-// MARK: - Liquid Glass (iOS 26 Concept)
-enum GlassType {
-    case regular, clear
-}
-
-extension View {
-    func glassEffect(_ type: GlassType) -> some View {
-        self.background(
-            (type == .regular ? Material.regular : Material.ultraThin)
-        )
     }
 }

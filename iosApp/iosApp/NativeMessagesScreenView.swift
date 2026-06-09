@@ -45,6 +45,7 @@ class NativeMessagesViewModel: ObservableObject {
 
 struct NativeMessagesScreenView: View {
     @StateObject private var vm = NativeMessagesViewModel()
+    @Namespace private var glassNamespace
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -52,33 +53,41 @@ struct NativeMessagesScreenView: View {
 
             ScrollView {
                 VStack(spacing: 16) {
-                    // Search Bar
-                    HStack(spacing: 8) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.secondary)
-                        
-                        TextField("Search users...", text: Binding(
-                            get: { vm.searchQuery },
-                            set: { vm.updateSearch(query: $0) }
-                        ))
-                        .foregroundColor(.primary)
-                        .accentColor(Color(hex: "#FF6B35"))
-                        .font(.system(size: 15))
-                        
-                        if !vm.searchQuery.isEmpty {
-                            Button(action: { vm.updateSearch(query: "") }) {
-                                Image(systemName: "xmark.circle.fill")
+                    GlassEffectContainer(spacing: 12) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.secondary)
+                            
+                            TextField("Search users...", text: Binding(
+                                get: { vm.searchQuery },
+                                set: { vm.updateSearch(query: $0) }
+                            ))
+                            .foregroundColor(.primary)
+                            .accentColor(Color(hex: "#FF6B35"))
+                            .font(.system(size: 15))
+                            
+                            if !vm.searchQuery.isEmpty {
+                                Button(action: { vm.updateSearch(query: "") }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            
+                            Button(action: {
+                                // Dictation action
+                            }) {
+                                Image(systemName: "mic.fill")
                                     .foregroundColor(.secondary)
                             }
                         }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .glassEffect(.regular.interactive(), in: Capsule())
+                        .glassEffectID("searchBar", in: glassNamespace)
+                        .overlay(Capsule().stroke(Color.primary.opacity(0.1), lineWidth: 1))
+                        .padding(.horizontal)
+                        .padding(.top, 16) // Padding below safe area
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .glassEffect(.regular)
-                    .clipShape(RoundedRectangle(cornerRadius: 24))
-                    .overlay(RoundedRectangle(cornerRadius: 24).stroke(Color.primary.opacity(0.1), lineWidth: 1))
-                    .padding(.horizontal)
-                    .padding(.top, 16) // Padding below safe area
 
                     // List of Threads
                     if vm.isLoading && vm.threads.isEmpty {
@@ -181,8 +190,7 @@ struct ThreadRowView: View {
             }
         }
         .padding()
-        .glassEffect(.regular)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.primary.opacity(0.05), lineWidth: 1))
     }
     

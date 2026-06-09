@@ -73,6 +73,7 @@ struct NativeChatScreenView: View {
     @StateObject private var vm: NativeChatViewModel
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject var appState: AppState
+    @Namespace private var glassNamespace
     
     @State private var selectedItem: PhotosPickerItem? = nil
     
@@ -164,8 +165,8 @@ struct NativeChatScreenView: View {
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 12)
-                .glassEffect(.regular)
-                .clipShape(RoundedRectangle(cornerRadius: 32))
+                .glassEffect(.regular.interactive(), in: Capsule())
+                .glassEffectID("chatInput", in: glassNamespace)
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8) // Floating above the keyboard/bezel
             }
@@ -302,8 +303,7 @@ struct ChatBubbleView: View {
                         .padding(.vertical, 12)
                         .background(isMine ? Color(hex: "#FF6B35") : Color.clear)
                         .foregroundColor(isMine ? .white : .primary)
-                        .glassEffect(isMine ? .clear : .regular)
-                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                        .glassEffect(isMine ? .clear : .regular, in: RoundedRectangle(cornerRadius: 20))
                 }
                 
                 // Reactions
