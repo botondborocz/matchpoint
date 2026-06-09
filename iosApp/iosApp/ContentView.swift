@@ -24,7 +24,7 @@ class IOSGalleryLauncher: NativeGalleryLauncher {
         self.appState = appState
     }
 
-    func openGallery(images: [String], initialIndex: Int32, isMineList: [KotlinBoolean], onDelete: @escaping (String) -> Void, onReport: @escaping (String, String) -> Void) {
+    func openGallery(images: [String], initialIndex: Int32, isMineList: [ComposeAppBoolean], onDelete: @escaping (String) -> Void, onReport: @escaping (String, String) -> Void) {
         DispatchQueue.main.async {
             self.appState.galleryData = GalleryData(
                 images: images,
