@@ -60,7 +60,7 @@ struct MKMapViewRepresentable: UIViewRepresentable {
             if annotation is MKUserLocation { return nil }
             
             let identifier = "TableTennisPin"
-            var view = mapView.dequeueReusableAnnotationViewWithIdentifier(identifier) as? MKMarkerAnnotationView
+            var view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
             
             if view == nil {
                 view = MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
@@ -992,7 +992,7 @@ struct PhotosPickerBox: View {
                 // Call Kotlin bridge function directly
                 helper?.addLocationImages(
                     locationId: clubId,
-                    imagesData: imageList.map { $0 as NSData },
+                    imagesData: imageList.map { $0 as Data },
                     onSuccess: {
                         isUploading = false
                     }
@@ -1113,7 +1113,7 @@ struct AddTableModalView: View {
             isIndoor: isIndoor,
             count: Int32(tableCount),
             isFree: isFree,
-            imagesData: selectedImages.map { $0 as NSData },
+            imagesData: selectedImages.map { $0 as Data },
             onSuccess: {
                 isSubmitting = false
                 onDismiss()
@@ -1232,7 +1232,7 @@ struct AddReviewModalView: View {
             locationId: locationId,
             tags: Array(selectedTags),
             text: reviewText,
-            imagesData: reviewImages.map { $0 as NSData },
+            imagesData: reviewImages.map { $0 as Data },
             onSuccess: {
                 isSubmitting = false
                 onDismiss()
