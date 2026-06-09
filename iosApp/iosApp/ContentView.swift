@@ -108,11 +108,13 @@ struct ContentView: View {
                     .tabItem { Label("Match", systemImage: "bolt.fill") }
                     .tag("match")
 
-                ComposeTabViewControllerRepresentable(tabName: "messages", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
-                    .ignoresSafeArea()
-                    .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
-                    .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
-                    .tag("messages")
+                NavigationStack {
+                    NativeMessagesScreenView()
+                }
+                .environmentObject(appState)
+                .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
+                .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
+                .tag("messages")
 
                 ComposeTabViewControllerRepresentable(tabName: "profile", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
                     .ignoresSafeArea()
