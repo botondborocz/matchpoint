@@ -166,8 +166,7 @@ struct NativeMapScreenView: View {
     @State private var centerCoordinate = CLLocationCoordinate2D(latitude: 47.4979, longitude: 19.0402)
     @State private var mapRegion = MKCoordinateRegion()
     @State private var trackingUserLocation = true
-    
-    @Namespace private var glassNamespace
+    @Namespace private var mapGlassNS
     @State private var userCoordinate: CLLocationCoordinate2D? = nil
     
     // Filters and Search
@@ -282,7 +281,7 @@ struct NativeMapScreenView: View {
                 
                 // MARK: 3. Search and Filters Floating Capsule
                 if !isPickingLocation && selectedLocation == nil {
-                    GlassEffectContainer(spacing: 12) {
+                    VStack(spacing: 12) {
                         // Search bar
                         HStack(spacing: 8) {
                             Image(systemName: "magnifyingglass")
@@ -320,8 +319,8 @@ struct NativeMapScreenView: View {
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
-                        .glassEffect(.regular.interactive(), in: Capsule())
-                        .glassEffectID("searchBar", in: glassNamespace)
+                        .background(.regularMaterial, in: Capsule())
+                        .matchedGeometryEffect(id: "mapSearchBar", in: mapGlassNS)
                         .overlay(Capsule().stroke(Color.primary.opacity(0.1), lineWidth: 1))
                         .shadow(radius: 6)
                         
@@ -343,7 +342,7 @@ struct NativeMapScreenView: View {
                             }
                             .padding([.horizontal, .bottom])
                             .padding(.top, 10)
-                            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 24))
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
                             .shadow(radius: 6)
                         }
                     }
@@ -363,8 +362,8 @@ struct NativeMapScreenView: View {
                                 .font(.system(size: 18))
                                 .foregroundColor(colorAccent)
                                 .frame(width: 48, height: 48)
+                                .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 16))
                         }
-                        .buttonStyle(.glassProminent)
                         
                         Button(action: {
                             withAnimation {
@@ -376,8 +375,8 @@ struct NativeMapScreenView: View {
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(colorAccent)
                                 .frame(width: 48, height: 48)
+                                .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 16))
                         }
-                        .buttonStyle(.glassProminent)
                     }
                     .padding(.trailing, 16)
                     .padding(.bottom, currentSheetState.height(screenHeight: screenHeight) + 16)
@@ -585,8 +584,11 @@ struct NativeMapScreenView: View {
                                 Text(opt)
                                     .font(.system(size: 14))
                                     .foregroundColor(.primary)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .background(.regularMaterial, in: Capsule())
                             }
-                            .buttonStyle(.glass)
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -658,7 +660,7 @@ struct NativeMapScreenView: View {
             }
         }
         .frame(height: currentSheetState.height(screenHeight: screenHeight))
-        .glassEffect(.regular)
+        .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .padding(.horizontal, 16)
         .padding(.bottom, 20)
@@ -902,7 +904,7 @@ struct NativeMapScreenView: View {
             }
         }
         .frame(height: isDetailsExpanded ? screenHeight * 0.9 : 150)
-        .glassEffect(.regular)
+        .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .padding(.horizontal, 16)
         .padding(.bottom, 20)
