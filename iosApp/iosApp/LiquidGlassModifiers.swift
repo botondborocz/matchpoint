@@ -21,8 +21,12 @@ struct GlassEffectType {
 }
 
 extension View {
-    func glassEffect(_ type: GlassEffectType, in shape: some Shape = Rectangle()) -> some View {
+    func glassEffect<S: Shape>(_ type: GlassEffectType, in shape: S) -> some View {
         self.background(type.material, in: shape)
+    }
+    
+    func glassEffect(_ type: GlassEffectType) -> some View {
+        self.background(type.material, in: Rectangle())
     }
     
     func glassEffectID(_ id: String, in namespace: Namespace.ID) -> some View {

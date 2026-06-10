@@ -282,7 +282,7 @@ struct NativeMapScreenView: View {
                 
                 // MARK: 3. Search and Filters Floating Capsule
                 if !isPickingLocation && selectedLocation == nil {
-                    VStack(spacing: 12) {
+                    GlassEffectContainer(spacing: 12) {
                         // Search bar
                         HStack(spacing: 8) {
                             Image(systemName: "magnifyingglass")
