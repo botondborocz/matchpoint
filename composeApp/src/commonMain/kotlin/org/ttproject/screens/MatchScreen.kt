@@ -51,12 +51,8 @@ import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import org.ttproject.AppColors
 import org.ttproject.data.Player
-import org.ttproject.shared.resources.find
+import org.ttproject.shared.resources.*
 import org.ttproject.shared.resources.Res as SharedRes
-import org.ttproject.shared.resources.find_your_match
-import org.ttproject.shared.resources.find_your_match_unauth_title
-import org.ttproject.shared.resources.login
-import org.ttproject.shared.resources.register
 import org.ttproject.viewmodel.MatchUiState
 import org.ttproject.viewmodel.MatchViewModel
 import org.ttproject.isIosPlatform
@@ -205,7 +201,7 @@ fun MatchScreen(
                         val players = (uiState as MatchUiState.Success).players
 
                         if (players.isEmpty()) {
-                            Text("No more matches nearby!", color = AppColors.TextPrimary)
+                            Text(stringResource(SharedRes.string.no_more_matches), color = AppColors.TextPrimary)
                         } else {
                             val topPlayer = players.firstOrNull()
                             val offsetX = remember(topPlayer?.id) { Animatable(0f) }
@@ -375,7 +371,7 @@ fun MatchScreen(
                     Row(modifier = Modifier.clip(RoundedCornerShape(24.dp)).background(AppColors.AccentOrange).clickable { viewModel.loadPlayers() }.padding(horizontal = 32.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("TRY AGAIN", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text(stringResource(SharedRes.string.try_again).uppercase(), color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -405,7 +401,7 @@ fun MatchScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Unlock Premium",
+                        text = stringResource(SharedRes.string.go_premium),
                         color = Color.White,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold
@@ -428,11 +424,11 @@ fun MatchScreen(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Go Premium (Debug)", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text(stringResource(SharedRes.string.go_premium_debug), color = Color.White, fontWeight = FontWeight.Bold)
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(onClick = { isPaywallDialogOpen = false }) {
-                        Text("Maybe Later", color = Color.LightGray)
+                        Text(stringResource(SharedRes.string.maybe_later), color = Color.LightGray)
                     }
                 }
             }
@@ -518,7 +514,7 @@ fun LikesYouPopupOverlay(
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 if (displayPlayers.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No likes yet! Keep swiping.", color = Color.Gray, fontSize = 16.sp)
+                        Text(stringResource(SharedRes.string.no_likes_yet), color = Color.Gray, fontSize = 16.sp)
                     }
                 } else {
                     if (isPremiumUser) {
@@ -643,10 +639,10 @@ fun LikesYouPopupOverlay(
                                 .border(1.dp, AppColors.AccentOrange.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
                                 .padding(24.dp)
                         ) {
-                            Text(text = "See Who Likes You!", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Text(text = stringResource(SharedRes.string.see_who_likes_you), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "Unlock names, metrics and match instantly with premium features.",
+                                text = stringResource(SharedRes.string.premium_unlock_description),
                                 color = Color.LightGray,
                                 fontSize = 13.sp,
                                 textAlign = TextAlign.Center,
@@ -659,7 +655,7 @@ fun LikesYouPopupOverlay(
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("Go Premium", color = Color.White, fontWeight = FontWeight.Bold)
+                                Text(stringResource(SharedRes.string.go_premium), color = Color.White, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -825,9 +821,9 @@ fun ActionButtonsRow(onLike: () -> Unit, onPass: () -> Unit, canUndo: Boolean, o
 fun MatchCelebrationOverlay(player: Player, onKeepSwiping: () -> Unit, onSendMessage: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize().background(Color(0xE6151C2C)).clickable(enabled = false) {}, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = "IT'S A MATCH!", color = AppColors.AccentOrange, fontSize = 42.sp, fontWeight = FontWeight.ExtraBold, style = androidx.compose.ui.text.TextStyle(shadow = androidx.compose.ui.graphics.Shadow(color = AppColors.AccentOrange, blurRadius = 20f)))
+            Text(text = stringResource(SharedRes.string.its_a_match).uppercase(), color = AppColors.AccentOrange, fontSize = 42.sp, fontWeight = FontWeight.ExtraBold, style = androidx.compose.ui.text.TextStyle(shadow = androidx.compose.ui.graphics.Shadow(color = AppColors.AccentOrange, blurRadius = 20f)))
             Spacer(modifier = Modifier.height(16.dp))
-            Text(text = "You and ${player.username} liked each other.", color = AppColors.TextPrimary, fontSize = 16.sp)
+            Text(text = stringResource(SharedRes.string.match_congrats, player.username ?: ""), color = AppColors.TextPrimary, fontSize = 16.sp)
             Spacer(modifier = Modifier.height(48.dp))
             Row(horizontalArrangement = Arrangement.Center) {
                 Box(modifier = Modifier.size(100.dp).clip(CircleShape).background(Color.Gray).border(3.dp, AppColors.AccentOrange, CircleShape))
@@ -835,9 +831,9 @@ fun MatchCelebrationOverlay(player: Player, onKeepSwiping: () -> Unit, onSendMes
                 Box(modifier = Modifier.size(100.dp).clip(CircleShape).background(AppColors.TextPrimary.copy(alpha=0.5f)).border(3.dp, AppColors.AccentOrange, CircleShape))
             }
             Spacer(modifier = Modifier.height(48.dp))
-            Box(modifier = Modifier.clip(RoundedCornerShape(24.dp)).background(AppColors.AccentOrange).clickable { onSendMessage() }.padding(horizontal = 48.dp, vertical = 16.dp)) { Text("SEND MESSAGE", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold) }
+            Box(modifier = Modifier.clip(RoundedCornerShape(24.dp)).background(AppColors.AccentOrange).clickable { onSendMessage() }.padding(horizontal = 48.dp, vertical = 16.dp)) { Text(stringResource(SharedRes.string.send_message_btn).uppercase(), color = AppColors.TextPrimary, fontWeight = FontWeight.Bold) }
             Spacer(modifier = Modifier.height(16.dp))
-            Box(modifier = Modifier.clip(RoundedCornerShape(24.dp)).border(2.dp, AppColors.TextPrimary, RoundedCornerShape(24.dp)).clickable { onKeepSwiping() }.padding(horizontal = 48.dp, vertical = 16.dp)) { Text("KEEP SWIPING", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold) }
+            Box(modifier = Modifier.clip(RoundedCornerShape(24.dp)).border(2.dp, AppColors.TextPrimary, RoundedCornerShape(24.dp)).clickable { onKeepSwiping() }.padding(horizontal = 48.dp, vertical = 16.dp)) { Text(stringResource(SharedRes.string.keep_swiping_btn).uppercase(), color = AppColors.TextPrimary, fontWeight = FontWeight.Bold) }
         }
     }
 }

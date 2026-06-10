@@ -95,39 +95,50 @@ struct ContentView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            TabView(selection: $appState.currentTab) {
-                NativeMapScreenView(appState: appState)
-                    .ignoresSafeArea()
-                    .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
-                    .tabItem { Label("Map", systemImage: "map.fill") }
-                    .tag("map")
+            ZStack(alignment .bottom) {
+                TabView(selection: $appState.currentTab) {
+                    // NativeMapScreenView(appState: appState)
+                    //     .ignoresSafeArea()
+                    //     .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
+                    //     .tabItem { Label("Map", systemImage: "map.fill") }
+                    //     .tag("map")
+                    ComposeTabViewControllerRepresentable(tabName: "map", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                        .ignoresSafeArea()
+                        .tabItem { Label("Map", systemImage: "map.fill") }
+                        .tag("map")
 
-                ComposeTabViewControllerRepresentable(tabName: "match", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
-                    .ignoresSafeArea()
-                    .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
-                    .tabItem { Label("Match", systemImage: "bolt.fill") }
-                    .tag("match")
+                    ComposeTabViewControllerRepresentable(tabName: "match", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                        .ignoresSafeArea()
+                        .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
+                        .tabItem { Label("Match", systemImage: "bolt.fill") }
+                        .tag("match")
 
-                NavigationStack {
-                    NativeMessagesScreenView()
+                    // NavigationStack {
+                    //     NativeMessagesScreenView()
+                    // }
+                    // .environmentObject(appState)
+                    // .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
+                    // .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
+                    // .tag("messages")
+
+                    ComposeTabViewControllerRepresentable(tabName: "messages", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                        .ignoresSafeArea()
+                        .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
+                        .tag("messages")
+
+                    ComposeTabViewControllerRepresentable(tabName: "profile", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                        .ignoresSafeArea()
+                        .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
+                        .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
+                        .tag("profile")
                 }
-                .environmentObject(appState)
-                .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
-                .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
-                .tag("messages")
-
-                ComposeTabViewControllerRepresentable(tabName: "profile", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
-                    .ignoresSafeArea()
-                    .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
-                    .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
-                    .tag("profile")
+                .tint(appState.tabTintColor)
+                .ignoresSafeArea(.keyboard)
             }
-            .tint(appState.tabTintColor)
-            .ignoresSafeArea(.keyboard)
-        }
-        .fullScreenCover(item: $appState.galleryData) { data in
-            NativeSwiftGalleryView(data: data)
-                .background(TransparentBackground())
+            .fullScreenCover(item: $appState.galleryData) { data in
+                NativeSwiftGalleryView(data: data)
+                    .background(TransparentBackground())
+            }
         }
     }
 }

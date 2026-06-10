@@ -56,13 +56,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.ttproject.AppColors
-import org.ttproject.shared.resources.indoor
-import org.ttproject.shared.resources.nearby_clubs
-import org.ttproject.shared.resources.outdoor
+import org.ttproject.shared.resources.*
+import org.ttproject.shared.resources.Res as SharedRes
 import org.ttproject.util.LocalThemeMode
 import org.ttproject.util.ThemeMode
 import kotlin.math.roundToInt
-import org.ttproject.shared.resources.Res as SharedRes
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -119,6 +117,9 @@ import org.ttproject.components.SetSystemBarsVisibility
 import org.ttproject.data.LocationType
 import org.ttproject.data.TokenStorage
 import org.ttproject.isIosPlatform
+import org.ttproject.shared.resources.distance_type_format
+import org.ttproject.shared.resources.drag_map_crosshair_hint
+import org.ttproject.shared.resources.free
 import org.ttproject.viewmodel.LocationViewModel
 import org.ttproject.viewmodel.LocationsUiState
 import ttproject.composeapp.generated.resources.Res as AppRes
@@ -502,7 +503,7 @@ fun MapScreen(
                                 },
                                 contentPadding = PaddingValues(horizontal = 8.dp)
                             ) {
-                                Text("Clear", color = brandOrange, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                Text(stringResource(SharedRes.string.clear), color = brandOrange, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
                         }
 
@@ -599,7 +600,13 @@ fun MapScreen(
                                             Spacer(modifier = Modifier.width(12.dp))
                                             Column {
                                                 Text(club.name, color = AppColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                                Text("${club.distance} • ${club.type.name.lowercase().replaceFirstChar { it.uppercase() }}", color = Color.Gray, fontSize = 12.sp)
+                                                val locationTypeStr = when (club.type.name.lowercase()) {
+                                                     "indoor" -> stringResource(SharedRes.string.indoor)
+                                                     "outdoor" -> stringResource(SharedRes.string.outdoor)
+                                                     "free" -> stringResource(SharedRes.string.free)
+                                                     else -> club.type.name
+                                                 }
+                                                 Text(stringResource(SharedRes.string.distance_type_format, club.distance, locationTypeStr), color = Color.Gray, fontSize = 12.sp)
                                             }
                                         }
                                     }
@@ -631,7 +638,7 @@ fun MapScreen(
                     modifier = Modifier.fillMaxSize().padding(16.dp)
                 ) {
                     Text(
-                        text = "Drag the map to place the crosshair exactly over the table.",
+                        text = stringResource(SharedRes.string.drag_map_crosshair_hint),
                         color = AppColors.TextPrimary,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
@@ -645,7 +652,7 @@ fun MapScreen(
                         contentPadding = PaddingValues(0.dp),
                         modifier = Modifier.height(24.dp)
                     ) {
-                        Text("Cancel", color = brandOrange, fontWeight = FontWeight.Bold)
+                        Text(stringResource(SharedRes.string.cancel), color = brandOrange, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -966,7 +973,7 @@ fun FilterGroupRow(
             items(tags) { tag ->
                 val isSelected = selectedTags.contains(tag)
                 FilterChip(
-                    text = tag,
+                    text = getLocalizedTag(tag),
                     isSelected = isSelected,
                     activeColor = activeColor,
                     inactiveColor = inactiveColor,
@@ -1003,7 +1010,7 @@ fun ClubCardCompact(
         if (showMapChoice) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 TextButton(onClick = { showMapChoice = false }, modifier = Modifier.height(buttonHeight)) {
-                    Text("Cancel", color = Color.Gray, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(SharedRes.string.cancel), color = Color.Gray, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.weight(1f))
                 Button(
@@ -1016,7 +1023,7 @@ fun ClubCardCompact(
                     shape = RoundedCornerShape(10.dp), modifier = Modifier.height(buttonHeight), contentPadding = PaddingValues(horizontal = 12.dp)
                 ) {
                     Image(painter = painterResource(AppRes.drawable.apple_logo_white), contentDescription = "Apple", modifier = Modifier.size(20.dp).padding(end = 6.dp))
-                    Text("Apple", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(SharedRes.string.apple_maps), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(
@@ -1029,7 +1036,7 @@ fun ClubCardCompact(
                     shape = RoundedCornerShape(10.dp), modifier = Modifier.height(buttonHeight), contentPadding = PaddingValues(horizontal = 12.dp)
                 ) {
                     Image(painter = painterResource(AppRes.drawable.google_logo_white), contentDescription = "Google", modifier = Modifier.size(20.dp).padding(end = 6.dp))
-                    Text("Google", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(SharedRes.string.google_maps), color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
             }
         } else {
@@ -1041,7 +1048,7 @@ fun ClubCardCompact(
                     shape = RoundedCornerShape(10.dp),
                     contentPadding = PaddingValues(0.dp)
                 ) {
-                    Text("Details", color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(SharedRes.string.details), color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Button(
@@ -1058,7 +1065,7 @@ fun ClubCardCompact(
                     shape = RoundedCornerShape(10.dp),
                     contentPadding = PaddingValues(0.dp)
                 ) {
-                    Text("Navigate", color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(SharedRes.string.navigate), color = AppColors.TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -1285,10 +1292,10 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Pinned Location", color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text(stringResource(SharedRes.string.pinned_location), color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                                 Text("${lat.toString().take(8)}, ${lng.toString().take(8)}", color = Color.Gray, fontSize = 14.sp)
                             }
-                            Text("Edit", color = brandOrange, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(stringResource(SharedRes.string.edit), color = brandOrange, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
                     }
 
@@ -1305,8 +1312,8 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(Icons.Default.CameraAlt, contentDescription = "Add Photo", tint = brandOrange, modifier = Modifier.size(40.dp))
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Text("Add Table Photos", color = brandOrange, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                                Text("Optional, but highly recommended!", color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                                Text(stringResource(SharedRes.string.add_table_photos), color = brandOrange, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text(stringResource(SharedRes.string.optional_recommended), color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                             }
                         }
                     } else {
@@ -1338,15 +1345,15 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
-                    Text("Table Details", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(SharedRes.string.table_details), color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("Type", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                            Text(stringResource(SharedRes.string.type), color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilterChip(text = "Outdoor", isSelected = !isIndoor, activeColor = brandOrange, inactiveColor = cardBg) { isIndoor = false }
-                                FilterChip(text = "Indoor", isSelected = isIndoor, activeColor = brandOrange, inactiveColor = cardBg) { isIndoor = true }
+                                FilterChip(text = stringResource(SharedRes.string.outdoor), isSelected = !isIndoor, activeColor = brandOrange, inactiveColor = cardBg) { isIndoor = false }
+                                FilterChip(text = stringResource(SharedRes.string.indoor), isSelected = isIndoor, activeColor = brandOrange, inactiveColor = cardBg) { isIndoor = true }
                             }
                         }
                     }
@@ -1355,7 +1362,7 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
 
                     Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("Number of Tables", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                            Text(stringResource(SharedRes.string.number_of_tables), color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                                 IconButton(
                                     onClick = { if (tableCount > 1) tableCount-- },
@@ -1376,10 +1383,10 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
 
                     Surface(color = cardBg, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("Cost", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                            Text(stringResource(SharedRes.string.cost), color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.weight(1f))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilterChip(text = "Free", isSelected = isFree, activeColor = brandOrange, inactiveColor = cardBg) { isFree = true }
-                                FilterChip(text = "Paid", isSelected = !isFree, activeColor = brandOrange, inactiveColor = cardBg) { isFree = false }
+                                FilterChip(text = stringResource(SharedRes.string.free), isSelected = isFree, activeColor = brandOrange, inactiveColor = cardBg) { isFree = true }
+                                FilterChip(text = stringResource(SharedRes.string.paid), isSelected = !isFree, activeColor = brandOrange, inactiveColor = cardBg) { isFree = false }
                             }
                         }
                     }
@@ -1415,7 +1422,7 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
                         enabled = !isSubmitting
                     ) {
                         if (isSubmitting) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                        else Text("Submit Table", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        else Text(stringResource(SharedRes.string.submit_table), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     }
                 }
             }
@@ -1425,22 +1432,22 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
                     onDismissRequest = { showExitConfirmation = false },
                     containerColor = cardBg,
                     title = {
-                        Text("Discard New Table?", fontWeight = FontWeight.Bold, color = AppColors.TextPrimary)
+                        Text(stringResource(SharedRes.string.discard_table_title), fontWeight = FontWeight.Bold, color = AppColors.TextPrimary)
                     },
                     text = {
-                        Text("You have unsaved changes. Are you sure you want to discard this table?", color = Color.LightGray)
+                        Text(stringResource(SharedRes.string.discard_table_message), color = Color.LightGray)
                     },
                     confirmButton = {
                         TextButton(onClick = {
                             showExitConfirmation = false
                             onClose()
                         }) {
-                            Text("Discard", color = Color(0xFFE57373), fontWeight = FontWeight.Bold)
+                            Text(stringResource(SharedRes.string.discard), color = Color(0xFFE57373), fontWeight = FontWeight.Bold)
                         }
                     },
                     dismissButton = {
                         TextButton(onClick = { showExitConfirmation = false }) {
-                            Text("Keep Editing", color = brandOrange, fontWeight = FontWeight.Bold)
+                            Text(stringResource(SharedRes.string.keep_editing), color = brandOrange, fontWeight = FontWeight.Bold)
                         }
                     }
                 )
@@ -1622,7 +1629,7 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                         enabled = hasUnsavedChanges && !isSubmitting
                     ) {
                         if (isSubmitting) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        else Text("Submit", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        else Text(stringResource(SharedRes.string.submit), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 }
 
@@ -1637,10 +1644,10 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                 ) {
 
                     Text(clubName, color = Color.Gray, fontSize = 14.sp, modifier = Modifier.padding(bottom = 4.dp))
-                    Text("Write Your Review", color = AppColors.TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(bottom = 24.dp))
+                    Text(stringResource(SharedRes.string.write_a_review), color = AppColors.TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(bottom = 24.dp))
 
                     Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Add Photos", color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text(stringResource(SharedRes.string.add_table_photos), color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         Text("${reviewImages.size} / 5", color = Color.Gray, fontSize = 14.sp)
                     }
 
@@ -1690,11 +1697,11 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
 
                     Surface(color = cardBg, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Table Condition", color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
+                            Text(stringResource(SharedRes.string.table_condition_header), color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
                             FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 tableConditionTags.forEach { tag ->
                                     val isSelected = selectedTags.contains(tag)
-                                    FilterChip(text = tag, isSelected = isSelected, activeColor = brandOrange, inactiveColor = AppColors.Background, onClick = { selectedTags = if (isSelected) selectedTags - tag else selectedTags + tag })
+                                    FilterChip(text = getLocalizedTag(tag), isSelected = isSelected, activeColor = brandOrange, inactiveColor = AppColors.Background, onClick = { selectedTags = if (isSelected) selectedTags - tag else selectedTags + tag })
                                 }
                             }
                         }
@@ -1702,11 +1709,11 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
 
                     Surface(color = cardBg, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Playing Area & Environment", color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
+                            Text(stringResource(SharedRes.string.playing_area_header), color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
                             FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 environmentTags.forEach { tag ->
                                     val isSelected = selectedTags.contains(tag)
-                                    FilterChip(text = tag, isSelected = isSelected, activeColor = brandOrange, inactiveColor = AppColors.Background, onClick = { selectedTags = if (isSelected) selectedTags - tag else selectedTags + tag })
+                                    FilterChip(text = getLocalizedTag(tag), isSelected = isSelected, activeColor = brandOrange, inactiveColor = AppColors.Background, onClick = { selectedTags = if (isSelected) selectedTags - tag else selectedTags + tag })
                                 }
                             }
                         }
@@ -1714,11 +1721,11 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
 
                     Surface(color = cardBg, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Amenities & Vibe", color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
+                            Text(stringResource(SharedRes.string.amenities_header), color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 12.dp))
                             FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 amenitiesTags.forEach { tag ->
                                     val isSelected = selectedTags.contains(tag)
-                                    FilterChip(text = tag, isSelected = isSelected, activeColor = brandOrange, inactiveColor = AppColors.Background, onClick = { selectedTags = if (isSelected) selectedTags - tag else selectedTags + tag })
+                                    FilterChip(text = getLocalizedTag(tag), isSelected = isSelected, activeColor = brandOrange, inactiveColor = AppColors.Background, onClick = { selectedTags = if (isSelected) selectedTags - tag else selectedTags + tag })
                                 }
                             }
                         }
@@ -1727,7 +1734,7 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                     OutlinedTextField(
                         value = reviewText,
                         onValueChange = { if (it.length <= 500) reviewText = it },
-                        placeholder = { Text("Describe your experience... (optional)", color = Color.Gray) },
+                        placeholder = { Text(stringResource(SharedRes.string.review_placeholder), color = Color.Gray) },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
                         colors = TextFieldDefaults.colors(
                             focusedContainerColor = cardBg,
@@ -1765,7 +1772,7 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                         enabled = hasUnsavedChanges && !isSubmitting
                     ) {
                         if (isSubmitting) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                        else Text("Submit Review", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        else Text(stringResource(SharedRes.string.submit_review), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                     }
                 }
             }
@@ -1775,22 +1782,22 @@ fun AnimatedVisibilityScope.AddReviewFullScreen(
                     onDismissRequest = { showExitConfirmation = false },
                     containerColor = cardBg,
                     title = {
-                        Text("Discard Review?", fontWeight = FontWeight.Bold, color = AppColors.TextPrimary)
+                        Text(stringResource(SharedRes.string.discard_review_title), fontWeight = FontWeight.Bold, color = AppColors.TextPrimary)
                     },
                     text = {
-                        Text("You have unsaved changes. Are you sure you want to discard this review?", color = Color.LightGray)
+                        Text(stringResource(SharedRes.string.discard_review_message), color = Color.LightGray)
                     },
                     confirmButton = {
                         TextButton(onClick = {
                             showExitConfirmation = false
                             onClose()
                         }) {
-                            Text("Discard", color = Color(0xFFE57373), fontWeight = FontWeight.Bold)
+                            Text(stringResource(SharedRes.string.discard), color = Color(0xFFE57373), fontWeight = FontWeight.Bold)
                         }
                     },
                     dismissButton = {
                         TextButton(onClick = { showExitConfirmation = false }) {
-                            Text("Keep Editing", color = brandOrange, fontWeight = FontWeight.Bold)
+                            Text(stringResource(SharedRes.string.keep_editing), color = brandOrange, fontWeight = FontWeight.Bold)
                         }
                     }
                 )
@@ -2040,10 +2047,15 @@ fun ClubDetailsFullScreen(
             ) {
                 Spacer(modifier = Modifier.height(34.dp))
                 Spacer(modifier = Modifier.height(8.dp))
-                val locationTypeStr = club.type.name.lowercase().replaceFirstChar { it.uppercase() }
-                Text("Distance: ${club.distance}", color = Color.LightGray, fontSize = 14.sp)
+                val locationTypeStr = when (club.type.name.lowercase()) {
+                    "indoor" -> stringResource(SharedRes.string.indoor)
+                    "outdoor" -> stringResource(SharedRes.string.outdoor)
+                    "free" -> stringResource(SharedRes.string.free)
+                    else -> club.type.name
+                }
+                Text(stringResource(SharedRes.string.distance_format, club.distance), color = Color.LightGray, fontSize = 14.sp)
                 Text(
-                    "Type: $locationTypeStr • ${club.tables} Tables",
+                    stringResource(SharedRes.string.type_tables_format, locationTypeStr, club.tables),
                     color = brandOrange,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
@@ -2051,7 +2063,7 @@ fun ClubDetailsFullScreen(
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    "What People Say",
+                    stringResource(SharedRes.string.what_people_say),
                     color = AppColors.TextPrimary,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
@@ -2067,7 +2079,7 @@ fun ClubDetailsFullScreen(
                             .forEach { (tag, count) ->
                                 Surface(shape = RoundedCornerShape(20.dp), color = brandOrange) {
                                     Text(
-                                        text = "$tag ($count)",
+                                        text = "${getLocalizedTag(tag)} ($count)",
                                         modifier = Modifier.padding(
                                             horizontal = 12.dp,
                                             vertical = 6.dp
@@ -2087,7 +2099,7 @@ fun ClubDetailsFullScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "Community Reviews (${reviews.size})",
+                        stringResource(SharedRes.string.community_reviews_format, reviews.size),
                         color = AppColors.TextPrimary,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
@@ -2098,7 +2110,7 @@ fun ClubDetailsFullScreen(
                             contentPadding = PaddingValues(0.dp)
                         ) {
                             Text(
-                                "Write a Review",
+                                stringResource(SharedRes.string.write_a_review),
                                 color = brandOrange,
                                 fontWeight = FontWeight.Bold
                             )
@@ -2107,12 +2119,12 @@ fun ClubDetailsFullScreen(
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 if (reviews.isEmpty()) {
-                    Text("No reviews yet. Be the first to review!", color = Color.Gray)
+                    Text(stringResource(SharedRes.string.no_reviews_yet), color = Color.Gray)
                 } else {
                     reviews.filter { !it.textContent.isNullOrBlank() || it.tags.isNotEmpty() || it.imageUrls.isNotEmpty() }
                         .forEach { review ->
                             val displayName =
-                                if (review.userId == currentUserId) "You" else review.username
+                                if (review.userId == currentUserId) stringResource(SharedRes.string.you_label) else review.username
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                                 verticalAlignment = Alignment.Top
@@ -2180,7 +2192,7 @@ fun ClubDetailsFullScreen(
                                                     shape = RoundedCornerShape(12.dp)
                                                 ) {
                                                     Text(
-                                                        tag,
+                                                        getLocalizedTag(tag),
                                                         fontSize = 12.sp,
                                                         color = brandOrange,
                                                         modifier = Modifier.padding(
@@ -2757,5 +2769,29 @@ fun ClubDetailsFullScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun getLocalizedTag(tag: String): String {
+    return when (tag) {
+        "Perfect surface" -> stringResource(SharedRes.string.tag_perfect_surface)
+        "Sturdy net" -> stringResource(SharedRes.string.tag_sturdy_net)
+        "Worn out / Damaged" -> stringResource(SharedRes.string.tag_worn_out)
+        "Torn net" -> stringResource(SharedRes.string.tag_torn_net)
+        "Slippery surface" -> stringResource(SharedRes.string.tag_slippery_surface)
+        "Spacious" -> stringResource(SharedRes.string.tag_spacious)
+        "Wind-protected" -> stringResource(SharedRes.string.tag_wind_protected)
+        "Good lighting" -> stringResource(SharedRes.string.tag_good_lighting)
+        "Cramped space" -> stringResource(SharedRes.string.tag_cramped_space)
+        "Glaring sun" -> stringResource(SharedRes.string.tag_glaring_sun)
+        "Poor lighting" -> stringResource(SharedRes.string.tag_poor_lighting)
+        "Drinking fountain" -> stringResource(SharedRes.string.tag_drinking_fountain)
+        "Restroom available" -> stringResource(SharedRes.string.tag_restroom)
+        "Usually crowded" -> stringResource(SharedRes.string.tag_usually_crowded)
+        "Quiet & Chill" -> stringResource(SharedRes.string.tag_quiet_chill)
+        "Paid access" -> stringResource(SharedRes.string.tag_paid_access)
+        "Free to play" -> stringResource(SharedRes.string.tag_free_to_play)
+        else -> tag
     }
 }

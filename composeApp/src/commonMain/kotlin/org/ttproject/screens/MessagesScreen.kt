@@ -110,6 +110,7 @@ import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
 import io.github.vinceglb.filekit.core.PickerMode
 import io.github.vinceglb.filekit.core.PickerType
 import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.stringResource
 import org.ttproject.components.AudioPlayer
 import org.ttproject.components.FullScreenImageGallery
 import org.ttproject.components.NativeGalleryLauncher
@@ -120,6 +121,8 @@ import org.ttproject.components.rememberVideoLauncher
 import org.ttproject.components.rememberVoiceRecorder
 import org.ttproject.data.ReactionDto
 import ttproject.composeapp.generated.resources.Res
+import org.ttproject.shared.resources.*
+import org.ttproject.shared.resources.Res as SharedRes
 import ttproject.composeapp.generated.resources.camera
 import ttproject.composeapp.generated.resources.image
 import ttproject.composeapp.generated.resources.mic
@@ -216,7 +219,7 @@ fun MessagesScreen(
                                     onValueChange = { viewModel.updateSearchQuery(it) },
                                     placeholder = {
                                         Text(
-                                            "Search username...",
+                                            stringResource(SharedRes.string.search_username_placeholder),
                                             color = AppColors.TextGray
                                         )
                                     },
@@ -760,7 +763,7 @@ fun ChatDetailScreen(
                             )
                             Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color.Red.copy(alpha = alpha)))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "Recording...", color = Color.White, fontSize = 14.sp)
+                            Text(text = stringResource(SharedRes.string.recording_label), color = Color.White, fontSize = 14.sp)
                             Spacer(modifier = Modifier.weight(1f))
                             val minutes = recordingDuration / 60
                             val seconds = recordingDuration % 60
@@ -844,7 +847,7 @@ fun ChatDetailScreen(
                             decorationBox = { innerTextField ->
                                 Box(contentAlignment = Alignment.CenterStart) {
                                     if (messageText.text.isEmpty()) {
-                                        Text("Message", color = AppColors.TextGray, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(stringResource(SharedRes.string.message_placeholder), color = AppColors.TextGray, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                     innerTextField()
                                 }
@@ -897,7 +900,7 @@ fun ChatDetailScreen(
             ) {
                 Column(modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp)) {
                     Text(
-                        "Chat Theme",
+                        stringResource(SharedRes.string.chat_theme_title),
                         color = AppColors.TextPrimary,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
@@ -975,11 +978,12 @@ fun ChatDetailScreen(
                 val targetMessage = messages.find { it.id == reactionSheetMessageId }
                 if (targetMessage != null && targetMessage.reactions.isNotEmpty()) {
                     val currentUserId = tokenStorage.getUserId() ?: ""
+                    val youStr = stringResource(SharedRes.string.you_label)
                     val realReactionsList = targetMessage.reactions.map { dto ->
                         val isMyReaction = dto.userId == currentUserId
                         ReactionDetail(
                             userId = dto.userId,
-                            username = if (isMyReaction) "You" else otherUsername,
+                            username = if (isMyReaction) youStr else otherUsername,
                             profileImageUrl = if (isMyReaction) null else otherUserImageUrl,
                             emoji = dto.emoji,
                             isMe = isMyReaction
@@ -1669,9 +1673,9 @@ fun ChatBubble(
                         val isDarkMode = org.ttproject.isDark
                         val isQuotedImage = repliedText.startsWith("[IMAGE")
                         val displayRepliedText = when {
-                            repliedText.startsWith("[VOICE]") -> "🎤 Voice Message"
-                            repliedText.startsWith("[VIDEO]") -> "🎥 Video"
-                            repliedText.startsWith("[IMAGE") -> "📸 Photo"
+                            repliedText.startsWith("[VOICE]") -> "🎤 " + stringResource(SharedRes.string.voice_message_preview)
+                            repliedText.startsWith("[VIDEO]") -> "🎥 " + stringResource(SharedRes.string.video_preview)
+                            repliedText.startsWith("[IMAGE") -> "📸 " + stringResource(SharedRes.string.photo_preview)
                             else -> repliedText
                         }
                         val quoteBgColor = if (isAnyMedia) Color.Black.copy(alpha = 0.6f) else if (isDarkMode) Color.Black.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.05f)
@@ -1960,9 +1964,9 @@ fun ChatListItem(thread: ChatThreadDto, onClick: () -> Unit) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     val displayLastMessage = when {
-                        thread.lastMessage.startsWith("[VOICE]") -> "🎤 Voice Message"
-                        thread.lastMessage.startsWith("[VIDEO]") -> "🎥 Video"
-                        thread.lastMessage.startsWith("[IMAGE") -> "📸 Photo"
+                        thread.lastMessage.startsWith("[VOICE]") -> "🎤 " + stringResource(SharedRes.string.voice_message_preview)
+                        thread.lastMessage.startsWith("[VIDEO]") -> "🎥 " + stringResource(SharedRes.string.video_preview)
+                        thread.lastMessage.startsWith("[IMAGE") -> "📸 " + stringResource(SharedRes.string.photo_preview)
                         else -> thread.lastMessage
                     }
                     Text(displayLastMessage, color = if (thread.unreadCount > 0) AppColors.TextPrimary else Color.Gray, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -1990,10 +1994,10 @@ fun EmptySearchState(query: String) {
         Spacer(modifier = Modifier.height(48.dp)) // Push it down a bit from the search bar
         Text("🔍", fontSize = 64.sp)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("No results found", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(stringResource(SharedRes.string.no_results_found), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "We couldn't find any chats matching \"$query\".",
+            text = stringResource(SharedRes.string.no_chats_matching_query, query),
             color = Color.Gray,
             fontSize = 14.sp,
             textAlign = TextAlign.Center
@@ -2010,9 +2014,9 @@ fun EmptyMessagesState() {
     ) {
         Text("💬", fontSize = 64.sp)
         Spacer(modifier = Modifier.height(16.dp))
-        Text("No Messages Yet", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(stringResource(SharedRes.string.no_messages_yet), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(8.dp))
-        Text("Swipe on players nearby or join a table to start a conversation.", color = Color.Gray, fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text(stringResource(SharedRes.string.no_messages_subtitle), color = Color.Gray, fontSize = 14.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
 
@@ -2025,9 +2029,9 @@ fun ReplyPreview(
     val isDarkMode = org.ttproject.isDark
     val bgColor = if (isDarkMode) Color.Black.copy(alpha = 0.2f) else Color.Black.copy(alpha = 0.05f)
     val displayMessage = when {
-        messageContent.startsWith("[VOICE]") -> "🎤 Voice Message"
-        messageContent.startsWith("[VIDEO]") -> "🎥 Video"
-        messageContent.startsWith("[IMAGE") -> "📸 Photo"
+        messageContent.startsWith("[VOICE]") -> "🎤 " + stringResource(SharedRes.string.voice_message_preview)
+        messageContent.startsWith("[VIDEO]") -> "🎥 " + stringResource(SharedRes.string.video_preview)
+        messageContent.startsWith("[IMAGE") -> "📸 " + stringResource(SharedRes.string.photo_preview)
         else -> messageContent
     }
 
@@ -2055,7 +2059,7 @@ fun ReplyPreview(
         Spacer(modifier = Modifier.width(8.dp))
 
         Column(modifier = Modifier.weight(1f).padding(vertical = 8.dp)) {
-            Text("Replying to", color = themeColor, fontSize = 12.sp, fontWeight = FontWeight.Bold) // 👈 Theme matched title
+            Text(stringResource(SharedRes.string.replying_to), color = themeColor, fontSize = 12.sp, fontWeight = FontWeight.Bold) // 👈 Theme matched title
             Text(
                 text = displayMessage,
                 color = AppColors.TextPrimary,
@@ -2158,13 +2162,13 @@ fun ReactionsBottomSheet(
                     // Name & "Tap to remove" hint
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (reaction.isMe) "You" else reaction.username,
+                            text = if (reaction.isMe) stringResource(SharedRes.string.you_label) else reaction.username,
                             color = AppColors.TextPrimary,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Medium
                         )
                         if (reaction.isMe) {
-                            Text("Tap to remove", color = AppColors.TextGray, fontSize = 12.sp)
+                            Text(stringResource(SharedRes.string.tap_to_remove), color = AppColors.TextGray, fontSize = 12.sp)
                         }
                     }
 
@@ -2261,7 +2265,7 @@ fun OtherUserProfileSheet(
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Person, contentDescription = null, tint = AppColors.TextGray, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("BASIC INFO", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(SharedRes.string.basic_info_header).uppercase(), color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2269,7 +2273,7 @@ fun OtherUserProfileSheet(
                     modifier = Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(cardBgColor).padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(text = "AGE", color = AppColors.TextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text(text = stringResource(SharedRes.string.age_label).uppercase(), color = AppColors.TextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(text = age.toString(), color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
@@ -2277,7 +2281,7 @@ fun OtherUserProfileSheet(
                     modifier = Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(cardBgColor).padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(text = "LEVEL", color = AppColors.TextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text(text = stringResource(SharedRes.string.level_label).uppercase(), color = AppColors.TextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(text = skillLevel ?: "?", color = AppColors.AccentOrange, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
@@ -2289,18 +2293,18 @@ fun OtherUserProfileSheet(
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.Build, contentDescription = null, tint = AppColors.TextGray, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("GEAR", color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(SharedRes.string.gear_header).uppercase(), color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(16.dp))
 
             // Blade
-            ReadOnlyGearItem("BLADE", blade ?: "?", cardBgColor) { Text("🏓", fontSize = 16.sp) }
+            ReadOnlyGearItem(stringResource(SharedRes.string.blade).uppercase(), blade ?: "?", cardBgColor) { Text("🏓", fontSize = 16.sp) }
             Spacer(modifier = Modifier.height(8.dp))
             // FH
-            ReadOnlyGearItem("FOREHAND", rubberFh ?: "?", cardBgColor) { Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(Color(0xFFFF4B4B))) }
+            ReadOnlyGearItem(stringResource(SharedRes.string.forehand).uppercase(), rubberFh ?: "?", cardBgColor) { Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(Color(0xFFFF4B4B))) }
             Spacer(modifier = Modifier.height(8.dp))
             // BH
-            ReadOnlyGearItem("BACKHAND", rubberBh ?: "?", cardBgColor) { Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(Color.Black)) }
+            ReadOnlyGearItem(stringResource(SharedRes.string.backhand).uppercase(), rubberBh ?: "?", cardBgColor) { Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(Color.Black)) }
         }
     }
 }

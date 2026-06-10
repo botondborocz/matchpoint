@@ -1,7 +1,13 @@
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
@@ -20,11 +26,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import org.ttproject.AppColors
 import org.ttproject.data.BadgeData
 import org.ttproject.data.BadgeTierDefinition
@@ -140,8 +146,14 @@ fun HexagonCanvas(color: Color, modifier: Modifier = Modifier, strokeWidth: Floa
 }
 
 // --- 3. A Kitűző Komponens (Badge Item) ---
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun BadgeItem(badge: BadgeData, modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun SharedTransitionScope.BadgeItem(
+    badge: BadgeData,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
     val isCompleted = badge.currentLevel > 0
     val badgeColor = getBadgeColor(badge.currentLevel, isCompleted)
 
@@ -165,20 +177,36 @@ fun BadgeItem(badge: BadgeData, modifier: Modifier = Modifier, onClick: () -> Un
                 onClick = onClick
             )
     ) {
+        // 📦 FIXED SIZE WRAPPER: Prevents layout collapse when the badge icon flies out
         Box(
-            modifier = Modifier
-                .size(46.dp)
-                .scale(scaleMultiplier),
+            modifier = Modifier.size(46.dp),
             contentAlignment = Alignment.Center
         ) {
-            HexagonCanvas(color = badgeColor)
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !isSelected,
+                enter = fadeIn(tween(400)),
+                exit = fadeOut(tween(400))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .scale(scaleMultiplier)
+                        .sharedBounds(
+                            sharedContentState = rememberSharedContentState(key = "badge_icon_${badge.baseName}"),
+                            animatedVisibilityScope = this@AnimatedVisibility
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    HexagonCanvas(color = badgeColor)
 
-            Icon(
-                imageVector = badge.icon,
-                contentDescription = badge.baseName,
-                tint = badgeColor,
-                modifier = Modifier.size(20.dp)
-            )
+                    Icon(
+                        imageVector = badge.icon,
+                        contentDescription = badge.baseName,
+                        tint = badgeColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(6.dp))
@@ -197,9 +225,11 @@ fun BadgeItem(badge: BadgeData, modifier: Modifier = Modifier, onClick: () -> Un
 }
 
 // --- 4. A Kitűző Sáv (Badges Section) ---
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun BadgesSection(
+fun SharedTransitionScope.BadgesSection(
     metrics: UserBadgeMetricsDto?, // 👈 Pass the real metrics here
+    selectedBadge: BadgeData?,
     onBadgeClick: (BadgeData) -> Unit
 ) {
     // If metrics are null (still loading or failed), fallback to 0s to avoid crashes
@@ -222,8 +252,10 @@ fun BadgesSection(
             chunkedBadges.forEach { rowBadges ->
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     rowBadges.forEach { badge ->
+                        val isSelected = selectedBadge?.baseName == badge.baseName
                         BadgeItem(
                             badge = badge,
+                            isSelected = isSelected,
                             modifier = Modifier.weight(1f),
                             onClick = { onBadgeClick(badge) }
                         )
@@ -235,17 +267,26 @@ fun BadgesSection(
 }
 
 // --- 5. A Frissített Popup Dialog (Badge Details) Animált Progress Bar-ral ---
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun BadgeDetailsDialog(
+fun SharedTransitionScope.BadgeDetailsOverlay(
     badge: BadgeData,
+    animatedVisibilityScope: AnimatedVisibilityScope,
     onDismiss: () -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.8f))
+            .pointerInput(Unit) { detectTapGestures { onDismiss() } },
+        contentAlignment = Alignment.Center
+    ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxWidth(0.85f)
                 .clip(RoundedCornerShape(24.dp))
                 .background(AppColors.SurfaceDark)
+                .pointerInput(Unit) { detectTapGestures { /* block click propagation */ } }
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -253,7 +294,15 @@ fun BadgeDetailsDialog(
             val headerColor = getBadgeColor(badge.currentLevel, isBadgeStarted)
 
             // Fejléc Ikon
-            Box(modifier = Modifier.size(64.dp), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .sharedBounds(
+                        sharedContentState = rememberSharedContentState(key = "badge_icon_${badge.baseName}"),
+                        animatedVisibilityScope = animatedVisibilityScope
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
                 HexagonCanvas(color = headerColor, strokeWidth = 3f)
                 Icon(badge.icon, contentDescription = null, tint = headerColor, modifier = Modifier.size(28.dp))
             }

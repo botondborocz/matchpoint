@@ -1,6 +1,6 @@
 package org.ttproject.screens
 
-import BadgeDetailsDialog
+import BadgeDetailsOverlay
 import BadgesSection
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
@@ -57,24 +57,12 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.ttproject.AppColors
 import org.ttproject.AppColors.TextGray
 import org.ttproject.data.Player
-import org.ttproject.shared.resources.backhand
-import org.ttproject.shared.resources.blade
-import org.ttproject.shared.resources.dark
-import org.ttproject.shared.resources.forehand
-import org.ttproject.shared.resources.language
-import org.ttproject.shared.resources.light
-import org.ttproject.shared.resources.logout
-import org.ttproject.shared.resources.my_gear
-import org.ttproject.shared.resources.system_default
-import org.ttproject.shared.resources.theme
+import org.ttproject.shared.resources.*
+import org.ttproject.shared.resources.Res as SharedRes
 import org.ttproject.viewmodel.ProfileState
 import org.ttproject.viewmodel.ProfileViewModel
 import org.ttproject.util.ThemeMode
-import org.ttproject.shared.resources.Res as SharedRes
 import coil3.compose.AsyncImage
-import org.ttproject.shared.resources.cancel
-import org.ttproject.shared.resources.save
-import org.ttproject.shared.resources.username
 import com.preat.peekaboo.image.picker.SelectionMode
 import com.preat.peekaboo.image.picker.rememberImagePickerLauncher
 import kotlinx.coroutines.launch
@@ -145,12 +133,7 @@ fun ProfileScreen(
         )
     }
 
-    if (selectedBadge != null) {
-        BadgeDetailsDialog(
-            badge = selectedBadge!!,
-            onDismiss = { selectedBadge = null }
-        )
-    }
+
 
     LaunchedEffect(Unit) {
         viewModel.fetchUserProfile(showLoading = false)
@@ -180,6 +163,13 @@ fun ProfileScreen(
             }
 
             val scrollState = rememberScrollState()
+
+            var activeBadgeForOverlay by remember { mutableStateOf<BadgeData?>(null) }
+            LaunchedEffect(selectedBadge) {
+                if (selectedBadge != null) {
+                    activeBadgeForOverlay = selectedBadge
+                }
+            }
 
             if (isEditUsernameModalOpen) {
                 EditUsernameDialog(
@@ -280,6 +270,7 @@ fun ProfileScreen(
                             Column {
                                 BadgesSection(
                                     metrics = userData.badgeMetrics,
+                                    selectedBadge = selectedBadge,
                                     onBadgeClick = { clickedBadge -> selectedBadge = clickedBadge }
                                 )
                                 Spacer(modifier = Modifier.height(32.dp))
@@ -372,6 +363,22 @@ fun ProfileScreen(
                             onDismiss = { isMatchCardPreviewOpen = false }
                         )
                     }
+
+                    // 🌟 DESTINATION 3: MORPHING BADGE DETAILS PREVIEW
+                    AnimatedVisibility(
+                        visible = selectedBadge != null,
+                        enter = fadeIn(tween(400)),
+                        exit = fadeOut(tween(400)),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        activeBadgeForOverlay?.let { badge ->
+                            BadgeDetailsOverlay(
+                                badge = badge,
+                                animatedVisibilityScope = this,
+                                onDismiss = { selectedBadge = null }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -415,7 +422,7 @@ private fun SharedTransitionScope.MatchCardPreviewOverlay(
             modifier = Modifier.pointerInput(Unit) { detectTapGestures { /* Block bubbling */ } }
         ) {
             Text(
-                text = "THIS IS HOW OTHERS SEE YOU",
+                text = stringResource(SharedRes.string.matchcard_preview_subtitle).uppercase(),
                 color = Color.Black.copy(alpha = 0.7f),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
@@ -521,7 +528,7 @@ private fun SharedTransitionScope.AvatarPreviewOverlay(
             ) {
                 Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(12.dp))
-                Text("Upload Photo", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(stringResource(SharedRes.string.upload_photo), color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         }
 
@@ -641,7 +648,7 @@ private fun SharedTransitionScope.ProfileHeader(
                 ) {
                     Icon(Icons.Default.Visibility, contentDescription = null, tint = AppColors.AccentOrange, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("PREVIEW MATCHCARD", color = AppColors.AccentOrange, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.sp)
+                    Text(stringResource(SharedRes.string.preview_matchcard_btn).uppercase(), color = AppColors.AccentOrange, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.sp)
                 }
             }
         }
@@ -681,7 +688,7 @@ fun EditBasicInfoDialog(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Edit Basic Info", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(SharedRes.string.edit_basic_info_title), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(24.dp))
 
             NativeDatePickerField(
@@ -723,7 +730,7 @@ private fun BasicInfoSection(
         ) {
             Icon(Icons.Default.Person, contentDescription = null, tint = AppColors.TextGray, modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("BASIC INFO", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(SharedRes.string.basic_info_header).uppercase(), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -734,9 +741,9 @@ private fun BasicInfoSection(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        val birthDate = profileData.birthDate ?: "Set birth date"
-        val ageDisplay = profileData.age?.toString() ?: "Set age"
-        val skillLevel = profileData.skillLevel ?: "Set level"
+        val birthDate = profileData.birthDate ?: stringResource(SharedRes.string.set_birth_date)
+        val ageDisplay = profileData.age?.toString() ?: stringResource(SharedRes.string.set_age)
+        val skillLevel = profileData.skillLevel ?: stringResource(SharedRes.string.set_level)
 
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(
@@ -747,7 +754,7 @@ private fun BasicInfoSection(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(text = "AGE", color = AppColors.TextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Text(text = stringResource(SharedRes.string.age_label).uppercase(), color = AppColors.TextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(text = ageDisplay, color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
@@ -760,7 +767,7 @@ private fun BasicInfoSection(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(text = "LEVEL", color = AppColors.TextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Text(text = stringResource(SharedRes.string.level_label).uppercase(), color = AppColors.TextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(text = skillLevel, color = AppColors.AccentOrange, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
@@ -812,7 +819,7 @@ fun AvatarFramerDialog(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Frame Your Avatar", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(SharedRes.string.frame_avatar_title), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(24.dp))
 
             Box(
@@ -833,7 +840,7 @@ fun AvatarFramerDialog(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Text("Adjust Position", color = AppColors.TextPrimary, fontSize = 14.sp)
+            Text(stringResource(SharedRes.string.adjust_position_label), color = AppColors.TextPrimary, fontSize = 14.sp)
             Spacer(modifier = Modifier.height(4.dp))
             Slider(
                 value = verticalBias,
@@ -849,14 +856,14 @@ fun AvatarFramerDialog(
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel", color = AppColors.TextPrimary)
+                    Text(stringResource(SharedRes.string.cancel), color = AppColors.TextPrimary)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(
                     onClick = { onConfirm(verticalBias) },
                     colors = ButtonDefaults.buttonColors(containerColor = AppColors.AccentOrange)
                 ) {
-                    Text("Save & Upload", color = AppColors.TextPrimary)
+                    Text(stringResource(SharedRes.string.save_upload_btn), color = AppColors.TextPrimary)
                 }
             }
         }
@@ -957,6 +964,14 @@ private fun SettingsAndLogout(
     tokenStorage: TokenStorage = koinInject()
 ) {
     val scope = rememberCoroutineScope()
+    val premiumThemeLockedMsg = stringResource(SharedRes.string.premium_theme_locked_msg)
+    val premiumIconLockedMsg = stringResource(SharedRes.string.premium_icon_locked_msg)
+    val mapResetSuccessMsg = stringResource(SharedRes.string.map_preference_reset_success)
+    val premiumActiveTitle = stringResource(SharedRes.string.premium_account_active)
+    val upgradePremiumTitle = stringResource(SharedRes.string.upgrade_to_premium)
+    val tapFreePlanSub = stringResource(SharedRes.string.tap_to_free_plan)
+    val tapUnlockPremiumSub = stringResource(SharedRes.string.tap_to_unlock_premium)
+    val resetMapChoiceLabel = stringResource(SharedRes.string.reset_map_choice)
 
     Column(modifier = Modifier.fillMaxWidth()) {
         // 🌟 NEW: THE DEBUG MODE MEMBERSHIP PREMIUM STATUS TOGGLE CARD STRIP
@@ -976,15 +991,16 @@ private fun SettingsAndLogout(
                 modifier = Modifier.size(24.dp)
             )
             Spacer(modifier = Modifier.width(16.dp))
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (isUserPremium) "Premium Account Active" else "Upgrade to Premium",
+                    text = if (isUserPremium) premiumActiveTitle else upgradePremiumTitle,
                     color = AppColors.TextPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = if (isUserPremium) "Tap to switch to Free Plan (Debug)" else "Tap to instantly unlock all features (Debug)",
+                    text = if (isUserPremium) tapFreePlanSub else tapUnlockPremiumSub,
                     color = AppColors.TextGray,
                     fontSize = 12.sp
                 )
@@ -999,7 +1015,7 @@ private fun SettingsAndLogout(
             onThemeSelected = onChangeAppThemeStyle,
             onPremiumLockedClick = {
                 scope.launch {
-                    snackbarHostState.showSnackbar("Ez egy prémium téma! Oldd fel az előfizetéssel.")
+                    snackbarHostState.showSnackbar(premiumThemeLockedMsg)
                 }
             }
         )
@@ -1011,7 +1027,7 @@ private fun SettingsAndLogout(
             isUserPremium = isUserPremium,
             onIconSelected = onChangeAppIcon,
             onPremiumLockedClick = {
-                scope.launch { snackbarHostState.showSnackbar("Ez egy prémium ikon! Oldd fel az előfizetéssel.") }
+                scope.launch { snackbarHostState.showSnackbar(premiumIconLockedMsg) }
             }
         )
 
@@ -1035,7 +1051,7 @@ private fun SettingsAndLogout(
                         tokenStorage.clearMapChoice()
                         scope.launch {
                             snackbarHostState.showSnackbar(
-                                message = "Map preference reset successfully",
+                                message = mapResetSuccessMsg,
                                 duration = SnackbarDuration.Short
                             )
                         }
@@ -1045,13 +1061,13 @@ private fun SettingsAndLogout(
             ) {
                 Icon(
                     Icons.Default.Map,
-                    contentDescription = "Reset Map Choice",
+                    contentDescription = resetMapChoiceLabel,
                     tint = AppColors.TextGray,
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(16.dp))
                 Text(
-                    "Reset Map Choice",
+                    resetMapChoiceLabel,
                     color = AppColors.TextPrimary,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
@@ -1231,7 +1247,7 @@ fun EditUsernameDialog(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Edit Username", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(SharedRes.string.edit_username_title), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(24.dp))
 
             EditTextField(
@@ -1283,7 +1299,7 @@ fun EditBioDialog(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Edit Bio", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(SharedRes.string.edit_bio_title), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(24.dp))
 
             OutlinedTextField(
@@ -1294,7 +1310,7 @@ fun EditBioDialog(
                     .focusRequester(focusRequester),
                 minLines = 3,
                 maxLines = 5,
-                placeholder = { Text("Tell everyone a bit about your playstyle...", color = AppColors.TextGray.copy(alpha = 0.5f)) },
+                placeholder = { Text(stringResource(SharedRes.string.bio_placeholder), color = AppColors.TextGray.copy(alpha = 0.5f)) },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = AppColors.TextPrimary, unfocusedTextColor = AppColors.TextPrimary,
                     focusedBorderColor = AppColors.AccentOrange, unfocusedBorderColor = AppColors.TextPrimary.copy(alpha = 0.3f),
@@ -1350,7 +1366,7 @@ fun EditGearDialog(
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Edit Gear", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(SharedRes.string.edit_gear_title), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(24.dp))
 
             EditTextField(
