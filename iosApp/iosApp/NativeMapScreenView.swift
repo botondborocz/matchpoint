@@ -281,7 +281,7 @@ struct NativeMapScreenView: View {
                 
                 // MARK: 3. Search and Filters Floating Capsule
                 if !isPickingLocation && selectedLocation == nil {
-                    VStack(spacing: 12) {
+                    GlassEffectContainer(spacing: 12) {
                         // Search bar
                         HStack(spacing: 8) {
                             Image(systemName: "magnifyingglass")
@@ -319,8 +319,8 @@ struct NativeMapScreenView: View {
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
-                        .background(.regularMaterial, in: Capsule())
-                        .matchedGeometryEffect(id: "mapSearchBar", in: mapGlassNS)
+                        .glassEffect(.regular.interactive(), in: Capsule())
+                        .glassEffectID("mapSearchBar", in: mapGlassNS)
                         .overlay(Capsule().stroke(Color.primary.opacity(0.1), lineWidth: 1))
                         .shadow(radius: 6)
                         
@@ -342,7 +342,7 @@ struct NativeMapScreenView: View {
                             }
                             .padding([.horizontal, .bottom])
                             .padding(.top, 10)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
+                            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
                             .shadow(radius: 6)
                         }
                     }
@@ -362,8 +362,8 @@ struct NativeMapScreenView: View {
                                 .font(.system(size: 18))
                                 .foregroundColor(colorAccent)
                                 .frame(width: 48, height: 48)
-                                .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 16))
                         }
+                        .buttonStyle(.glass)
                         
                         Button(action: {
                             withAnimation {
@@ -375,8 +375,8 @@ struct NativeMapScreenView: View {
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(colorAccent)
                                 .frame(width: 48, height: 48)
-                                .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 16))
                         }
+                        .buttonStyle(.glassProminent)
                     }
                     .padding(.trailing, 16)
                     .padding(.bottom, currentSheetState.height(screenHeight: screenHeight) + 16)
@@ -565,7 +565,7 @@ struct NativeMapScreenView: View {
                         if isSelected {
                             Button(action: {
                                 withAnimation(Animation.spring(duration: 0.25, bounce: 0.175)) {
-                                    selectedTags.remove(opt)
+                                    _ = selectedTags.remove(opt)
                                 }
                             }) {
                                 Text(opt)
@@ -578,7 +578,7 @@ struct NativeMapScreenView: View {
                         } else {
                             Button(action: {
                                 withAnimation(Animation.spring(duration: 0.25, bounce: 0.175)) {
-                                    selectedTags.insert(opt)
+                                    _ = selectedTags.insert(opt)
                                 }
                             }) {
                                 Text(opt)
@@ -586,9 +586,8 @@ struct NativeMapScreenView: View {
                                     .foregroundColor(.primary)
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 8)
-                                    .background(.regularMaterial, in: Capsule())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.glass)
                         }
                     }
                 }
@@ -660,8 +659,7 @@ struct NativeMapScreenView: View {
             }
         }
         .frame(height: currentSheetState.height(screenHeight: screenHeight))
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
         .padding(.horizontal, 16)
         .padding(.bottom, 20)
         .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 5)
@@ -904,8 +902,7 @@ struct NativeMapScreenView: View {
             }
         }
         .frame(height: isDetailsExpanded ? screenHeight * 0.9 : 150)
-        .background(.regularMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
         .padding(.horizontal, 16)
         .padding(.bottom, 20)
         .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 5)
@@ -1015,7 +1012,7 @@ struct PhotosPickerBox: View {
                 // Call Kotlin bridge function directly
                 helper?.addLocationImages(
                     locationId: clubId,
-                    imagesData: imageList.map { $0 as Data },
+                    imagesData: imageList.map { $0 as NSData },
                     onSuccess: {
                         isUploading = false
                     }
@@ -1136,7 +1133,7 @@ struct AddTableModalView: View {
             isIndoor: isIndoor,
             count: Int32(tableCount),
             isFree: isFree,
-            imagesData: selectedImages.map { $0 as Data },
+            imagesData: selectedImages.map { $0 as NSData },
             onSuccess: {
                 isSubmitting = false
                 onDismiss()
@@ -1255,7 +1252,7 @@ struct AddReviewModalView: View {
             locationId: locationId,
             tags: Array(selectedTags),
             text: reviewText,
-            imagesData: reviewImages.map { $0 as Data },
+            imagesData: reviewImages.map { $0 as NSData },
             onSuccess: {
                 isSubmitting = false
                 onDismiss()

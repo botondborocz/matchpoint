@@ -276,7 +276,7 @@ struct ChatBubbleView: View {
             VStack(alignment: isMine ? .trailing : .leading, spacing: 4) {
                 if isImageMessage {
                     // Gallery Grid
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: min(urls.count, 2)), spacing: 4) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: max(1, min(urls.count, 2))), spacing: 4) {
                         ForEach(urls, id: \.self) { url in
                             AsyncImage(url: URL(string: url)) { phase in
                                 if let image = phase.image {
