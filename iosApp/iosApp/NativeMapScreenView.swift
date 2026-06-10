@@ -279,81 +279,9 @@ struct NativeMapScreenView: View {
                     .ignoresSafeArea(.all)
                 }
                 
-                // MARK: 3. Search and Filters Floating Capsule
-                if !isPickingLocation && selectedLocation == nil {
-                    GlassEffectContainer(spacing: 12) {
-                        // Search bar
-                        HStack(spacing: 8) {
-                            Image(systemName: "magnifyingglass")
-                                .foregroundColor(.secondary)
-                            
-                            TextField("Search venues...", text: $searchQuery)
-                                .foregroundColor(.primary)
-                                .accentColor(colorAccent)
-                                .font(.system(size: 15))
-                            
-                            if !searchQuery.isEmpty {
-                                Button(action: { searchQuery = "" }) {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            
-                            Button(action: {
-                                // Dictation action placeholder
-                            }) {
-                                Image(systemName: "mic.fill")
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Button(action: {
-                                withAnimation(.spring()) {
-                                    isFilterPanelExpanded.toggle()
-                                }
-                            }) {
-                                Image(systemName: "slider.horizontal.3")
-                                    .foregroundColor(isFilterPanelExpanded || !selectedTags.isEmpty ? colorAccent : .secondary)
-                                    .padding(8)
-                                    .background(isFilterPanelExpanded || !selectedTags.isEmpty ? colorAccent.opacity(0.2) : Color.clear, in: Circle())
-                            }
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .glassEffect(.regular.interactive(), in: Capsule())
-                        .glassEffectID("mapSearchBar", in: mapGlassNS)
-                        .overlay(Capsule().stroke(Color.primary.opacity(0.1), lineWidth: 1))
-                        .shadow(radius: 6)
-                        
-                        // Filters drawer
-                        if isFilterPanelExpanded {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Divider().background(Color.primary.opacity(0.1))
-                                
-                                ScrollView {
-                                    VStack(alignment: .leading, spacing: 14) {
-                                        filterSection(title: "Type & Access Strategy", options: ["Indoor", "Outdoor", "Free", "Paid"])
-                                        filterSection(title: "Table Properties", options: ["Perfect surface", "Sturdy net", "Worn out / Damaged", "Torn net", "Slippery surface"])
-                                        filterSection(title: "Playing Arena Environment", options: ["Spacious", "Wind-protected", "Good lighting", "Cramped space", "Glaring sun", "Poor lighting"])
-                                        filterSection(title: "Amenities & Settings Vibe", options: ["Drinking fountain", "Restroom available", "Usually crowded", "Quiet & Chill"])
-                                    }
-                                    .padding(.bottom, 8)
-                                }
-                                .frame(maxHeight: 220)
-                            }
-                            .padding([.horizontal, .bottom])
-                            .padding(.top, 10)
-                            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
-                            .shadow(radius: 6)
-                        }
-                    }
-                    .padding(.horizontal)
-                    .position(x: screenWidth / 2, y: isFilterPanelExpanded ? 200 : 70)
-                    .zIndex(10)
-                }
-                
-                // MARK: 4. Floating Action Buttons (FABs)
+                // MARK: 3. Vertical Map Controls Toolbar
                 if selectedLocation == nil && !isPickingLocation {
-                    VStack(spacing: 16) {
+                    VStack(spacing: 0) {
                         Button(action: {
                             trackingUserLocation = true
                             locationManager.requestWhenInUseAuthorization()
@@ -362,8 +290,12 @@ struct NativeMapScreenView: View {
                                 .font(.system(size: 18))
                                 .foregroundColor(colorAccent)
                                 .frame(width: 48, height: 48)
+                                .contentShape(Rectangle())
                         }
-                        .buttonStyle(.glass)
+                        
+                        Divider()
+                            .background(Color.primary.opacity(0.1))
+                            .frame(width: 32)
                         
                         Button(action: {
                             withAnimation {
@@ -375,12 +307,18 @@ struct NativeMapScreenView: View {
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(colorAccent)
                                 .frame(width: 48, height: 48)
+                                .contentShape(Rectangle())
                         }
-                        .buttonStyle(.glassProminent)
                     }
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                    )
                     .padding(.trailing, 16)
                     .padding(.bottom, currentSheetState.height(screenHeight: screenHeight) + 16)
                     .frame(maxWidth: .infinity, alignment: .trailing)
+                    .shadow(color: Color.black.opacity(0.15), radius: 6, x: 0, y: 3)
                     .zIndex(5)
                 }
                 
@@ -604,11 +542,113 @@ struct NativeMapScreenView: View {
                 .frame(width: 40, height: 4)
                 .padding(.vertical, 12)
             
+            // Search bar & Filter trigger inline in the bottom sheet header
+            HStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    
+                    TextField("Search venues...", text: $searchQuery, onEditingChanged: { editing in
+                        if editing {
+                            withAnimation(.spring()) {
+                                if currentSheetState == .collapsed {
+                                    currentSheetState = .half
+                                }
+                            }
+                        }
+                    })
+                    .foregroundColor(.primary)
+                    .accentColor(colorAccent)
+                    .font(.system(size: 15))
+                    
+                    if !searchQuery.isEmpty {
+                        Button(action: { searchQuery = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    Button(action: {
+                        // Dictation action placeholder
+                    }) {
+                        Image(systemName: "mic.fill")
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.black.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+                
+                Button(action: {
+                    withAnimation(.spring()) {
+                        isFilterPanelExpanded.toggle()
+                        if isFilterPanelExpanded && currentSheetState == .collapsed {
+                            currentSheetState = .half
+                        }
+                    }
+                }) {
+                    Image(systemName: "slider.horizontal.3")
+                        .foregroundColor(isFilterPanelExpanded || !selectedTags.isEmpty ? colorAccent : .secondary)
+                        .padding(8)
+                        .background(isFilterPanelExpanded || !selectedTags.isEmpty ? colorAccent.opacity(0.15) : Color.clear, in: Circle())
+                }
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+            
+            // Selected active tags tokens row
+            if !selectedTags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(Array(selectedTags), id: \.self) { tag in
+                            HStack(spacing: 4) {
+                                Text(tag)
+                                    .font(.system(size: 12, weight: .medium))
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 10))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(colorAccent, in: Capsule())
+                            .onTapGesture {
+                                withAnimation {
+                                    selectedTags.remove(tag)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                }
+            }
+            
+            // Inline expanded Filter Panel
+            if isFilterPanelExpanded {
+                VStack(alignment: .leading, spacing: 12) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            filterSection(title: "Type & Access Strategy", options: ["Indoor", "Outdoor", "Free", "Paid"])
+                            filterSection(title: "Table Properties", options: ["Perfect surface", "Sturdy net", "Worn out / Damaged", "Torn net", "Slippery surface"])
+                            filterSection(title: "Playing Arena Environment", options: ["Spacious", "Wind-protected", "Good lighting", "Cramped space", "Glaring sun", "Poor lighting"])
+                            filterSection(title: "Amenities & Settings Vibe", options: ["Drinking fountain", "Restroom available", "Usually crowded", "Quiet & Chill"])
+                        }
+                        .padding(.bottom, 8)
+                    }
+                    .frame(maxHeight: 180)
+                    
+                    Divider().background(Color.primary.opacity(0.1))
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
+            
             Text("Nearby Clubs")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(.primary)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal)
+                .padding(.top, 4)
                 .padding(.bottom, 8)
             
             ScrollView {
