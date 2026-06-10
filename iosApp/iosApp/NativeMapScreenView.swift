@@ -396,7 +396,7 @@ struct NativeMapScreenView: View {
                                 }
                                 .onEnded { value in
                                     let threshold = screenHeight * 0.15
-                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                    withAnimation(Animation.spring(response: 0.35, dampingFraction: 0.8)) {
                                         if value.translation.height < -threshold {
                                             // Swipe up
                                             if currentSheetState == .collapsed {
@@ -565,7 +565,7 @@ struct NativeMapScreenView: View {
                         let isSelected = selectedTags.contains(opt)
                         if isSelected {
                             Button(action: {
-                                withAnimation(.spring(duration: 0.25, bounce: 0.175)) {
+                                withAnimation(Animation.spring(duration: 0.25, bounce: 0.175)) {
                                     selectedTags.remove(opt)
                                 }
                             }) {
@@ -578,7 +578,7 @@ struct NativeMapScreenView: View {
                             .clipShape(Capsule())
                         } else {
                             Button(action: {
-                                withAnimation(.spring(response: 0.25)) {
+                                withAnimation(Animation.spring(duration: 0.25, bounce: 0.175)) {
                                     selectedTags.insert(opt)
                                 }
                             }) {

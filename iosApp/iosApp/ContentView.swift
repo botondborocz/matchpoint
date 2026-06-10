@@ -208,7 +208,7 @@ struct NativeSwiftGalleryView: View {
                         if abs(viewOffset.height) + abs(velocity) > 150 {
                             dismiss()
                         } else {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            withAnimation(Animation.spring(response: 0.3, dampingFraction: 0.8)) {
                                 viewOffset = .zero
                                 bgOpacity = 1.0
                             }

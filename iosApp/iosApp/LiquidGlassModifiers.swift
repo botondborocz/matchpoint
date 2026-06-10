@@ -55,7 +55,7 @@ struct GlassButtonStyle: ButtonStyle {
         configuration.label
             .background(.regularMaterial, in: Capsule())
             .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+            .animation(Animation.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }
 
@@ -65,7 +65,7 @@ struct GlassProminentButtonStyle: ButtonStyle {
             .background(.thickMaterial, in: Capsule()) // Simulating a prominent glass layer
             .overlay(Capsule().stroke(Color.primary.opacity(0.1), lineWidth: 1))
             .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+            .animation(Animation.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }
 
