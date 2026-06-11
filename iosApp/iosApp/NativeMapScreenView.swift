@@ -192,6 +192,9 @@ struct NativeMapScreenView: View {
     
     // Sheet detent for the nearby list
     @State private var selectedDetent: PresentationDetent = .height(160)
+    @State private var selectedDetailsDetent: PresentationDetent = .medium
+    @State private var selectedAddTableDetent: PresentationDetent = .medium
+    
     
     var body: some View {
         NavigationStack {
@@ -264,52 +267,36 @@ struct NativeMapScreenView: View {
                     }
                     .ignoresSafeArea(.all)
                 }
+                
+                // MARK: Floating Combined Toolbar (Center Me & Add)
+                if !isPickingLocation {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            combinedToolbar
+                                .padding(.trailing, 16)
+                                .padding(.bottom, selectedDetent == .large ? 30 : 180)
+                        }
+                    }
+                }
             }
             .navigationTitle("Map")
             .navigationBarTitleDisplayMode(.inline)
-            .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search venues...")
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(action: {
-                        trackingUserLocation = true
-                        locationManager.requestWhenInUseAuthorization()
-                    }) {
-                        Image(systemName: "location.fill")
-                    }
-                    .tint(colorAccent)
-                }
-                
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button(action: {
-                        withAnimation {
-                            isFilterPanelExpanded.toggle()
-                        }
-                    }) {
-                        Image(systemName: "line.3.horizontal.decrease.circle\(isFilterPanelExpanded || !selectedTags.isEmpty ? ".fill" : "")")
-                    }
-                    .tint(!selectedTags.isEmpty ? colorAccent : .primary)
-                    
-                    Button(action: {
-                        withAnimation {
-                            isPickingLocation = true
-                        }
-                    }) {
-                        Image(systemName: "plus")
-                    }
-                    .tint(colorAccent)
-                }
-            }
             // MARK: 3. Nearby Clubs Bottom Sheet (Native)
             .sheet(isPresented: $showNearbySheet) {
-                nearbySheetContent
-                    .presentationDetents(
-                        [.height(160), .medium, .large],
-                        selection: $selectedDetent
-                    )
-                    .presentationDragIndicator(.visible)
-                    .presentationBackgroundInteraction(.enabled(upThrough: .medium))
-                    .interactiveDismissDisabled()
-                    .presentationCornerRadius(20)
+                NavigationStack {
+                    nearbySheetContent
+                }
+                .presentationDetents(
+                    [.height(160), .medium, .large],
+                    selection: $selectedDetent
+                )
+                .presentationDragIndicator(.visible)
+                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+                .interactiveDismissDisabled()
+                .presentationCornerRadius(20)
+                .presentationBackground(selectedDetent == .large ? Color(.systemBackground) : .clear)
             }
             // MARK: 4. Selected Club Details Sheet
             .sheet(item: $selectedLocation) { club in
@@ -335,8 +322,15 @@ struct NativeMapScreenView: View {
                             }
                         }
                 }
-                .presentationDetents([.medium, .large])
+                .background(selectedDetailsDetent == .large ? Color(.systemBackground) : Color(.systemBackground).opacity(0.95))
+                .cornerRadius(selectedDetailsDetent == .large ? 0 : 20)
+                .shadow(color: Color.black.opacity(selectedDetailsDetent == .large ? 0 : 0.15), radius: 10, x: 0, y: -3)
+                .padding(.bottom, selectedDetailsDetent == .large ? 0 : 80)
+                .ignoresSafeArea(edges: selectedDetailsDetent == .large ? [] : [.bottom])
+                .presentationDetents([.medium, .large], selection: $selectedDetailsDetent)
                 .presentationDragIndicator(.visible)
+                .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+                .presentationBackground(selectedDetailsDetent == .large ? Color(.systemBackground) : .clear)
                 .confirmationDialog("Navigate via", isPresented: $showMapSelectionActionSheet, titleVisibility: .visible) {
                     Button("Apple Maps") {
                         if let club = navigationTargetClub {
@@ -367,6 +361,15 @@ struct NativeMapScreenView: View {
                     appState.isTabBarHidden = false
                 }
             )
+            .background(selectedAddTableDetent == .large ? Color(.systemBackground) : Color(.systemBackground).opacity(0.95))
+            .cornerRadius(selectedAddTableDetent == .large ? 0 : 20)
+            .shadow(color: Color.black.opacity(selectedAddTableDetent == .large ? 0 : 0.15), radius: 10, x: 0, y: -3)
+            .padding(.bottom, selectedAddTableDetent == .large ? 0 : 80)
+            .ignoresSafeArea(edges: selectedAddTableDetent == .large ? [] : [.bottom])
+            .presentationDetents([.medium, .large], selection: $selectedAddTableDetent)
+            .presentationDragIndicator(.visible)
+            .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+            .presentationBackground(selectedAddTableDetent == .large ? Color(.systemBackground) : .clear)
         }
         .sheet(isPresented: $isAddingReview) {
             if let club = selectedLocation {
@@ -388,7 +391,14 @@ struct NativeMapScreenView: View {
         .onAppear {
             initializeKMPComponents()
             setupLocationUpdates()
+            updateTabBarVisibility()
         }
+        .onChange(of: selectedDetent) { _ in updateTabBarVisibility() }
+        .onChange(of: selectedLocation) { _ in updateTabBarVisibility() }
+        .onChange(of: selectedDetailsDetent) { _ in updateTabBarVisibility() }
+        .onChange(of: isAddingTable) { _ in updateTabBarVisibility() }
+        .onChange(of: selectedAddTableDetent) { _ in updateTabBarVisibility() }
+        .onChange(of: isPickingLocation) { _ in updateTabBarVisibility() }
     }
     
     // MARK: - Nearby Sheet Content
@@ -497,7 +507,28 @@ struct NativeMapScreenView: View {
                 }
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
         }
+        .navigationTitle("Nearby Clubs")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $searchQuery, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search venues...")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(action: {
+                    withAnimation {
+                        isFilterPanelExpanded.toggle()
+                    }
+                }) {
+                    Image(systemName: "line.3.horizontal.decrease.circle\(isFilterPanelExpanded || !selectedTags.isEmpty ? ".fill" : "")")
+                }
+                .tint(!selectedTags.isEmpty ? colorAccent : .primary)
+            }
+        }
+        .background(selectedDetent == .large ? Color(.systemBackground) : Color(.systemBackground).opacity(0.95))
+        .cornerRadius(selectedDetent == .large ? 0 : 20)
+        .shadow(color: Color.black.opacity(selectedDetent == .large ? 0 : 0.15), radius: 10, x: 0, y: -3)
+        .padding(.bottom, selectedDetent == .large ? 0 : 80)
+        .ignoresSafeArea(edges: selectedDetent == .large ? [] : [.bottom])
     }
     
     // MARK: - Details Sheet Content
@@ -796,6 +827,56 @@ struct NativeMapScreenView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+    
+    private func updateTabBarVisibility() {
+        let isNearbyLarge = showNearbySheet && selectedDetent == .large
+        let isDetailsLarge = (selectedLocation != nil) && selectedDetailsDetent == .large
+        let isAddTableLarge = isAddingTable && selectedAddTableDetent == .large
+        
+        let shouldHide = isNearbyLarge || isDetailsLarge || isAddTableLarge || isPickingLocation
+        if appState.isTabBarHidden != shouldHide {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                appState.isTabBarHidden = shouldHide
+            }
+        }
+    }
+    
+    private var combinedToolbar: some View {
+        HStack(spacing: 0) {
+            Button(action: {
+                trackingUserLocation = true
+                locationManager.requestWhenInUseAuthorization()
+            }) {
+                Image(systemName: "location.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(colorAccent)
+                    .frame(width: 44, height: 44)
+            }
+            
+            Divider()
+                .frame(height: 24)
+                .background(Color.secondary.opacity(0.3))
+            
+            Button(action: {
+                withAnimation {
+                    isPickingLocation = true
+                }
+            }) {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(colorAccent)
+                    .frame(width: 44, height: 44)
+            }
+        }
+        .padding(.horizontal, 8)
+        .background(.regularMaterial)
+        .cornerRadius(10)
+        .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.secondary.opacity(0.2), lineWidth: 0.5)
+        )
     }
 }
 
