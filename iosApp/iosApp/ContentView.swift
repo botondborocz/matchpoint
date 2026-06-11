@@ -95,7 +95,7 @@ struct ContentView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            ZStack(alignment .bottom) {
+            ZStack(alignment: .bottom) {
                 TabView(selection: $appState.currentTab) {
                     // NativeMapScreenView(appState: appState)
                     //     .ignoresSafeArea()
