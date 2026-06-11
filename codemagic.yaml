@@ -135,17 +135,16 @@ workflows:
             config.build_settings['ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS'] = 'YES'
             
             # 2. Safely Override Bundle Identifier & Name for side-by-side installation
-            # Note: We append Compose to the end of the identifier
             config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'org.ttproject.TTProjectCompose'
             config.build_settings['PRODUCT_NAME'] = 'MatchPoint Cmp'
+            
+            # 3. Explicitly set the Display Name (Home Screen Name) 
+            config.build_settings['INFOPLIST_KEY_CFBundleDisplayName'] = 'MatchPoint Cmp'
           end
           
           project.save
-          puts 'Successfully updated Xcode build settings for Alternate Icons and Bundle Identifiers!'
+          puts 'Successfully updated Xcode build settings for Alternate Icons, Bundle ID, and Display Name!'
           "
-          
-          # 3. Update the Display Name in the Plist (What the user actually sees on the home screen)
-          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName MatchPoint Cmp" iosApp/iosApp/Info.plist
 
       - name: Build Unsigned iOS App (Compose)
         script: |
