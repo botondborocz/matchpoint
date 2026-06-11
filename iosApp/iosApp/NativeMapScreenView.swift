@@ -281,6 +281,9 @@ struct NativeMapScreenView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                Color.clear.frame(height: 100)
+            }
             .navigationTitle("Map")
             .navigationBarTitleDisplayMode(.inline)
             // MARK: 3. Nearby Clubs Bottom Sheet (Native)
@@ -288,10 +291,10 @@ struct NativeMapScreenView: View {
                 NavigationStack {
                     nearbySheetContent
                 }
-                .background(selectedDetent == .large ? Color(.systemBackground) : Color(.systemBackground).opacity(0.95))
+                .background(selectedDetent == .large ? AnyShapeStyle(Color(.systemBackground)) : AnyShapeStyle(.ultraThinMaterial))
                 .cornerRadius(selectedDetent == .large ? 0 : 20)
                 .shadow(color: Color.black.opacity(selectedDetent == .large ? 0 : 0.15), radius: 10, x: 0, y: -3)
-                .padding(.bottom, selectedDetent == .large ? 0 : 80)
+                .padding(.bottom, selectedDetent == .large ? 0 : 100)
                 .ignoresSafeArea(edges: selectedDetent == .large ? [] : [.bottom])
                 .presentationDetents(
                     [.height(160), .medium, .large],
@@ -327,10 +330,10 @@ struct NativeMapScreenView: View {
                             }
                         }
                 }
-                .background(selectedDetailsDetent == .large ? Color(.systemBackground) : Color(.systemBackground).opacity(0.95))
+                .background(selectedDetailsDetent == .large ? AnyShapeStyle(Color(.systemBackground)) : AnyShapeStyle(.ultraThinMaterial))
                 .cornerRadius(selectedDetailsDetent == .large ? 0 : 20)
                 .shadow(color: Color.black.opacity(selectedDetailsDetent == .large ? 0 : 0.15), radius: 10, x: 0, y: -3)
-                .padding(.bottom, selectedDetailsDetent == .large ? 0 : 80)
+                .padding(.bottom, selectedDetailsDetent == .large ? 0 : 100)
                 .ignoresSafeArea(edges: selectedDetailsDetent == .large ? [] : [.bottom])
                 .presentationDetents([.medium, .large], selection: $selectedDetailsDetent)
                 .presentationDragIndicator(.visible)
@@ -366,10 +369,10 @@ struct NativeMapScreenView: View {
                     appState.isTabBarHidden = false
                 }
             )
-            .background(selectedAddTableDetent == .large ? Color(.systemBackground) : Color(.systemBackground).opacity(0.95))
+            .background(selectedAddTableDetent == .large ? AnyShapeStyle(Color(.systemBackground)) : AnyShapeStyle(.ultraThinMaterial))
             .cornerRadius(selectedAddTableDetent == .large ? 0 : 20)
             .shadow(color: Color.black.opacity(selectedAddTableDetent == .large ? 0 : 0.15), radius: 10, x: 0, y: -3)
-            .padding(.bottom, selectedAddTableDetent == .large ? 0 : 80)
+            .padding(.bottom, selectedAddTableDetent == .large ? 0 : 100)
             .ignoresSafeArea(edges: selectedAddTableDetent == .large ? [] : [.bottom])
             .presentationDetents([.medium, .large], selection: $selectedAddTableDetent)
             .presentationDragIndicator(.visible)
@@ -529,6 +532,11 @@ struct NativeMapScreenView: View {
                 .tint(!selectedTags.isEmpty ? colorAccent : .primary)
             }
         }
+        .background(selectedDetent == .large ? Color(.systemBackground) : Color(.systemBackground).opacity(0.95))
+        .cornerRadius(selectedDetent == .large ? 0 : 20)
+        .shadow(color: Color.black.opacity(selectedDetent == .large ? 0 : 0.15), radius: 10, x: 0, y: -3)
+        .padding(.bottom, selectedDetent == .large ? 0 : 80)
+        .ignoresSafeArea(edges: selectedDetent == .large ? [] : [.bottom])
     }
     
     // MARK: - Details Sheet Content
