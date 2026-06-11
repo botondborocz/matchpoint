@@ -191,10 +191,9 @@ struct NativeMapScreenView: View {
     private var colorAccent: Color { Color(hex: "#FF6B35") }
     
     // Sheet detent for the nearby list
-    @State private var selectedDetent: PresentationDetent = .height(160)
+    @State private var selectedDetent: PresentationDetent = .height(260)
     @State private var selectedDetailsDetent: PresentationDetent = .medium
     @State private var selectedAddTableDetent: PresentationDetent = .medium
-    
     
     var body: some View {
         NavigationStack {
@@ -288,16 +287,21 @@ struct NativeMapScreenView: View {
             .navigationBarTitleDisplayMode(.inline)
             // MARK: 3. Nearby Clubs Bottom Sheet (Native)
             .sheet(isPresented: $showNearbySheet) {
-                NavigationStack {
-                    nearbySheetContent
+                VStack(spacing: 0) {
+                    NavigationStack {
+                        nearbySheetContent
+                    }
+                    .background(selectedDetent == .large ? AnyShapeStyle(Color(.systemBackground)) : AnyShapeStyle(.ultraThinMaterial))
+                    .cornerRadius(selectedDetent == .large ? 0 : 20)
+                    .shadow(color: Color.black.opacity(selectedDetent == .large ? 0 : 0.15), radius: 10, x: 0, y: -3)
+                    
+                    if selectedDetent != .large {
+                        Color.clear.frame(height: 100)
+                    }
                 }
-                .background(selectedDetent == .large ? AnyShapeStyle(Color(.systemBackground)) : AnyShapeStyle(.ultraThinMaterial))
-                .cornerRadius(selectedDetent == .large ? 0 : 20)
-                .shadow(color: Color.black.opacity(selectedDetent == .large ? 0 : 0.15), radius: 10, x: 0, y: -3)
-                .padding(.bottom, selectedDetent == .large ? 0 : 100)
                 .ignoresSafeArea(edges: selectedDetent == .large ? [] : [.bottom])
                 .presentationDetents(
-                    [.height(160), .medium, .large],
+                    [.height(260), .medium, .large],
                     selection: $selectedDetent
                 )
                 .presentationDragIndicator(.visible)
@@ -308,32 +312,37 @@ struct NativeMapScreenView: View {
             }
             // MARK: 4. Selected Club Details Sheet
             .sheet(item: $selectedLocation) { club in
-                NavigationStack {
-                    detailsSheetContent(club: club)
-                        .navigationTitle(club.name)
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Close") {
-                                    selectedLocation = nil
-                                    appState.isTabBarHidden = false
+                VStack(spacing: 0) {
+                    NavigationStack {
+                        detailsSheetContent(club: club)
+                            .navigationTitle(club.name)
+                            .navigationBarTitleDisplayMode(.inline)
+                            .toolbar {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button("Close") {
+                                        selectedLocation = nil
+                                        appState.isTabBarHidden = false
+                                    }
+                                }
+                                ToolbarItem(placement: .primaryAction) {
+                                    Button(action: {
+                                        navigationTargetClub = club
+                                        handleNavigationClick(club: club)
+                                    }) {
+                                        Label("Navigate", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                                    }
+                                    .tint(colorAccent)
                                 }
                             }
-                            ToolbarItem(placement: .primaryAction) {
-                                Button(action: {
-                                    navigationTargetClub = club
-                                    handleNavigationClick(club: club)
-                                }) {
-                                    Label("Navigate", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
-                                }
-                                .tint(colorAccent)
-                            }
-                        }
+                    }
+                    .background(selectedDetailsDetent == .large ? AnyShapeStyle(Color(.systemBackground)) : AnyShapeStyle(.ultraThinMaterial))
+                    .cornerRadius(selectedDetailsDetent == .large ? 0 : 20)
+                    .shadow(color: Color.black.opacity(selectedDetailsDetent == .large ? 0 : 0.15), radius: 10, x: 0, y: -3)
+                    
+                    if selectedDetailsDetent != .large {
+                        Color.clear.frame(height: 100)
+                    }
                 }
-                .background(selectedDetailsDetent == .large ? AnyShapeStyle(Color(.systemBackground)) : AnyShapeStyle(.ultraThinMaterial))
-                .cornerRadius(selectedDetailsDetent == .large ? 0 : 20)
-                .shadow(color: Color.black.opacity(selectedDetailsDetent == .large ? 0 : 0.15), radius: 10, x: 0, y: -3)
-                .padding(.bottom, selectedDetailsDetent == .large ? 0 : 100)
                 .ignoresSafeArea(edges: selectedDetailsDetent == .large ? [] : [.bottom])
                 .presentationDetents([.medium, .large], selection: $selectedDetailsDetent)
                 .presentationDragIndicator(.visible)
@@ -356,23 +365,31 @@ struct NativeMapScreenView: View {
                 }
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            Color.clear.frame(height: 100)
+        }
         .tint(colorAccent)
         .sheet(isPresented: $isAddingTable) {
-            AddTableModalView(
-                lat: centerCoordinate.latitude,
-                lng: centerCoordinate.longitude,
-                colorAccent: colorAccent,
-                colorSurface: Color(hex: "#162032"),
-                helper: helper,
-                onDismiss: {
-                    isAddingTable = false
-                    appState.isTabBarHidden = false
+            VStack(spacing: 0) {
+                AddTableModalView(
+                    lat: centerCoordinate.latitude,
+                    lng: centerCoordinate.longitude,
+                    colorAccent: colorAccent,
+                    colorSurface: Color(hex: "#162032"),
+                    helper: helper,
+                    onDismiss: {
+                        isAddingTable = false
+                        appState.isTabBarHidden = false
+                    }
+                )
+                .background(selectedAddTableDetent == .large ? AnyShapeStyle(Color(.systemBackground)) : AnyShapeStyle(.ultraThinMaterial))
+                .cornerRadius(selectedAddTableDetent == .large ? 0 : 20)
+                .shadow(color: Color.black.opacity(selectedAddTableDetent == .large ? 0 : 0.15), radius: 10, x: 0, y: -3)
+                
+                if selectedAddTableDetent != .large {
+                    Color.clear.frame(height: 100)
                 }
-            )
-            .background(selectedAddTableDetent == .large ? AnyShapeStyle(Color(.systemBackground)) : AnyShapeStyle(.ultraThinMaterial))
-            .cornerRadius(selectedAddTableDetent == .large ? 0 : 20)
-            .shadow(color: Color.black.opacity(selectedAddTableDetent == .large ? 0 : 0.15), radius: 10, x: 0, y: -3)
-            .padding(.bottom, selectedAddTableDetent == .large ? 0 : 100)
+            }
             .ignoresSafeArea(edges: selectedAddTableDetent == .large ? [] : [.bottom])
             .presentationDetents([.medium, .large], selection: $selectedAddTableDetent)
             .presentationDragIndicator(.visible)
