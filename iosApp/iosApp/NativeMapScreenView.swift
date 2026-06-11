@@ -742,7 +742,7 @@ struct NativeMapScreenView: View {
                         if isSelected {
                             Button(action: {
                                 withAnimation(.spring(duration: 0.25, bounce: 0.175)) {
-                                    selectedTags.remove(opt)
+                                    _ = selectedTags.remove(opt) // Explicitly discard the return value
                                 }
                             }) {
                                 Text(opt).font(.subheadline)
@@ -753,7 +753,7 @@ struct NativeMapScreenView: View {
                         } else {
                             Button(action: {
                                 withAnimation(.spring(duration: 0.25, bounce: 0.175)) {
-                                    selectedTags.insert(opt)
+                                    _ = selectedTags.insert(opt) // Explicitly discard the return value
                                 }
                             }) {
                                 Text(opt).font(.subheadline)
