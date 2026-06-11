@@ -738,20 +738,30 @@ struct NativeMapScreenView: View {
                 HStack(spacing: 8) {
                     ForEach(options, id: \.self) { (opt: String) in
                         let isSelected = selectedTags.contains(opt)
-                        Button(action: {
-                            withAnimation(.spring(duration: 0.25, bounce: 0.175)) {
-                                if isSelected {
+                        
+                        if isSelected {
+                            Button(action: {
+                                withAnimation(.spring(duration: 0.25, bounce: 0.175)) {
                                     selectedTags.remove(opt)
-                                } else {
+                                }
+                            }) {
+                                Text(opt).font(.subheadline)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(colorAccent)
+                            .clipShape(Capsule())
+                        } else {
+                            Button(action: {
+                                withAnimation(.spring(duration: 0.25, bounce: 0.175)) {
                                     selectedTags.insert(opt)
                                 }
+                            }) {
+                                Text(opt).font(.subheadline)
                             }
-                        }) {
-                            Text(opt).font(.subheadline)
+                            .buttonStyle(.bordered)
+                            .tint(.secondary)
+                            .clipShape(Capsule())
                         }
-                        .buttonStyle(isSelected ? .borderedProminent : .bordered)
-                        .tint(isSelected ? colorAccent : .secondary)
-                        .clipShape(Capsule())
                     }
                 }
             }
