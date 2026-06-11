@@ -525,6 +525,20 @@ struct NativeMapScreenView: View {
                         systemImage: "location.fill"
                     )
                     Text("•")
+                    Label("\(club.tableCount) Tables", systemImage: "tablecells")
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+                
+                if let created = club.createdBy {
+                    Label("Added by: \(created)", systemImage: "person.fill")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Divider()
+                
+                // Image gallery
                 if !club.imageUrls.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
@@ -735,7 +749,7 @@ struct NativeMapScreenView: View {
                         }) {
                             Text(opt).font(.subheadline)
                         }
-                        .buttonStyle(isSelected ? .borderedProminent)
+                        .buttonStyle(isSelected ? .borderedProminent : .bordered)
                         .tint(isSelected ? colorAccent : .secondary)
                         .clipShape(Capsule())
                     }
