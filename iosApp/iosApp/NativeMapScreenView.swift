@@ -74,7 +74,7 @@ struct MKMapViewRepresentable: UIViewRepresentable {
             }
             
             view?.markerTintColor = UIColor(red: 255/255, green: 107/255, blue: 53/255, alpha: 1.0) // Branded Orange
-            view?.glyphText = "đźŹ“"
+            view?.glyphText = "🏓"
             
             return view
         }
@@ -401,7 +401,9 @@ struct NativeMapScreenView: View {
                     HStack(spacing: 6) {
                         ForEach(Array(selectedTags), id: \.self) { tag in
                             Button(action: {
-                                withAnimation { selectedTags.remove(tag) }
+                                withAnimation { 
+                                    _ = selectedTags.remove(tag) 
+                                }
                             }) {
                                 HStack(spacing: 4) {
                                     Text(tag).font(.caption)
@@ -468,14 +470,14 @@ struct NativeMapScreenView: View {
                                     RoundedRectangle(cornerRadius: 8)
                                         .fill(Color.secondary.opacity(0.15))
                                         .frame(width: 44, height: 44)
-                                        .overlay(Text("đźŹ“").font(.title2))
+                                        .overlay(Text("🏓").font(.title2))
                                     
                                     VStack(alignment: .leading, spacing: 3) {
                                         Text(loc.name)
                                             .font(.subheadline.weight(.semibold))
                                             .foregroundColor(.primary)
                                         
-                                        Text("\(formattedDistance(lat: loc.latitude, lng: loc.longitude)) â€˘ \(loc.tableCount) Tables")
+                                        Text("\(formattedDistance(lat: loc.latitude, lng: loc.longitude)) • \(loc.tableCount) Tables")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
                                     }
@@ -522,21 +524,7 @@ struct NativeMapScreenView: View {
                         "\(formattedDistance(lat: club.latitude, lng: club.longitude))",
                         systemImage: "location.fill"
                     )
-                    Text("â€˘")
-                    Label("\(club.tableCount) Tables", systemImage: "tablecells")
-                }
-                .font(.caption)
-                .foregroundColor(.secondary)
-                
-                if let created = club.createdBy {
-                    Label("Added by: \(created)", systemImage: "person.fill")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                Divider()
-                
-                // Image gallery
+                    Text("•")
                 if !club.imageUrls.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
@@ -734,7 +722,7 @@ struct NativeMapScreenView: View {
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(options, id: \.self) { opt in
+                    ForEach(options, id: \.self) { (opt: String) in
                         let isSelected = selectedTags.contains(opt)
                         Button(action: {
                             withAnimation(.spring(duration: 0.25, bounce: 0.175)) {
@@ -747,7 +735,7 @@ struct NativeMapScreenView: View {
                         }) {
                             Text(opt).font(.subheadline)
                         }
-                        .buttonStyle(isSelected ? .borderedProminent : .bordered)
+                        .buttonStyle(isSelected ? .borderedProminent)
                         .tint(isSelected ? colorAccent : .secondary)
                         .clipShape(Capsule())
                     }
@@ -1108,7 +1096,6 @@ struct FlowLayout: Layout {
     
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
-        let width = bounds.width
         var currentX: CGFloat = bounds.minX
         var currentY: CGFloat = bounds.minY
         var lineHeight: CGFloat = 0
