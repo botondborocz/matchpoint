@@ -288,6 +288,11 @@ struct NativeMapScreenView: View {
                 NavigationStack {
                     nearbySheetContent
                 }
+                .background(selectedDetent == .large ? Color(.systemBackground) : Color(.systemBackground).opacity(0.95))
+                .cornerRadius(selectedDetent == .large ? 0 : 20)
+                .shadow(color: Color.black.opacity(selectedDetent == .large ? 0 : 0.15), radius: 10, x: 0, y: -3)
+                .padding(.bottom, selectedDetent == .large ? 0 : 80)
+                .ignoresSafeArea(edges: selectedDetent == .large ? [] : [.bottom])
                 .presentationDetents(
                     [.height(160), .medium, .large],
                     selection: $selectedDetent
@@ -524,11 +529,6 @@ struct NativeMapScreenView: View {
                 .tint(!selectedTags.isEmpty ? colorAccent : .primary)
             }
         }
-        .background(selectedDetent == .large ? Color(.systemBackground) : Color(.systemBackground).opacity(0.95))
-        .cornerRadius(selectedDetent == .large ? 0 : 20)
-        .shadow(color: Color.black.opacity(selectedDetent == .large ? 0 : 0.15), radius: 10, x: 0, y: -3)
-        .padding(.bottom, selectedDetent == .large ? 0 : 80)
-        .ignoresSafeArea(edges: selectedDetent == .large ? [] : [.bottom])
     }
     
     // MARK: - Details Sheet Content
