@@ -97,15 +97,15 @@ struct ContentView: View {
         GeometryReader { geometry in
             ZStack(alignment: .bottom) {
                 TabView(selection: $appState.currentTab) {
-                    // NativeMapScreenView(appState: appState)
-                    //     .ignoresSafeArea()
-                    //     .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
-                    //     .tabItem { Label("Map", systemImage: "map.fill") }
-                    //     .tag("map")
-                    ComposeTabViewControllerRepresentable(tabName: "map", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                    NativeMapScreenView(appState: appState)
                         .ignoresSafeArea()
+                        .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
                         .tabItem { Label("Map", systemImage: "map.fill") }
                         .tag("map")
+                    // ComposeTabViewControllerRepresentable(tabName: "map", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
+                    //     .ignoresSafeArea()
+                    //     .tabItem { Label("Map", systemImage: "map.fill") }
+                    //     .tag("map")
 
                     ComposeTabViewControllerRepresentable(tabName: "match", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
                         .ignoresSafeArea()
