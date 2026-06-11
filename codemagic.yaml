@@ -86,3 +86,89 @@ workflows:
 
     artifacts:
       - KmpApp.ipa
+
+  ios-unsigned-workflow-compose:
+    name: Build KMP iOS App Compose (Unsigned)
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+
+    environment:
+      java: 17
+      groups:
+        - api_keys
+
+    scripts:
+      - name: Make Gradle Wrapper Executable
+        script: chmod +x gradlew
+
+      - name: Inject API Keys into local.properties
+        script: |
+          echo "MAPS_API_KEY=$MAPS_API_KEY" >> local.properties
+          echo "GOOGLE_WEB_CLIENT_ID=$GOOGLE_WEB_CLIENT_ID" >> local.properties
+          echo "GOOGLE_IOS_CLIENT_ID=$GOOGLE_IOS_CLIENT_ID" >> local.properties
+
+      - name: Configure Gradle Memory limits
+        script: |
+          echo "" >> gradle.properties 
+          echo "org.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=512m" >> gradle.properties
+          echo "kotlin.native.jvmArgs=-Xmx3g" >> gradle.properties
+          echo "kotlin.native.cacheKind=none" >> gradle.properties
+          echo "org.gradle.daemon=false" >> gradle.properties
+
+      - name: Configure iOS 18 Alternate Icons in Xcode
+        script: |
+          gem install xcodeproj
+          ruby -e "
+          require 'xcodeproj'
+          
+          project_path = 'iosApp/iosApp.xcodeproj'
+          project = Xcodeproj::Project.open(project_path)
+          target = project.targets.find { |t| t.name == 'iosApp' } || project.targets.first
+          
+          # Define the exact names of your .appiconset folders (without the extension)
+          alternate_icons = 'AdrenalinIcon ChampionshipIcon CyberIcon GoldIcon IceIcon IceIconExtra LightIcon StealthIcon SynthwaveIcon SynthwaveIconExtra'
+          
+          target.build_configurations.each do |config|
+            # Tell Xcode to compile these as alternate icons
+            config.build_settings['ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES'] = alternate_icons
+            # Ensure it bundles them into the final app
+            config.build_settings['ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS'] = 'YES'
+          end
+          
+          project.save
+          puts 'Successfully updated Xcode build settings for iOS 18 Alternate Icons!'
+          "
+
+      - name: Build Unsigned iOS App (Compose)
+        script: |
+          set -e 
+
+          # 1. Prepare Kotlin CocoaPods
+          ./gradlew :shared:generateDummyFramework :shared:podspec
+
+          # 2. Install Pods
+          cd iosApp
+          pod install
+          cd ..
+
+          # 3. Build the Workspace
+          xcodebuild build \
+            -workspace iosApp/iosApp.xcworkspace \
+            -scheme iosApp \
+            -configuration Debug \
+            -sdk iphoneos \
+            -derivedDataPath ./build-xcode \
+            PARALLELIZE_TARGETS=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            PRODUCT_NAME="Matchpoint Compose" \
+            PRODUCT_BUNDLE_IDENTIFIER="org.ttproject.TTProjectCompose\$(TEAM_ID)"
+
+          # 4. Package the IPA
+          mkdir -p Payload
+          cp -R "build-xcode/Build/Products/Debug-iphoneos/Matchpoint Compose.app" Payload/
+          zip -r KmpAppCompose.ipa Payload
+
+    artifacts:
+      - KmpAppCompose.ipa
