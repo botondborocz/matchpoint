@@ -3,6 +3,10 @@ import MapKit
 import shared
 import PhotosUI
 
+// MARK: - Location Identifiable Conformance for SwiftUI sheets
+extension Location: @retroactive Identifiable {
+}
+
 // MARK: - Native Annotation
 class ClubAnnotation: NSObject, MKAnnotation {
     let id: String
@@ -70,7 +74,7 @@ struct MKMapViewRepresentable: UIViewRepresentable {
             }
             
             view?.markerTintColor = UIColor(red: 255/255, green: 107/255, blue: 53/255, alpha: 1.0) // Branded Orange
-            view?.glyphText = "🏓"
+            view?.glyphText = "đźŹ“"
             
             return view
         }
@@ -159,54 +163,39 @@ struct NativeMapScreenView: View {
     
     // Selection and sheets
     @State private var selectedLocation: Location? = nil
-    @State private var isDetailsExpanded = false
-    @State private var currentSheetState: SheetPosition = .collapsed
+    @State private var showNearbySheet = true
     
     // Map control
     @State private var centerCoordinate = CLLocationCoordinate2D(latitude: 47.4979, longitude: 19.0402)
     @State private var mapRegion = MKCoordinateRegion()
     @State private var trackingUserLocation = true
-    @Namespace private var mapGlassNS
     @State private var userCoordinate: CLLocationCoordinate2D? = nil
     
     // Filters and Search
     @State private var searchQuery = ""
     @State private var selectedTags: Set<String> = []
     @State private var isFilterPanelExpanded = false
-    @State private var searchFocused = false
     
     // Creation Modals
     @State private var isPickingLocation = false
     @State private var isAddingTable = false
     @State private var isAddingReview = false
     
-    // Drag gestures & positions
-    @State private var sheetOffset: CGFloat = 0
+    // Navigation
+    @State private var showMapSelectionActionSheet = false
+    @State private var navigationTargetClub: Location? = nil
+    
     private let locationManager = CLLocationManager()
     
-    enum SheetPosition {
-        case collapsed, half, expanded
-        
-        func height(screenHeight: CGFloat) -> CGFloat {
-            switch self {
-            case .collapsed: return 140
-            case .half: return screenHeight * 0.4
-            case .expanded: return screenHeight - 100
-            }
-        }
-    }
-    
-    // Color Palette Tokens
-    private var colorBackground: Color { Color(hex: "#0F172A") }
-    private var colorSurface: Color { Color(hex: "#162032") }
+    // Color Palette
     private var colorAccent: Color { Color(hex: "#FF6B35") }
     
+    // Sheet detent for the nearby list
+    @State private var selectedDetent: PresentationDetent = .height(160)
+    
     var body: some View {
-        GeometryReader { geo in
-            let screenHeight = geo.size.height
-            let screenWidth = geo.size.width
-            
-            ZStack(alignment: .bottom) {
+        NavigationStack {
+            ZStack {
                 // MARK: 1. Native Map
                 MKMapViewRepresentable(
                     locations: filteredLocations,
@@ -219,8 +208,9 @@ struct NativeMapScreenView: View {
                     onAnnotationSelected: { loc in
                         withAnimation(.spring()) {
                             selectedLocation = loc
-                            isDetailsExpanded = false
-                            currentSheetState = .collapsed
+                            if let id = loc.id {
+                                helper?.loadReviewsForClub(locationId: id)
+                            }
                         }
                     }
                 )
@@ -228,33 +218,33 @@ struct NativeMapScreenView: View {
                 
                 // MARK: 2. Crosshair for Picking Table Location
                 if isPickingLocation {
-                    Image(systemName: "plus")
-                        .font(.system(size: 36, weight: .thin))
-                        .foregroundColor(colorAccent)
-                        .background(
-                            Circle()
-                                .fill(Color.black.opacity(0.2))
-                                .frame(width: 44, height: 44)
-                        )
-                        .position(x: screenWidth / 2, y: screenHeight / 2)
-                        .transition(.scale)
+                    GeometryReader { geo in
+                        Image(systemName: "plus")
+                            .font(.system(size: 36, weight: .thin))
+                            .foregroundColor(colorAccent)
+                            .background(
+                                Circle()
+                                    .fill(Color.black.opacity(0.2))
+                                    .frame(width: 44, height: 44)
+                            )
+                            .position(x: geo.size.width / 2, y: geo.size.height / 2)
+                            .transition(.scale)
+                    }
                     
                     // Instruction overlay at bottom
                     VStack {
                         Spacer()
                         VStack(spacing: 12) {
                             Text("Drag the map to place the crosshair exactly over the table.")
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundColor(.white)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundColor(.primary)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal)
                             
                             HStack(spacing: 20) {
-                                Button("Cancel") {
+                                Button("Cancel", role: .cancel) {
                                     withAnimation { isPickingLocation = false }
                                 }
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundColor(.gray)
                                 
                                 Button("Confirm") {
                                     withAnimation {
@@ -263,114 +253,114 @@ struct NativeMapScreenView: View {
                                         appState.isTabBarHidden = true
                                     }
                                 }
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 8)
-                                .background(colorAccent, in: Capsule())
+                                .buttonStyle(.borderedProminent)
+                                .tint(colorAccent)
                             }
                         }
                         .padding()
-                        .background(colorSurface.opacity(0.95), in: RoundedRectangle(cornerRadius: 16))
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
                         .padding()
-                        .shadow(radius: 10)
                         .padding(.bottom, 20)
                     }
                     .ignoresSafeArea(.all)
                 }
-                
-                // MARK: 3. Vertical Map Controls Toolbar
-                if selectedLocation == nil && !isPickingLocation {
-                    VStack(spacing: 0) {
-                        Button(action: {
-                            trackingUserLocation = true
-                            locationManager.requestWhenInUseAuthorization()
-                        }) {
-                            Image(systemName: "location.fill")
-                                .font(.system(size: 18))
-                                .foregroundColor(colorAccent)
-                                .frame(width: 48, height: 48)
-                                .contentShape(Rectangle())
-                        }
-                        
-                        Divider()
-                            .background(Color.primary.opacity(0.1))
-                            .frame(width: 32)
-                        
-                        Button(action: {
-                            withAnimation {
-                                isPickingLocation = true
-                                currentSheetState = .collapsed
-                            }
-                        }) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 20, weight: .bold))
-                                .foregroundColor(colorAccent)
-                                .frame(width: 48, height: 48)
-                                .contentShape(Rectangle())
-                        }
+            }
+            .navigationTitle("Map")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $searchQuery, placement: .toolbar, prompt: "Search venues...")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: {
+                        trackingUserLocation = true
+                        locationManager.requestWhenInUseAuthorization()
+                    }) {
+                        Image(systemName: "location.fill")
                     }
-                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(Color.primary.opacity(0.1), lineWidth: 1)
-                    )
-                    .padding(.trailing, 16)
-                    .padding(.bottom, currentSheetState.height(screenHeight: screenHeight) + 16)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .shadow(color: Color.black.opacity(0.15), radius: 6, x: 0, y: 3)
-                    .zIndex(5)
+                    .tint(colorAccent)
                 }
                 
-                // MARK: 5. Draggable Nearby Clubs List Sheet
-                if selectedLocation == nil && !isPickingLocation {
-                    nearbySheetView(screenHeight: screenHeight)
-                        .offset(y: sheetOffset)
-                        .gesture(
-                            DragGesture()
-                                .onChanged { value in
-                                    sheetOffset = value.translation.height
-                                }
-                                .onEnded { value in
-                                    let threshold = screenHeight * 0.15
-                                    withAnimation(Animation.spring(response: 0.35, dampingFraction: 0.8)) {
-                                        if value.translation.height < -threshold {
-                                            // Swipe up
-                                            if currentSheetState == .collapsed {
-                                                currentSheetState = .half
-                                            } else if currentSheetState == .half {
-                                                currentSheetState = .expanded
-                                            }
-                                        } else if value.translation.height > threshold {
-                                            // Swipe down
-                                            if currentSheetState == .expanded {
-                                                currentSheetState = .half
-                                            } else if currentSheetState == .half {
-                                                currentSheetState = .collapsed
-                                            }
-                                        }
-                                        sheetOffset = 0
-                                    }
-                                }
-                        )
-                        .zIndex(6)
-                }
-                
-                // MARK: 6. Selected Club Details Overlay (Draggable)
-                if let club = selectedLocation {
-                    detailsCardView(club: club, screenHeight: screenHeight)
-                        .zIndex(7)
-                        .transition(.move(edge: .bottom))
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button(action: {
+                        withAnimation {
+                            isFilterPanelExpanded.toggle()
+                        }
+                    }) {
+                        Image(systemName: "line.3.horizontal.decrease.circle\(isFilterPanelExpanded || !selectedTags.isEmpty ? ".fill" : "")")
+                    }
+                    .tint(!selectedTags.isEmpty ? colorAccent : .primary)
+                    
+                    Button(action: {
+                        withAnimation {
+                            isPickingLocation = true
+                        }
+                    }) {
+                        Image(systemName: "plus")
+                    }
+                    .tint(colorAccent)
                 }
             }
-            .background(colorBackground)
+            // MARK: 3. Nearby Clubs Bottom Sheet (Native)
+            .sheet(isPresented: $showNearbySheet) {
+                nearbySheetContent
+                    .presentationDetents(
+                        [.height(160), .medium, .large],
+                        selection: $selectedDetent
+                    )
+                    .presentationDragIndicator(.visible)
+                    .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+                    .interactiveDismissDisabled()
+                    .presentationCornerRadius(20)
+            }
+            // MARK: 4. Selected Club Details Sheet
+            .sheet(item: $selectedLocation) { club in
+                NavigationStack {
+                    detailsSheetContent(club: club)
+                        .navigationTitle(club.name)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Close") {
+                                    selectedLocation = nil
+                                    appState.isTabBarHidden = false
+                                }
+                            }
+                            ToolbarItem(placement: .primaryAction) {
+                                Button(action: {
+                                    navigationTargetClub = club
+                                    handleNavigationClick(club: club)
+                                }) {
+                                    Label("Navigate", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                                }
+                                .tint(colorAccent)
+                            }
+                        }
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .confirmationDialog("Navigate via", isPresented: $showMapSelectionActionSheet, titleVisibility: .visible) {
+                    Button("Apple Maps") {
+                        if let club = navigationTargetClub {
+                            openMapsApp(choice: "apple", club: club)
+                        }
+                    }
+                    Button("Google Maps") {
+                        if let club = navigationTargetClub {
+                            openMapsApp(choice: "google", club: club)
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Select your preferred navigation app.")
+                }
+            }
         }
+        .tint(colorAccent)
         .sheet(isPresented: $isAddingTable) {
             AddTableModalView(
                 lat: centerCoordinate.latitude,
                 lng: centerCoordinate.longitude,
                 colorAccent: colorAccent,
-                colorSurface: colorSurface,
+                colorSurface: Color(hex: "#162032"),
                 helper: helper,
                 onDismiss: {
                     isAddingTable = false
@@ -384,11 +374,10 @@ struct NativeMapScreenView: View {
                     locationId: club.id ?? "",
                     clubName: club.name,
                     colorAccent: colorAccent,
-                    colorSurface: colorSurface,
+                    colorSurface: Color(hex: "#162032"),
                     helper: helper,
                     onDismiss: {
                         isAddingReview = false
-                        // Refresh reviews
                         if let id = club.id {
                             helper?.loadReviewsForClub(locationId: id)
                         }
@@ -402,6 +391,262 @@ struct NativeMapScreenView: View {
         }
     }
     
+    // MARK: - Nearby Sheet Content
+    
+    private var nearbySheetContent: some View {
+        VStack(spacing: 0) {
+            // Active filter tokens
+            if !selectedTags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(Array(selectedTags), id: \.self) { tag in
+                            Button(action: {
+                                withAnimation { selectedTags.remove(tag) }
+                            }) {
+                                HStack(spacing: 4) {
+                                    Text(tag).font(.caption)
+                                    Image(systemName: "xmark.circle.fill").font(.caption2)
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(colorAccent)
+                            .clipShape(Capsule())
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                }
+            }
+            
+            // Inline expanded filter panel
+            if isFilterPanelExpanded {
+                VStack(alignment: .leading, spacing: 12) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            filterSection(title: "Type & Access", options: ["Indoor", "Outdoor", "Free", "Paid"])
+                            filterSection(title: "Table Quality", options: ["Perfect surface", "Sturdy net", "Worn out / Damaged", "Torn net", "Slippery surface"])
+                            filterSection(title: "Environment", options: ["Spacious", "Wind-protected", "Good lighting", "Cramped space", "Glaring sun", "Poor lighting"])
+                            filterSection(title: "Amenities", options: ["Drinking fountain", "Restroom available", "Usually crowded", "Quiet & Chill"])
+                        }
+                        .padding(.bottom, 8)
+                    }
+                    .frame(maxHeight: 180)
+                    
+                    Divider()
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
+            
+            // Clubs list
+            List {
+                Section {
+                    if isUiLoading && locations.isEmpty {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
+                        }
+                        .listRowBackground(Color.clear)
+                    } else if filteredLocations.isEmpty {
+                        Text("No table tennis clubs found.")
+                            .foregroundColor(.secondary)
+                            .font(.subheadline)
+                            .frame(maxWidth: .infinity)
+                            .listRowBackground(Color.clear)
+                    } else {
+                        ForEach(filteredLocations, id: \.id) { loc in
+                            Button(action: {
+                                withAnimation(.spring()) {
+                                    selectedLocation = loc
+                                    if let id = loc.id {
+                                        helper?.loadReviewsForClub(locationId: id)
+                                    }
+                                }
+                            }) {
+                                HStack(spacing: 14) {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color.secondary.opacity(0.15))
+                                        .frame(width: 44, height: 44)
+                                        .overlay(Text("đźŹ“").font(.title2))
+                                    
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(loc.name)
+                                            .font(.subheadline.weight(.semibold))
+                                            .foregroundColor(.primary)
+                                        
+                                        Text("\(formattedDistance(lat: loc.latitude, lng: loc.longitude)) â€˘ \(loc.tableCount) Tables")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Nearby Clubs")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                        .textCase(nil)
+                }
+            }
+            .listStyle(.plain)
+        }
+    }
+    
+    // MARK: - Details Sheet Content
+    
+    private func detailsSheetContent(club: Location) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                // Info bar
+                HStack {
+                    Label(
+                        club.type == LocationType.indoor ? "Indoor Arena" : "Outdoor Space",
+                        systemImage: club.type == LocationType.indoor ? "house.fill" : "leaf.fill"
+                    )
+                    Spacer()
+                    Text(club.isFree ? "Free Access" : "Paid Arena")
+                        .fontWeight(.bold)
+                        .foregroundColor(colorAccent)
+                }
+                .font(.subheadline)
+                .foregroundColor(.primary)
+                
+                HStack {
+                    Label(
+                        "\(formattedDistance(lat: club.latitude, lng: club.longitude))",
+                        systemImage: "location.fill"
+                    )
+                    Text("â€˘")
+                    Label("\(club.tableCount) Tables", systemImage: "tablecells")
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+                
+                if let created = club.createdBy {
+                    Label("Added by: \(created)", systemImage: "person.fill")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Divider()
+                
+                // Image gallery
+                if !club.imageUrls.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(club.imageUrls, id: \.self) { url in
+                                AsyncImage(url: URL(string: url)) { phase in
+                                    if let image = phase.image {
+                                        image
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(width: 140, height: 140)
+                                            .cornerRadius(12)
+                                            .onTapGesture {
+                                                let isMines = club.imageUrls.map { _ in false }
+                                                appState.galleryData = GalleryData(
+                                                    images: club.imageUrls,
+                                                    initialIndex: club.imageUrls.firstIndex(of: url) ?? 0,
+                                                    isMineList: isMines,
+                                                    onDelete: { _ in },
+                                                    onReport: { _, _ in }
+                                                )
+                                            }
+                                    } else {
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color.secondary.opacity(0.15))
+                                            .frame(width: 140, height: 140)
+                                            .overlay(ProgressView().tint(.primary))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    PhotosPickerBox(clubId: club.id ?? "", helper: helper)
+                }
+                
+                Divider()
+                
+                // Reviews Section
+                HStack {
+                    Text("Player Reviews")
+                        .font(.headline)
+                    Spacer()
+                    Button(action: {
+                        isAddingReview = true
+                    }) {
+                        Label("Add Review", systemImage: "plus.bubble.fill")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .tint(colorAccent)
+                }
+                
+                if reviews.isEmpty {
+                    Text("No reviews yet. Be the first to share details!")
+                        .foregroundColor(.secondary)
+                        .font(.subheadline)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 20)
+                } else {
+                    ForEach(reviews, id: \.id) { review in
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Circle()
+                                    .fill(colorAccent.opacity(0.2))
+                                    .frame(width: 32, height: 32)
+                                    .overlay(
+                                        Text(String((review.username).prefix(2)).uppercased())
+                                            .font(.caption2.weight(.bold))
+                                            .foregroundColor(colorAccent)
+                                    )
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(review.username)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundColor(.primary)
+                                    Text(timeAgo(from: review.createdAt))
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                Spacer()
+                            }
+                            
+                            if let textContent = review.textContent, !textContent.isEmpty {
+                                Text(textContent)
+                                    .font(.subheadline)
+                                    .foregroundColor(.primary)
+                            }
+                            
+                            // Review Tags
+                            if !review.tags.isEmpty {
+                                FlowLayout(spacing: 6) {
+                                    ForEach(review.tags, id: \.self) { tag in
+                                        Text(tag)
+                                            .font(.caption2)
+                                            .foregroundColor(.primary.opacity(0.8))
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.primary.opacity(0.1), in: Capsule())
+                                    }
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                }
+            }
+            .padding()
+        }
+    }
+    
     // MARK: - Helpers & Subviews
     
     private func initializeKMPComponents() {
@@ -410,7 +655,6 @@ struct NativeMapScreenView: View {
         self.tokenStorage = KoinHelper.shared.getTokenStorage()
         self.helper = IosLocationViewModelHelper(viewModel: vm)
         
-        // Subscribe to UI state flow
         _ = helper?.subscribeUiState(
             onLoading: {
                 isUiLoading = true
@@ -425,7 +669,6 @@ struct NativeMapScreenView: View {
             }
         )
         
-        // Subscribe to reviews flow
         _ = helper?.subscribeReviews(onCollect: { reviewList in
             reviews = reviewList
         })
@@ -443,9 +686,8 @@ struct NativeMapScreenView: View {
         }
     }
     
-    // Computes distance to user in meters or custom string representation
     private func formattedDistance(lat: Double, lng: Double) -> String {
-        guard let userCoord = userCoordinate else { return "Distance: N/A" }
+        guard let userCoord = userCoordinate else { return "N/A" }
         let userLoc = CLLocation(latitude: userCoord.latitude, longitude: userCoord.longitude)
         let clubLoc = CLLocation(latitude: lat, longitude: lng)
         let meters = userLoc.distance(from: clubLoc)
@@ -457,26 +699,21 @@ struct NativeMapScreenView: View {
         }
     }
     
-    // Filtering Core logic
     private var filteredLocations: [Location] {
         locations.filter { loc in
-            // Search query filter
             if !searchQuery.isEmpty {
                 if !loc.name.localizedCaseInsensitiveContains(searchQuery) {
                     return false
                 }
             }
             
-            // Category/tag filter
             if !selectedTags.isEmpty {
-                // Map indoor/outdoor options to loc.type
                 for filter in selectedTags {
                     if filter == "Indoor" && loc.type != LocationType.indoor { return false }
                     if filter == "Outdoor" && loc.type != LocationType.outdoor { return false }
                     if filter == "Free" && !loc.isFree { return false }
                     if filter == "Paid" && loc.isFree { return false }
                     
-                    // Arbitrary custom tags matching
                     if filter != "Indoor" && filter != "Outdoor" && filter != "Free" && filter != "Paid" {
                         if !loc.tags.contains(where: { $0.localizedCaseInsensitiveCompare(filter) == .orderedSame }) {
                             return false
@@ -488,11 +725,10 @@ struct NativeMapScreenView: View {
         }
     }
     
-    // Filter tags builder UI row
     private func filterSection(title: String, options: [String]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.system(size: 11, weight: .bold))
+                .font(.caption.weight(.bold))
                 .foregroundColor(.secondary)
                 .padding(.leading, 4)
             
@@ -500,486 +736,23 @@ struct NativeMapScreenView: View {
                 HStack(spacing: 8) {
                     ForEach(options, id: \.self) { opt in
                         let isSelected = selectedTags.contains(opt)
-                        if isSelected {
-                            Button(action: {
-                                withAnimation(Animation.spring(duration: 0.25, bounce: 0.175)) {
-                                    _ = selectedTags.remove(opt)
-                                }
-                            }) {
-                                Text(opt)
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.white)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(colorAccent)
-                            .clipShape(Capsule())
-                        } else {
-                            Button(action: {
-                                withAnimation(Animation.spring(duration: 0.25, bounce: 0.175)) {
-                                    _ = selectedTags.insert(opt)
-                                }
-                            }) {
-                                Text(opt)
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.primary)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 8)
-                            }
-                            .buttonStyle(.glass)
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    // Draggable bottom sheet representing nearby list
-    private func nearbySheetView(screenHeight: CGFloat) -> some View {
-        VStack(spacing: 0) {
-            // Header handle
-            Capsule()
-                .fill(Color.secondary)
-                .frame(width: 40, height: 4)
-                .padding(.vertical, 12)
-            
-            // Search bar & Filter trigger inline in the bottom sheet header
-            HStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(.secondary)
-                    
-                    TextField("Search venues...", text: $searchQuery, onEditingChanged: { editing in
-                        if editing {
-                            withAnimation(.spring()) {
-                                if currentSheetState == .collapsed {
-                                    currentSheetState = .half
-                                }
-                            }
-                        }
-                    })
-                    .foregroundColor(.primary)
-                    .accentColor(colorAccent)
-                    .font(.system(size: 15))
-                    
-                    if !searchQuery.isEmpty {
-                        Button(action: { searchQuery = "" }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    Button(action: {
-                        // Dictation action placeholder
-                    }) {
-                        Image(systemName: "mic.fill")
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.black.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
-                
-                Button(action: {
-                    withAnimation(.spring()) {
-                        isFilterPanelExpanded.toggle()
-                        if isFilterPanelExpanded && currentSheetState == .collapsed {
-                            currentSheetState = .half
-                        }
-                    }
-                }) {
-                    Image(systemName: "slider.horizontal.3")
-                        .foregroundColor(isFilterPanelExpanded || !selectedTags.isEmpty ? colorAccent : .secondary)
-                        .padding(8)
-                        .background(isFilterPanelExpanded || !selectedTags.isEmpty ? colorAccent.opacity(0.15) : Color.clear, in: Circle())
-                }
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-            
-            // Selected active tags tokens row
-            if !selectedTags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(Array(selectedTags), id: \.self) { tag in
-                            HStack(spacing: 4) {
-                                Text(tag)
-                                    .font(.system(size: 12, weight: .medium))
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 10))
-                            }
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(colorAccent, in: Capsule())
-                            .onTapGesture {
-                                withAnimation {
-                                    selectedTags.remove(tag)
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
-                }
-            }
-            
-            // Inline expanded Filter Panel
-            if isFilterPanelExpanded {
-                VStack(alignment: .leading, spacing: 12) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 14) {
-                            filterSection(title: "Type & Access Strategy", options: ["Indoor", "Outdoor", "Free", "Paid"])
-                            filterSection(title: "Table Properties", options: ["Perfect surface", "Sturdy net", "Worn out / Damaged", "Torn net", "Slippery surface"])
-                            filterSection(title: "Playing Arena Environment", options: ["Spacious", "Wind-protected", "Good lighting", "Cramped space", "Glaring sun", "Poor lighting"])
-                            filterSection(title: "Amenities & Settings Vibe", options: ["Drinking fountain", "Restroom available", "Usually crowded", "Quiet & Chill"])
-                        }
-                        .padding(.bottom, 8)
-                    }
-                    .frame(maxHeight: 180)
-                    
-                    Divider().background(Color.primary.opacity(0.1))
-                }
-                .padding(.horizontal)
-                .padding(.bottom, 8)
-            }
-            
-            Text("Nearby Clubs")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundColor(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal)
-                .padding(.top, 4)
-                .padding(.bottom, 8)
-            
-            ScrollView {
-                VStack(spacing: 12) {
-                    if isUiLoading && locations.isEmpty {
-                        ProgressView().padding()
-                    } else if filteredLocations.isEmpty {
-                        Text("No table tennis clubs found.")
-                            .foregroundColor(.secondary)
-                            .font(.system(size: 14))
-                            .padding()
-                    } else {
-                        ForEach(filteredLocations, id: \.id) { loc in
-                            HStack(spacing: 16) {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.black.opacity(0.3))
-                                    .frame(width: 50, height: 50)
-                                    .overlay(
-                                        Text("🏓").font(.title)
-                                    )
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(loc.name)
-                                        .font(.system(size: 16, weight: .bold))
-                                        .foregroundColor(.primary)
-                                    
-                                    Text("\(formattedDistance(lat: loc.latitude, lng: loc.longitude)) • \(loc.tableCount) Tables")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.secondary)
-                                }
-                                Spacer()
-                            }
-                            .padding(.horizontal)
-                            .padding(.vertical, 8)
-                            .background(Color.black.opacity(0.15))
-                            .cornerRadius(12)
-                            .onTapGesture {
-                                withAnimation(.spring()) {
-                                    selectedLocation = loc
-                                    currentSheetState = .collapsed
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.bottom, 20)
-            }
-        }
-        .frame(height: currentSheetState.height(screenHeight: screenHeight))
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
-        .padding(.horizontal, 16)
-        .padding(.bottom, 20)
-        .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 5)
-    }
-    
-    // MARK: - Selected Club Card / Full Details
-    @State private var detailsDragOffset: CGFloat = 0
-    @State private var showMapSelectionActionSheet = false
-    
-    private func detailsCardView(club: Location, screenHeight: CGFloat) -> some View {
-        VStack(spacing: 0) {
-            // Drag handle at top if details is expanded
-            if isDetailsExpanded {
-                Capsule()
-                    .fill(Color.secondary)
-                    .frame(width: 40, height: 4)
-                    .padding(.vertical, 12)
-            }
-            
-            // Detail contents
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // Header Row
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(club.name)
-                                .font(.system(size: isDetailsExpanded ? 22 : 18, weight: .bold))
-                                .foregroundColor(.primary)
-                            
-                            Text("\(formattedDistance(lat: club.latitude, lng: club.longitude)) • \(club.tableCount) Tables")
-                                .font(.system(size: 14))
-                                .foregroundColor(.secondary)
-                        }
-                        Spacer()
                         Button(action: {
-                            withAnimation(.spring()) {
-                                selectedLocation = nil
-                                isDetailsExpanded = false
+                            withAnimation(.spring(duration: 0.25, bounce: 0.175)) {
+                                if isSelected {
+                                    selectedTags.remove(opt)
+                                } else {
+                                    selectedTags.insert(opt)
+                                }
                             }
                         }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title3)
-                                .foregroundColor(.secondary)
+                            Text(opt).font(.subheadline)
                         }
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, isDetailsExpanded ? 0 : 16)
-                    
-                    // Compact buttons
-                    if !isDetailsExpanded {
-                        HStack(spacing: 12) {
-                            Button("Details") {
-                                withAnimation(.spring()) {
-                                    isDetailsExpanded = true
-                                    appState.isTabBarHidden = true
-                                    if let id = club.id {
-                                        helper?.loadReviewsForClub(locationId: id)
-                                    }
-                                }
-                            }
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.primary)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 38)
-                            .background(Color.black.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
-                            
-                            Button("Navigate") {
-                                handleNavigationClick(club: club)
-                            }
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 38)
-                            .background(colorAccent, in: RoundedRectangle(cornerRadius: 10))
-                        }
-                        .padding(.horizontal)
-                        .padding(.bottom, 20)
-                    } else {
-                        // Expanded view sections
-                        
-                        // Image gallery horizontal carousel
-                        if !club.imageUrls.isEmpty {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 12) {
-                                    ForEach(club.imageUrls, id: \.self) { url in
-                                        AsyncImage(url: URL(string: url)) { phase in
-                                            if let image = phase.image {
-                                                image
-                                                    .resizable()
-                                                    .aspectRatio(contentMode: .fill)
-                                                    .frame(width: 140, height: 140)
-                                                    .cornerRadius(12)
-                                                    .onTapGesture {
-                                                        // Invoke the premium SwiftUI gallery representable cover in ContentView
-                                                        let isMines = club.imageUrls.map { _ in false } // fallback
-                                                        appState.galleryData = GalleryData(
-                                                            images: club.imageUrls,
-                                                            initialIndex: club.imageUrls.firstIndex(of: url) ?? 0,
-                                                            isMineList: isMines,
-                                                            onDelete: { _ in },
-                                                            onReport: { _, _ in }
-                                                        )
-                                                    }
-                                            } else {
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .fill(Color.black.opacity(0.15))
-                                                    .frame(width: 140, height: 140)
-                                                    .overlay(ProgressView().tint(.primary))
-                                            }
-                                        }
-                                    }
-                                }
-                                .padding(.horizontal)
-                            }
-                        } else {
-                            // Empty gallery picker trigger box
-                            PhotosPickerBox(clubId: club.id ?? "", helper: helper)
-                                .padding(.horizontal)
-                        }
-                        
-                        // Amenities & Info
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack {
-                                Label(club.type == LocationType.indoor ? "Indoor Arena" : "Outdoor Space", systemImage: club.type == LocationType.indoor ? "house.fill" : "leaf.fill")
-                                Spacer()
-                                Text(club.isFree ? "Free Access" : "Paid Arena")
-                                    .fontWeight(.bold)
-                                    .foregroundColor(colorAccent)
-                            }
-                            .font(.system(size: 15))
-                            .foregroundColor(.primary)
-                            
-                            if let created = club.createdBy {
-                                Text("Added by: \(created)")
-                                    .font(.system(size: 13))
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        .padding()
-                        .background(Color.black.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
-                        .padding(.horizontal)
-                        
-                        // Navigation action button
-                        Button(action: {
-                            handleNavigationClick(club: club)
-                        }) {
-                            HStack {
-                                Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
-                                Text("Navigate to Table")
-                            }
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 48)
-                            .background(colorAccent, in: RoundedRectangle(cornerRadius: 12))
-                        }
-                        .padding(.horizontal)
-                        
-                        // Reviews Section Header
-                        HStack {
-                            Text("Player Reviews")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundColor(.primary)
-                            Spacer()
-                            Button(action: {
-                                isAddingReview = true
-                            }) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "plus.bubble.fill")
-                                    Text("Add Review")
-                                }
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundColor(colorAccent)
-                            }
-                        }
-                        .padding(.horizontal)
-                        .padding(.top, 8)
-                        
-                        // Reviews list
-                        VStack(spacing: 12) {
-                            if reviews.isEmpty {
-                                Text("No reviews yet. Be the first to share details!")
-                                    .foregroundColor(.secondary)
-                                    .font(.system(size: 14))
-                                    .padding()
-                                    .frame(maxWidth: .infinity, alignment: .center)
-                            } else {
-                                ForEach(reviews, id: \.id) { review in
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        HStack {
-                                            Circle()
-                                                .fill(colorAccent.opacity(0.2))
-                                                .frame(width: 32, height: 32)
-                                                .overlay(
-                                                    Text(String((review.username).prefix(2)).uppercased())
-                                                        .font(.system(size: 12, weight: .bold))
-                                                        .foregroundColor(colorAccent)
-                                                )
-                                            
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(review.username)
-                                                    .font(.system(size: 14, weight: .bold))
-                                                    .foregroundColor(.primary)
-                                                Text(timeAgo(from: review.createdAt))
-                                                    .font(.system(size: 11))
-                                                    .foregroundColor(.secondary)
-                                            }
-                                            Spacer()
-                                        }
-                                        
-                                        if let textContent = review.textContent, !textContent.isEmpty {
-                                            Text(textContent)
-                                                .font(.system(size: 14))
-                                                .foregroundColor(.primary)
-                                        }
-                                        
-                                        // Review Tags
-                                        if !review.tags.isEmpty {
-                                            FlowLayout(spacing: 6) {
-                                                ForEach(review.tags, id: \.self) { tag in
-                                                    Text(tag)
-                                                        .font(.system(size: 11))
-                                                        .foregroundColor(.primary.opacity(0.8))
-                                                        .padding(.horizontal, 8)
-                                                        .padding(.vertical, 4)
-                                                        .background(Color.primary.opacity(0.1), in: Capsule())
-                                                }
-                                            }
-                                        }
-                                    }
-                                    .padding()
-                                    .background(Color.black.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
-                                    .padding(.horizontal)
-                                }
-                            }
-                        }
-                        .padding(.bottom, 40)
+                        .buttonStyle(isSelected ? .borderedProminent : .bordered)
+                        .tint(isSelected ? colorAccent : .secondary)
+                        .clipShape(Capsule())
                     }
                 }
             }
-        }
-        .frame(height: isDetailsExpanded ? screenHeight * 0.9 : 150)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
-        .padding(.horizontal, 16)
-        .padding(.bottom, 20)
-        .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 5)
-        .offset(y: detailsDragOffset)
-        .gesture(
-            isDetailsExpanded ? DragGesture()
-                .onChanged { value in
-                    if value.translation.height > 0 {
-                        detailsDragOffset = value.translation.height
-                    }
-                }
-                .onEnded { value in
-                    if value.translation.height > screenHeight / 3 || value.velocity.height > 300 {
-                        withAnimation {
-                            isDetailsExpanded = false
-                            appState.isTabBarHidden = false
-                        }
-                    }
-                    withAnimation {
-                        detailsDragOffset = 0
-                    }
-                } : nil
-        )
-        .actionSheet(isPresented: $showMapSelectionActionSheet) {
-            ActionSheet(
-                title: Text("Navigate via"),
-                message: Text("Select your preferred navigation mapping choice."),
-                buttons: [
-                    .default(Text("Apple Maps")) {
-                        openMapsApp(choice: "apple", club: club)
-                    },
-                    .default(Text("Google Maps")) {
-                        openMapsApp(choice: "google", club: club)
-                    },
-                    .cancel()
-                ]
-            )
         }
     }
     
@@ -987,6 +760,7 @@ struct NativeMapScreenView: View {
         if let choice = tokenStorage?.getMapChoice() {
             openMapsApp(choice: choice, club: club)
         } else {
+            navigationTargetClub = club
             showMapSelectionActionSheet = true
         }
     }
@@ -996,15 +770,15 @@ struct NativeMapScreenView: View {
         let latStr = String(format: "%f", club.latitude)
         let lngStr = String(format: "%f", club.longitude)
         
-        let urlStr = choice == "apple" ? 
-            "https://maps.apple.com/?q=\(latStr),\(lngStr)" : 
+        let urlStr = choice == "apple" ?
+            "https://maps.apple.com/?q=\(latStr),\(lngStr)" :
             "https://maps.google.com/?q=\(latStr),\(lngStr)"
         
         if let url = URL(string: urlStr) {
             UIApplication.shared.open(url)
         }
     }
-
+    
     private func timeAgo(from millisecondTimestamp: Int64) -> String {
         let date = Date(timeIntervalSince1970: Double(millisecondTimestamp) / 1000.0)
         let formatter = RelativeDateTimeFormatter()
