@@ -161,4 +161,11 @@
     <string name="tag_quiet_chill">Quiet &amp; Chill</string>
     <string name="tag_paid_access">Paid access</string>
     <string name="tag_free_to_play">Free to play</string>
+    <string name="offline_map_warning">You need to have access to the internet to view the map</string>
+    <string name="offline_match_warning">You need to have access to the internet to find matches</string>
+    <string name="offline_profile_warning">You are offline. Editing profile details is disabled.</string>
+    <string name="offline_messages_warning">You are offline. Connection list may be outdated.</string>
+    <string name="offline_chat_warning">You are offline. New messages will be sent when connection is restored.</string>
+    <string name="pending_status">Pending</string>
+    <string name="connection_restored">Connection restored!</string>
 </resources>

@@ -30,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -60,6 +61,7 @@ import org.ttproject.shared.resources.*
 import org.ttproject.shared.resources.Res as SharedRes
 import org.ttproject.util.LocalThemeMode
 import org.ttproject.util.ThemeMode
+import org.ttproject.util.ConnectivityChecker
 import kotlin.math.roundToInt
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.BorderStroke
@@ -145,7 +147,8 @@ data class MapBounds(val north: Double, val south: Double, val east: Double, val
 expect fun NativeMap(
     modifier: Modifier, locations: List<TTClub>, selectedClub: TTClub?,
     userLocationTrigger: Int, bottomPadding: Dp, isDark: Boolean,
-    onMarkerClick: (TTClub) -> Unit, onBoundsChanged: (MapBounds) -> Unit
+    onMarkerClick: (TTClub) -> Unit, onBoundsChanged: (MapBounds) -> Unit,
+    onMapLoaded: () -> Unit
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class,
@@ -155,11 +158,13 @@ expect fun NativeMap(
 fun MapScreen(
     viewModel: LocationViewModel = koinViewModel(),
     tokenStorage: TokenStorage = koinInject(),
+    connectivityChecker: ConnectivityChecker = koinInject(),
     isActive: Boolean = true,
     bottomNavHeight: Dp = 0.dp,
     systemNavHeight: Dp = 0.dp,
-    galleryLauncher: NativeGalleryLauncher? = null, // 👈 ADDED HERE
-    onNavBarVisibilityChange: (Boolean) -> Unit = {}
+    galleryLauncher: NativeGalleryLauncher? = null,
+    onNavBarVisibilityChange: (Boolean) -> Unit = {},
+    onMapLoaded: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
 
@@ -199,6 +204,44 @@ fun MapScreen(
 
     var selectedClub by remember { mutableStateOf<TTClub?>(null) }
     var isDetailsExpanded by remember { mutableStateOf(false) }
+    var mapNotificationMessage by remember { mutableStateOf<String?>(null) }
+
+    var isMapLoadedInternal by remember { mutableStateOf(false) }
+    var showOfflineMapBanner by remember { mutableStateOf(false) }
+    var showSuccessBanner by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        var wasConnected = connectivityChecker.isConnected()
+        delay(3500)
+        if (!isMapLoadedInternal && !connectivityChecker.isConnected()) {
+            showOfflineMapBanner = true
+        }
+        while (true) {
+            delay(1000)
+            val connected = connectivityChecker.isConnected()
+            if (connected) {
+                if (!wasConnected) {
+                    showSuccessBanner = true
+                    showOfflineMapBanner = false
+                }
+            } else {
+                if (wasConnected) {
+                    showSuccessBanner = false
+                    if (!isMapLoadedInternal) {
+                        showOfflineMapBanner = true
+                    }
+                }
+            }
+            wasConnected = connected
+        }
+    }
+
+    LaunchedEffect(showSuccessBanner) {
+        if (showSuccessBanner) {
+            delay(3000)
+            showSuccessBanner = false
+        }
+    }
 
     val detailsOffsetAnimatable = remember { Animatable(0f) }
     var isCardAnimating by remember { mutableStateOf(false) }
@@ -328,6 +371,12 @@ fun MapScreen(
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        InAppNotification(
+            message = mapNotificationMessage,
+            onDismiss = { mapNotificationMessage = null },
+            modifier = Modifier.windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
+        )
+
         val screenHeight = this.maxHeight
         val screenHeightPx = with(LocalDensity.current) { screenHeight.toPx() }
         val screenWidth = this.maxWidth
@@ -389,7 +438,11 @@ fun MapScreen(
             bottomPadding = mapBottomPadding,
             isDark = isDark,
             onMarkerClick = handleClubSelection,
-            onBoundsChanged = { newBounds -> mapBounds = newBounds }
+            onBoundsChanged = { newBounds -> mapBounds = newBounds },
+            onMapLoaded = {
+                isMapLoadedInternal = true
+                onMapLoaded()
+            }
         )
 
         val sheetOffsetYRaw = if (sheetState.offset.isNaN()) (layoutHeightPx - peekHeightPx) else sheetState.offset
@@ -742,7 +795,9 @@ fun MapScreen(
                                 .fillMaxSize()
                                 .alpha(1f - expandProgress)
                                 .clickable {
-                                    if (!isPickingLocation) {
+                                    if (!connectivityChecker.isConnected()) {
+                                        mapNotificationMessage = "No internet connection"
+                                    } else if (!isPickingLocation) {
                                         isPickingLocation = true
                                         coroutineScope.launch { sheetState.animateTo(SheetState.Collapsed) }
                                     } else {
@@ -775,6 +830,8 @@ fun MapScreen(
                                     lat = centerLat,
                                     lng = centerLng,
                                     viewModel = viewModel,
+                                    connectivityChecker = connectivityChecker,
+                                    onNoInternet = { mapNotificationMessage = "No internet connection" },
                                     onAdjustLocation = {
                                         isAddingTable = false
                                         isPickingLocation = true
@@ -861,6 +918,8 @@ fun MapScreen(
                                 systemNavHeight = systemNavHeight,
                                 viewModel = viewModel,
                                 currentUserId = currentUserId,
+                                connectivityChecker = connectivityChecker,
+                                onNoInternet = { mapNotificationMessage = "No internet connection" },
                                 galleryLauncher = galleryLauncher, // 👈 PASSED HERE
                                 onClose = {
                                     isDetailsExpanded = false
@@ -904,8 +963,12 @@ fun MapScreen(
                                 brandOrange = brandOrange,
                                 tokenStorage = tokenStorage,
                                 onExpand = {
-                                    isDetailsExpanded = true
-                                    coroutineScope.launch { detailsOffsetAnimatable.snapTo(0f) }
+                                    if (!connectivityChecker.isConnected()) {
+                                        mapNotificationMessage = "No internet connection"
+                                    } else {
+                                        isDetailsExpanded = true
+                                        coroutineScope.launch { detailsOffsetAnimatable.snapTo(0f) }
+                                    }
                                 },
                                 onClose = { selectedClub = null }
                             )
@@ -943,6 +1006,120 @@ fun MapScreen(
                             .background(Color.Gray.copy(alpha = 0.5f)).align(Alignment.CenterHorizontally)
                     )
                     NearbyClubsList(visibleClubs, cardBg, brandOrange, systemNavHeight, handleClubSelection)
+                }
+            }
+        }
+
+        // Offline Map Warning Banner
+        AnimatedVisibility(
+            visible = showOfflineMapBanner && isActive && !isDetailsExpanded && !isAddingTable && !isPickingLocation,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = sheetVisibleHeightDp + 16.dp, start = 16.dp, end = 16.dp)
+                .zIndex(15f)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = cardBg.copy(alpha = 0.95f),
+                shadowElevation = 6.dp,
+                border = BorderStroke(1.dp, Color(0xFFEF5350).copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFFEF5350).copy(alpha = 0.2f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Cancel,
+                            contentDescription = "Offline",
+                            tint = Color(0xFFEF5350),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = stringResource(SharedRes.string.offline_map_warning),
+                        color = AppColors.TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = { showOfflineMapBanner = false },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Connection Restored Success Banner
+        AnimatedVisibility(
+            visible = showSuccessBanner && isActive && !isDetailsExpanded && !isAddingTable && !isPickingLocation,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = sheetVisibleHeightDp + 16.dp, start = 16.dp, end = 16.dp)
+                .zIndex(15f)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = cardBg.copy(alpha = 0.95f),
+                shadowElevation = 6.dp,
+                border = BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFF4CAF50).copy(alpha = 0.2f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Online",
+                            tint = Color(0xFF4CAF50),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = stringResource(SharedRes.string.connection_restored),
+                        color = AppColors.TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = { showSuccessBanner = false },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
@@ -1117,6 +1294,8 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
     lat: Double,
     lng: Double,
     viewModel: LocationViewModel,
+    connectivityChecker: ConnectivityChecker,
+    onNoInternet: () -> Unit,
     onAdjustLocation: () -> Unit,
     onClose: () -> Unit,
     onDragOffsetChanged: (Float) -> Unit = {}
@@ -1306,7 +1485,13 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
                             modifier = Modifier
                                 .fillMaxWidth().height(160.dp)
                                 .background(cardBg, RoundedCornerShape(16.dp))
-                                .clickable { mediaLauncher.launch() },
+                                .clickable {
+                                    if (!connectivityChecker.isConnected()) {
+                                        onNoInternet()
+                                    } else {
+                                        mediaLauncher.launch()
+                                    }
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1334,7 +1519,13 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
                             if (selectedImages.size < 5) {
                                 item {
                                     Box(
-                                        modifier = Modifier.size(160.dp).background(cardBg, RoundedCornerShape(16.dp)).clickable { mediaLauncher.launch() },
+                                        modifier = Modifier.size(160.dp).background(cardBg, RoundedCornerShape(16.dp)).clickable {
+                                            if (!connectivityChecker.isConnected()) {
+                                                onNoInternet()
+                                            } else {
+                                                mediaLauncher.launch()
+                                            }
+                                        },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(Icons.Default.Add, contentDescription = "Add More", tint = brandOrange, modifier = Modifier.size(32.dp))
@@ -1397,7 +1588,9 @@ fun AnimatedVisibilityScope.AddTableFullScreen(
                 Surface(color = AppColors.Background.copy(alpha = 0.9f), modifier = Modifier.fillMaxWidth()) {
                     Button(
                         onClick = {
-                            if (!isSubmitting) {
+                            if (!connectivityChecker.isConnected()) {
+                                onNoInternet()
+                            } else if (!isSubmitting) {
                                 isSubmitting = true
                                 viewModel.submitNewTable(
                                     lat = lat,
@@ -1816,7 +2009,9 @@ fun ClubDetailsFullScreen(
     currentOffset: Float,
     onDragDelta: (Float) -> Unit,
     onDragStopped: (Float) -> Unit,
-    galleryLauncher: NativeGalleryLauncher? = null // 👈 ADDED HERE
+    connectivityChecker: ConnectivityChecker,
+    onNoInternet: () -> Unit,
+    galleryLauncher: NativeGalleryLauncher? = null
 ) {
     val reviews by viewModel.clubReviews.collectAsState()
     val hasReviewed =
@@ -1853,13 +2048,21 @@ fun ClubDetailsFullScreen(
                 initialIndex = index,
                 isMineList = allGalleryImages.map { it.isMine }, // 👈 CHANGED: Pass list of ownership
                 onDelete = { url ->
-                    viewModel.deleteImage(club.id, url) {
-                        notificationMessage = "Photo deleted successfully"
+                    if (!connectivityChecker.isConnected()) {
+                        notificationMessage = "No internet connection"
+                    } else {
+                        viewModel.deleteImage(club.id, url) {
+                            notificationMessage = "Photo deleted successfully"
+                        }
                     }
                 },
                 onReport = { url, reason ->
-                    viewModel.reportImage(club.id, url, reason) {
-                        notificationMessage = "Photo reported for review"
+                    if (!connectivityChecker.isConnected()) {
+                        notificationMessage = "No internet connection"
+                    } else {
+                        viewModel.reportImage(club.id, url, reason) {
+                            notificationMessage = "Photo reported for review"
+                        }
                     }
                 }
             )
@@ -2106,7 +2309,13 @@ fun ClubDetailsFullScreen(
                     )
                     if (!hasReviewed) {
                         TextButton(
-                            onClick = { isWritingReview = true },
+                            onClick = {
+                                if (!connectivityChecker.isConnected()) {
+                                    onNoInternet()
+                                } else {
+                                    isWritingReview = true
+                                }
+                            },
                             contentPadding = PaddingValues(0.dp)
                         ) {
                             Text(
@@ -2275,7 +2484,13 @@ fun ClubDetailsFullScreen(
             if (hasReviewed) {
                 Surface(color = brandOrange, shape = CircleShape) {
                     IconButton(
-                        onClick = { mediaLauncher.launch() },
+                        onClick = {
+                            if (!connectivityChecker.isConnected()) {
+                                onNoInternet()
+                            } else {
+                                mediaLauncher.launch()
+                            }
+                        },
                         modifier = Modifier.size(40.dp)
                     ) {
                         if (isUploadingGallery) CircularProgressIndicator(
@@ -2325,7 +2540,13 @@ fun ClubDetailsFullScreen(
         ) {
             if (!hasReviewed) {
                 Button(
-                    onClick = { isWritingReview = true },
+                    onClick = {
+                        if (!connectivityChecker.isConnected()) {
+                            onNoInternet()
+                        } else {
+                            isWritingReview = true
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = brandOrange),
                     shape = RoundedCornerShape(28.dp)
@@ -2740,17 +2961,25 @@ fun ClubDetailsFullScreen(
                                         }
                                     },
                                     onDelete = {
-                                        currentImage?.url?.let { url ->
-                                            viewModel.deleteImage(club.id, url) {
-                                                fullScreenInitialPage = null
-                                                notificationMessage = "Photo deleted successfully"
+                                        if (!connectivityChecker.isConnected()) {
+                                            notificationMessage = "No internet connection"
+                                        } else {
+                                            currentImage?.url?.let { url ->
+                                                viewModel.deleteImage(club.id, url) {
+                                                    fullScreenInitialPage = null
+                                                    notificationMessage = "Photo deleted successfully"
+                                                }
                                             }
                                         }
                                     },
                                     onReport = { reason ->
-                                        currentImage?.url?.let { url ->
-                                            viewModel.reportImage(club.id, url, reason) {
-                                                notificationMessage = "Photo reported for review"
+                                        if (!connectivityChecker.isConnected()) {
+                                            notificationMessage = "No internet connection"
+                                        } else {
+                                            currentImage?.url?.let { url ->
+                                                viewModel.reportImage(club.id, url, reason) {
+                                                    notificationMessage = "Photo reported for review"
+                                                }
                                             }
                                         }
                                     }

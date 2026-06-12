@@ -23,9 +23,11 @@ import org.ttproject.data.Location
 import org.ttproject.data.Player
 import org.ttproject.data.TTReview
 import org.ttproject.data.TokenStorage
+import org.ttproject.database.LocationDatabase
 
 interface LocationRepository {
     suspend fun getNearbyLocations(): List<Location>
+    suspend fun getCachedLocations(): List<Location>
     suspend fun addTable(request: AddTableRequest): Result<Unit>
     suspend fun addReview(locationId: String, request: AddReviewRequest): Result<Unit>
     suspend fun getReviews(locationId: String): Result<List<TTReview>>
@@ -36,17 +38,24 @@ interface LocationRepository {
 
 class LocationRepositoryImpl(
     private val httpClient: HttpClient,
-    private val tokenStorage: TokenStorage
+    private val tokenStorage: TokenStorage,
+    private val locationDatabase: LocationDatabase
 ) : LocationRepository {
 
     override suspend fun getNearbyLocations(): List<Location> {
         return try {
-            httpClient.get("${SERVER_IP}/api/locations/nearby") {
+            val locations = httpClient.get("${SERVER_IP}/api/locations/nearby") {
             }.body<List<Location>>()
+            locationDatabase.saveLocations(locations)
+            locations
         } catch (e: Exception) {
             println("Network Error fetching locations: ${e.message}")
-            emptyList()
+            locationDatabase.getLocations()
         }
+    }
+
+    override suspend fun getCachedLocations(): List<Location> {
+        return locationDatabase.getLocations()
     }
 
     override suspend fun addTable(request: AddTableRequest): Result<Unit> {

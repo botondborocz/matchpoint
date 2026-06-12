@@ -41,11 +41,17 @@ actual fun NativeMap(
     bottomPadding: Dp,
     isDark: Boolean,
     onMarkerClick: (TTClub) -> Unit,
-    onBoundsChanged: (MapBounds) -> Unit
+    onBoundsChanged: (MapBounds) -> Unit,
+    onMapLoaded: () -> Unit
 ) {
     val currentLocations by rememberUpdatedState(locations)
     val currentOnMarkerClick by rememberUpdatedState(onMarkerClick)
     val currentOnBoundsChanged by rememberUpdatedState(onBoundsChanged)
+    val currentOnMapLoaded by rememberUpdatedState(onMapLoaded)
+
+    LaunchedEffect(Unit) {
+        currentOnMapLoaded()
+    }
 
     val currentAccentColor by rememberUpdatedState(AppColors.AccentOrange)
     var lastHandledTrigger by remember { mutableStateOf(0) }

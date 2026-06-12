@@ -1,11 +1,14 @@
 package org.ttproject.data
 
 import com.liftric.kvault.KVault
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 class IosTokenStorage : TokenStorage {
     // KVault wraps the iOS Keychain automatically!
     private val vault = KVault()
     private val key = "jwt_token"
+    private val json = Json { ignoreUnknownKeys = true }
 
     override fun saveToken(token: String) { vault.set(key, token) }
     override fun getToken(): String? = vault.string(key)
@@ -28,4 +31,44 @@ class IosTokenStorage : TokenStorage {
     override fun savePremiumStatus(isPremium: Boolean) { vault.set("local_premium", isPremium.toString()) }
     override fun getPremiumStatus(): Boolean = vault.string("local_premium")?.toBoolean() ?: false
     override fun clearPremiumStatus() { vault.deleteObject("local_premium") }
+
+    override fun saveUserProfile(profile: UserProfile) {
+        val serialized = json.encodeToString(profile)
+        vault.set("user_profile_cache", serialized)
+    }
+
+    override fun getUserProfile(): UserProfile? {
+        val serialized = vault.string("user_profile_cache") ?: return null
+        return try {
+            json.decodeFromString<UserProfile>(serialized)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    override fun saveBadgeMetrics(metrics: UserBadgeMetricsDto) {
+        val serialized = json.encodeToString(metrics)
+        vault.set("badge_metrics_cache", serialized)
+    }
+
+    override fun getBadgeMetrics(): UserBadgeMetricsDto? {
+        val serialized = vault.string("badge_metrics_cache") ?: return null
+        return try {
+            json.decodeFromString<UserBadgeMetricsDto>(serialized)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    override fun setPendingLanguageSync(language: String?) {
+        if (language != null) {
+            vault.set("pending_language_sync", language)
+        } else {
+            vault.deleteObject("pending_language_sync")
+        }
+    }
+
+    override fun getPendingLanguageSync(): String? = vault.string("pending_language_sync")
+
+    override fun clearPendingLanguageSync() { vault.deleteObject("pending_language_sync") }
 }

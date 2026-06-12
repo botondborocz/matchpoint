@@ -44,7 +44,8 @@ actual fun NativeMap(
     bottomPadding: Dp,
     isDark: Boolean,
     onMarkerClick: (TTClub) -> Unit,
-    onBoundsChanged: (MapBounds) -> Unit
+    onBoundsChanged: (MapBounds) -> Unit,
+    onMapLoaded: () -> Unit
 ) {
     val context = LocalContext.current
 
@@ -213,6 +214,7 @@ actual fun NativeMap(
     GoogleMap(
         modifier = modifier,
         cameraPositionState = cameraPositionState,
+        onMapLoaded = onMapLoaded,
         // 👇 Dynamic Bottom Padding applied here!
         contentPadding = PaddingValues(top = 72.dp, bottom = bottomPadding),
         properties = MapProperties(

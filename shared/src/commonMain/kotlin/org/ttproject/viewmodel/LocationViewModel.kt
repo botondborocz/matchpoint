@@ -33,14 +33,29 @@ class LocationViewModel(
 
     fun fetchNearbyLocations() {
         viewModelScope.launch {
-            _uiState.value = LocationsUiState.Loading
+            try {
+                val cached = withContext(Dispatchers.Default) {
+                    repository.getCachedLocations()
+                }
+                if (cached.isNotEmpty()) {
+                    _uiState.value = LocationsUiState.Success(cached)
+                } else {
+                    _uiState.value = LocationsUiState.Loading
+                }
+            } catch (e: Exception) {
+                println("Error loading cache: ${e.message}")
+                _uiState.value = LocationsUiState.Loading
+            }
+
             try {
                 val locations = withContext(Dispatchers.Default) {
                     repository.getNearbyLocations()
                 }
                 _uiState.value = LocationsUiState.Success(locations)
             } catch (e: Exception) {
-                _uiState.value = LocationsUiState.Error(e.message ?: "Unknown error occurred")
+                if (_uiState.value !is LocationsUiState.Success) {
+                    _uiState.value = LocationsUiState.Error(e.message ?: "Unknown error occurred")
+                }
             }
         }
     }

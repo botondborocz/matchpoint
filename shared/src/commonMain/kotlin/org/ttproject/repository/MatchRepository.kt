@@ -15,9 +15,11 @@ import org.ttproject.data.Player
 import org.ttproject.data.SwipeRequest
 import org.ttproject.data.SwipeResponse
 import org.ttproject.data.TokenStorage
+import org.ttproject.database.PlayerDatabase
 
 interface MatchRepository {
     suspend fun getNearbyPlayers(): List<Player>
+    suspend fun getCachedPlayers(): List<Player>
     suspend fun recordSwipeAction(playerId: String, isLiked: Boolean): Boolean
     suspend fun undoSwipeAction(playerId: String): Boolean // 👈 NEW CONTRACT
     suspend fun getPeopleWhoLikedMe(): List<Player>
@@ -25,7 +27,8 @@ interface MatchRepository {
 
 class MatchRepositoryImpl(
     private val httpClient: HttpClient,
-    private val tokenStorage: TokenStorage
+    private val tokenStorage: TokenStorage,
+    private val playerDatabase: PlayerDatabase
 ) : MatchRepository {
 
     override suspend fun getNearbyPlayers(): List<Player> {
@@ -34,11 +37,17 @@ class MatchRepositoryImpl(
             val response = httpClient.get("${SERVER_IP}/api/users/nearby") {
                 bearerAuth(token)
             }
-            response.body<List<Player>>()
+            val players = response.body<List<Player>>()
+            playerDatabase.savePlayers(players)
+            players
         } catch (e: Exception) {
             println("Network Error fetching players: ${e.message}")
-            emptyList()
+            playerDatabase.getPlayers()
         }
+    }
+
+    override suspend fun getCachedPlayers(): List<Player> {
+        return playerDatabase.getPlayers()
     }
 
     override suspend fun recordSwipeAction(playerId: String, isLiked: Boolean): Boolean {

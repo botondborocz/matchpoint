@@ -27,6 +27,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
@@ -43,6 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import mapMetricsToBadges
@@ -56,23 +61,53 @@ import org.ttproject.shared.resources.Res as SharedRes
 import org.ttproject.viewmodel.MatchUiState
 import org.ttproject.viewmodel.MatchViewModel
 import org.ttproject.isIosPlatform
+import org.ttproject.util.ConnectivityChecker
+import org.ttproject.components.InAppNotification
 import kotlin.math.abs
 
 @Composable
 fun MatchScreen(
     viewModel: MatchViewModel = koinViewModel(),
+    connectivityChecker: ConnectivityChecker = koinInject(),
     onNavigateToLogin: () -> Unit,
     onNavigateToMessages: () -> Unit
 ) {
     var isVisible by remember { mutableStateOf(false) }
     var isLikesPopupOpen by remember { mutableStateOf(false) }
     var isPaywallDialogOpen by remember { mutableStateOf(false) }
+    var matchNotificationMessage by remember { mutableStateOf<String?>(null) }
+    var showOfflineBanner by remember { mutableStateOf(false) }
+    var showSuccessBanner by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         isVisible = true
         viewModel.loadPlayers(showLoading = false)
         viewModel.loadLikesFeed()
         viewModel.checkPremiumStatus()
+        
+        var wasConnected = connectivityChecker.isConnected()
+        showOfflineBanner = !wasConnected
+        while (true) {
+            kotlinx.coroutines.delay(1000)
+            val connected = connectivityChecker.isConnected()
+            if (connected) {
+                showOfflineBanner = false
+                if (!wasConnected) {
+                    showSuccessBanner = true
+                }
+            } else if (!connected && wasConnected) {
+                showOfflineBanner = true
+                showSuccessBanner = false
+            }
+            wasConnected = connected
+        }
+    }
+
+    LaunchedEffect(showSuccessBanner) {
+        if (showSuccessBanner) {
+            kotlinx.coroutines.delay(3000)
+            showSuccessBanner = false
+        }
     }
 
     val uiState by viewModel.uiState.collectAsState()
@@ -103,6 +138,11 @@ fun MatchScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Transparent)) {
+        InAppNotification(
+            message = matchNotificationMessage,
+            onDismiss = { matchNotificationMessage = null },
+            modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
+        )
 
         // --- MAIN WORKSPACE INTERFACE ---
         Column(
@@ -141,7 +181,13 @@ fun MatchScreen(
                     modifier = Modifier
                         .clip(RoundedCornerShape(16.dp))
                         .background(AppColors.SurfaceDark)
-                        .clickable { isLikesPopupOpen = true }
+                        .clickable {
+                            if (!connectivityChecker.isConnected()) {
+                                matchNotificationMessage = "No internet connection"
+                            } else {
+                                isLikesPopupOpen = true
+                            }
+                        }
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -209,14 +255,22 @@ fun MatchScreen(
                             val coroutineScope = rememberCoroutineScope()
 
                             val triggerSwipe = { directionRight: Boolean, screenWidthPx: Float ->
-                                coroutineScope.launch {
-                                    val targetX = if (directionRight) screenWidthPx * 1.5f else -screenWidthPx * 1.5f
-                                    val targetY = 200f
-                                    launch { offsetY.animateTo(targetY, tween(250)) }
-                                    offsetX.animateTo(targetX, tween(250))
+                                if (!connectivityChecker.isConnected()) {
+                                    matchNotificationMessage = "No internet connection"
+                                    coroutineScope.launch {
+                                        offsetX.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+                                        offsetY.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+                                    }
+                                } else {
+                                    coroutineScope.launch {
+                                        val targetX = if (directionRight) screenWidthPx * 1.5f else -screenWidthPx * 1.5f
+                                        val targetY = 200f
+                                        launch { offsetY.animateTo(targetY, tween(250)) }
+                                        offsetX.animateTo(targetX, tween(250))
 
-                                    if (topPlayer != null) {
-                                        viewModel.onPlayerSwiped(topPlayer, isLiked = directionRight)
+                                        if (topPlayer != null) {
+                                            viewModel.onPlayerSwiped(topPlayer, isLiked = directionRight)
+                                        }
                                     }
                                 }
                             }
@@ -257,9 +311,13 @@ fun MatchScreen(
                 val coroutineScope = rememberCoroutineScope()
 
                 val triggerSwipe = { directionRight: Boolean ->
-                    coroutineScope.launch {
-                        if (topPlayer != null) {
-                            viewModel.onPlayerSwiped(topPlayer, isLiked = directionRight)
+                    if (!connectivityChecker.isConnected()) {
+                        matchNotificationMessage = "No internet connection"
+                    } else {
+                        coroutineScope.launch {
+                            if (topPlayer != null) {
+                                viewModel.onPlayerSwiped(topPlayer, isLiked = directionRight)
+                            }
                         }
                     }
                 }
@@ -275,7 +333,9 @@ fun MatchScreen(
                         onPass = { triggerSwipe(false) },
                         canUndo = canUndo,
                         onUndo = {
-                            if (isPremiumUser) {
+                            if (!connectivityChecker.isConnected()) {
+                                matchNotificationMessage = "No internet connection"
+                            } else if (isPremiumUser) {
                                 viewModel.undoLastSwipe()
                             } else {
                                 isPaywallDialogOpen = true
@@ -429,6 +489,120 @@ fun MatchScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(onClick = { isPaywallDialogOpen = false }) {
                         Text(stringResource(SharedRes.string.maybe_later), color = Color.LightGray)
+                    }
+                }
+            }
+        }
+
+        // Offline Match Warning Banner
+        AnimatedVisibility(
+            visible = showOfflineBanner,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 24.dp, start = 16.dp, end = 16.dp)
+                .zIndex(15f)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = AppColors.SurfaceDark.copy(alpha = 0.95f),
+                shadowElevation = 6.dp,
+                border = BorderStroke(1.dp, Color(0xFFEF5350).copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFFEF5350).copy(alpha = 0.2f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Cancel,
+                            contentDescription = "Offline",
+                            tint = Color(0xFFEF5350),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = stringResource(SharedRes.string.offline_match_warning),
+                        color = AppColors.TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = { showOfflineBanner = false },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Connection Restored Success Banner
+        AnimatedVisibility(
+            visible = showSuccessBanner,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 24.dp, start = 16.dp, end = 16.dp)
+                .zIndex(15f)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = AppColors.SurfaceDark.copy(alpha = 0.95f),
+                shadowElevation = 6.dp,
+                border = BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.4f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFF4CAF50).copy(alpha = 0.2f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Online",
+                            tint = Color(0xFF4CAF50),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = stringResource(SharedRes.string.connection_restored),
+                        color = AppColors.TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = { showSuccessBanner = false },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }

@@ -67,9 +67,19 @@ class MatchViewModel(
 
     fun loadPlayers(showLoading: Boolean = true) {
         viewModelScope.launch {
-            if (showLoading || _uiState.value !is MatchUiState.Success) {
-                _uiState.value = MatchUiState.Loading
+            try {
+                val cached = repository.getCachedPlayers()
+                if (cached.isNotEmpty()) {
+                    _uiState.value = MatchUiState.Success(cached)
+                } else if (showLoading || _uiState.value !is MatchUiState.Success) {
+                    _uiState.value = MatchUiState.Loading
+                }
+            } catch (e: Exception) {
+                if (showLoading || _uiState.value !is MatchUiState.Success) {
+                    _uiState.value = MatchUiState.Loading
+                }
             }
+
             try {
                 val players = repository.getNearbyPlayers()
                 _uiState.value = MatchUiState.Success(players)

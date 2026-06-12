@@ -161,4 +161,11 @@
     <string name="tag_quiet_chill">Csendes &amp; Nyugodt</string>
     <string name="tag_paid_access">Fizetős belépés</string>
     <string name="tag_free_to_play">Ingyenes játék</string>
+    <string name="offline_map_warning">Internetes kapcsolat szükséges a térkép megtekintéséhez</string>
+    <string name="offline_match_warning">Internetes kapcsolat szükséges a játékostársak kereséséhez</string>
+    <string name="offline_profile_warning">Offline mód. A profil módosítása nem lehetséges.</string>
+    <string name="offline_messages_warning">Offline mód. A beszélgetések listája elavult lehet.</string>
+    <string name="offline_chat_warning">Offline mód. Az új üzenetek a kapcsolat helyreállásakor lesznek elküldve.</string>
+    <string name="pending_status">Függőben</string>
+    <string name="connection_restored">Kapcsolat helyreállítva!</string>
 </resources>

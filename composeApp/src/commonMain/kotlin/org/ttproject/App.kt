@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -58,6 +59,20 @@ import org.ttproject.viewmodel.ProfileViewModel
 import org.ttproject.viewmodel.MatchViewModel
 import org.ttproject.viewmodel.LocationViewModel
 import org.ttproject.viewmodel.MessagesViewModel
+import org.ttproject.viewmodel.LocationsUiState
+import kotlinx.coroutines.delay
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Text
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.shadow
 
 enum class AuthRoute {
     Login, Register
@@ -91,6 +106,26 @@ fun App(
     var isMapNavBarVisible by remember { mutableStateOf(true) }
     var currentTabRoute by remember { mutableStateOf<NavRoute>(NavRoute.Map) }
     var isDetailScreen by remember { mutableStateOf(false) }
+
+    var isMapLoaded by remember { mutableStateOf(false) }
+    val locationState by locationViewModel.uiState.collectAsState()
+    val isPinsLoaded = locationState is LocationsUiState.Success || locationState is LocationsUiState.Error
+
+    var showInitialLoader by remember { mutableStateOf(true) }
+
+    LaunchedEffect(isMapLoaded, isPinsLoaded) {
+        if (isMapLoaded && isPinsLoaded) {
+            delay(1000) // 1 second delay to ensure pins are drawn and smooth transition
+            showInitialLoader = false
+        }
+    }
+
+    // Safety timeout: dismiss the initial loader after 3.5 seconds under all circumstances
+    // (e.g., if offline and Google Maps doesn't trigger the onMapLoaded callback)
+    LaunchedEffect(Unit) {
+        delay(3500)
+        showInitialLoader = false
+    }
 
     LaunchedEffect(rootNavController) {
         rootNavController.addOnDestinationChangedListener { _, destination, _ ->
@@ -289,7 +324,8 @@ fun App(
                                                             systemNavHeight = systemNavPadding,
                                                             onNavBarVisibilityChange = { isVisible ->
                                                                 isMapNavBarVisible = isVisible
-                                                            }
+                                                            },
+                                                            onMapLoaded = { isMapLoaded = true }
                                                         )
                                                     }
                                                 }
@@ -474,7 +510,133 @@ fun App(
                         }
                     }
                 }
+
+                // Global initial loading overlay!
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = showInitialLoader,
+                    enter = fadeIn(),
+                    exit = fadeOut(tween(600)) + scaleOut(targetScale = 1.1f, animationSpec = tween(600)),
+                    modifier = Modifier.fillMaxSize().zIndex(100f)
+                ) {
+                    GlobalPremiumLoader(isDark = isCurrentlyDark, accentColor = AppColors.AccentOrange)
+                }
             }
+        }
+    }
+}
+
+@Composable
+fun GlobalPremiumLoader(isDark: Boolean, accentColor: Color) {
+    val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition()
+    
+    // Smooth ping pong bouncing animation
+    val bounceY by infiniteTransition.animateFloat(
+        initialValue = -30f,
+        targetValue = 30f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = tween(600, easing = FastOutSlowInEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "BounceY"
+    )
+    
+    val ballScale by infiniteTransition.animateFloat(
+        initialValue = 0.8f,
+        targetValue = 1.2f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = tween(600, easing = FastOutSlowInEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "BallScale"
+    )
+
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 0.9f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = tween(1000, easing = androidx.compose.animation.core.LinearEasing),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "GlowAlpha"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(if (isDark) Color(0xFF0F172A) else Color(0xFFF8FAFC)),
+        contentAlignment = Alignment.Center
+    ) {
+        // Glowing background gradient aura
+        Box(
+            modifier = Modifier
+                .size(220.dp)
+                .graphicsLayer {
+                    alpha = glowAlpha
+                    scaleX = 1.1f
+                    scaleY = 1.1f
+                }
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                        colors = listOf(
+                            accentColor.copy(alpha = 0.25f),
+                            Color.Transparent
+                        )
+                    ),
+                    shape = CircleShape
+                )
+        )
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Visual bouncing ping-pong paddle & ball setup
+            Box(
+                modifier = Modifier
+                    .size(120.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                // The Ball
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .offset(y = bounceY.dp)
+                        .graphicsLayer {
+                            scaleX = ballScale
+                            scaleY = ballScale
+                        }
+                        .background(accentColor, CircleShape)
+                        .shadow(4.dp, CircleShape)
+                )
+
+                // The Paddle (Static or slight rotation)
+                Box(
+                    modifier = Modifier
+                        .size(48.dp, 8.dp)
+                        .align(Alignment.BottomCenter)
+                        .offset(y = (-15).dp)
+                        .background(if (isDark) Color.White.copy(alpha = 0.9f) else Color.Black.copy(alpha = 0.8f), RoundedCornerShape(4.dp))
+                )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "TABLE TENNIS MAP",
+                color = if (isDark) Color.White else Color.Black,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 2.sp
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Drawing arena and placing pins...",
+                color = if (isDark) Color.Gray else Color.DarkGray,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }

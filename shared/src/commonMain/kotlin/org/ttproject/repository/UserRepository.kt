@@ -52,20 +52,40 @@ class UserRepositoryImpl(
 
         val localTz = TimeZone.currentSystemDefault().id
 
-        val response = httpClient.get("${SERVER_IP}/api/users/me") {
-            bearerAuth(token)
-            header("X-Timezone", localTz)
-        }
+        return try {
+            val response = httpClient.get("${SERVER_IP}/api/users/me") {
+                bearerAuth(token)
+                header("X-Timezone", localTz)
+            }
 
-        if (response.status.value in 200..299) {
-            val userProfile: UserProfile = response.body()
-            tokenStorage.saveUserId(userProfile.id)
-            tokenStorage.savePremiumStatus(userProfile.isPremium)
-            return userProfile
-        } else if (response.status.value == 401) {
-            throw Exception("Session expired. Please log in again.")
-        } else {
-            throw Exception("Server error: ${response.status.description}")
+            if (response.status.value in 200..299) {
+                val userProfile: UserProfile = response.body()
+                tokenStorage.saveUserId(userProfile.id)
+                tokenStorage.savePremiumStatus(userProfile.isPremium)
+                tokenStorage.saveUserProfile(userProfile)
+
+                // Trigger background language sync if pending offline change exists
+                val pendingLang = tokenStorage.getPendingLanguageSync()
+                if (pendingLang != null) {
+                    try {
+                        val syncRes = updateLanguage(pendingLang)
+                        if (syncRes.isSuccess && syncRes.getOrNull() == true) {
+                            tokenStorage.clearPendingLanguageSync()
+                        }
+                    } catch (e: Exception) {
+                        println("Failed to background sync pending language: ${e.message}")
+                    }
+                }
+
+                userProfile
+            } else if (response.status.value == 401) {
+                throw Exception("Session expired. Please log in again.")
+            } else {
+                throw Exception("Server error: ${response.status.description}")
+            }
+        } catch (e: Exception) {
+            println("Network Error fetching profile: ${e.message}")
+            tokenStorage.getUserProfile() ?: throw e
         }
     }
 
@@ -111,6 +131,9 @@ class UserRepositoryImpl(
     }
 
     override suspend fun updateLanguage(language: String): Result<Boolean> {
+        // Save locally first so the UI updates instantly
+        tokenStorage.saveLanguage(language)
+        
         return try {
             val response = httpClient.put("${SERVER_IP}/api/users/language") {
                 contentType(ContentType.Application.Json)
@@ -119,13 +142,16 @@ class UserRepositoryImpl(
             }
 
             if (response.status.isSuccess()) {
+                tokenStorage.clearPendingLanguageSync()
                 Result.success(true)
             } else {
-                Result.failure(Exception("Failed to update language. Server returned: ${response.status}"))
+                tokenStorage.setPendingLanguageSync(language)
+                Result.success(true)
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            Result.failure(e)
+            tokenStorage.setPendingLanguageSync(language)
+            Result.success(true)
         }
     }
 
@@ -163,16 +189,23 @@ class UserRepositoryImpl(
         val token = tokenStorage.getToken()
             ?: throw Exception("No auth token found! User should be logged out.")
 
-        val response = httpClient.get("${SERVER_IP}/api/profile/badges") {
-            bearerAuth(token)
-        }
+        return try {
+            val response = httpClient.get("${SERVER_IP}/api/profile/badges") {
+                bearerAuth(token)
+            }
 
-        if (response.status.isSuccess()) {
-            return response.body()
-        } else if (response.status.value == 401) {
-            throw Exception("Session expired. Please log in again.")
-        } else {
-            throw Exception("Failed to fetch badge metrics. Server returned: ${response.status}")
+            if (response.status.isSuccess()) {
+                val metrics: UserBadgeMetricsDto = response.body()
+                tokenStorage.saveBadgeMetrics(metrics)
+                metrics
+            } else if (response.status.value == 401) {
+                throw Exception("Session expired. Please log in again.")
+            } else {
+                throw Exception("Failed to fetch badge metrics. Server returned: ${response.status}")
+            }
+        } catch (e: Exception) {
+            println("Network Error fetching badge metrics: ${e.message}")
+            tokenStorage.getBadgeMetrics() ?: throw e
         }
     }
 

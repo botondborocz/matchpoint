@@ -15,6 +15,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -78,6 +80,9 @@ import org.ttproject.data.BadgeData
 import org.ttproject.data.TokenStorage
 import org.ttproject.icon.PremiumAppIcon
 import org.ttproject.isIosPlatform
+import org.ttproject.util.ConnectivityChecker
+import org.ttproject.components.InAppNotification
+import androidx.compose.ui.zIndex
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -94,6 +99,7 @@ fun ProfileScreen(
     onChangeAppIcon: (PremiumAppIcon) -> Unit = {},
     onOverlayActive: (Boolean) -> Unit = {},
     viewModel: ProfileViewModel = koinViewModel(),
+    connectivityChecker: ConnectivityChecker = koinInject(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var isAvatarExpanded by remember { mutableStateOf(false) }
@@ -135,8 +141,35 @@ fun ProfileScreen(
 
 
 
+    var profileNotificationMessage by remember { mutableStateOf<String?>(null) }
+    var showOfflineBanner by remember { mutableStateOf(false) }
+    var showSuccessBanner by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         viewModel.fetchUserProfile(showLoading = false)
+        var wasConnected = connectivityChecker.isConnected()
+        showOfflineBanner = !wasConnected
+        while (true) {
+            kotlinx.coroutines.delay(1000)
+            val connected = connectivityChecker.isConnected()
+            if (connected) {
+                showOfflineBanner = false
+                if (!wasConnected) {
+                    showSuccessBanner = true
+                }
+            } else if (!connected && wasConnected) {
+                showOfflineBanner = true
+                showSuccessBanner = false
+            }
+            wasConnected = connected
+        }
+    }
+
+    LaunchedEffect(showSuccessBanner) {
+        if (showSuccessBanner) {
+            kotlinx.coroutines.delay(3000)
+            showSuccessBanner = false
+        }
     }
 
     when (uiState) {
@@ -220,6 +253,11 @@ fun ProfileScreen(
 
             SharedTransitionLayout {
                 Box(modifier = Modifier.fillMaxSize()) {
+                    InAppNotification(
+                        message = profileNotificationMessage,
+                        onDismiss = { profileNotificationMessage = null },
+                        modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Top))
+                    )
 
                     val topPadding = if (isIosPlatform()) {
                         WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -254,9 +292,27 @@ fun ProfileScreen(
                                     isMatchCardPreviewOpen = isMatchCardPreviewOpen, // 👈 Triggers source morph
                                     profileData = userData,
                                     onAvatarClick = { isAvatarExpanded = true },
-                                    onPhotoEditClick = { singleImagePicker.launch() },
-                                    onUsernameEditClick = { isEditUsernameModalOpen = true },
-                                    onBioEditClick = { isEditBioModalOpen = true },
+                                    onPhotoEditClick = {
+                                        if (!connectivityChecker.isConnected()) {
+                                            profileNotificationMessage = "No internet connection"
+                                        } else {
+                                            singleImagePicker.launch()
+                                        }
+                                    },
+                                    onUsernameEditClick = {
+                                        if (!connectivityChecker.isConnected()) {
+                                            profileNotificationMessage = "No internet connection"
+                                        } else {
+                                            isEditUsernameModalOpen = true
+                                        }
+                                    },
+                                    onBioEditClick = {
+                                        if (!connectivityChecker.isConnected()) {
+                                            profileNotificationMessage = "No internet connection"
+                                        } else {
+                                            isEditBioModalOpen = true
+                                        }
+                                    },
                                     onPreviewMatchcardClick = { isMatchCardPreviewOpen = true }
                                 )
                                 Spacer(modifier = Modifier.height(32.dp))
@@ -283,7 +339,13 @@ fun ProfileScreen(
                             Column {
                                 BasicInfoSection(
                                     profileData = userData,
-                                    onEditClick = { isEditBasicInfoModalOpen = true }
+                                    onEditClick = {
+                                        if (!connectivityChecker.isConnected()) {
+                                            profileNotificationMessage = "No internet connection"
+                                        } else {
+                                            isEditBasicInfoModalOpen = true
+                                        }
+                                    }
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                             }
@@ -295,7 +357,13 @@ fun ProfileScreen(
                             Column {
                                 GearSection(
                                     profileData = userData,
-                                    onGearEditClick = { isEditGearModalOpen = true }
+                                    onGearEditClick = {
+                                        if (!connectivityChecker.isConnected()) {
+                                            profileNotificationMessage = "No internet connection"
+                                        } else {
+                                            isEditGearModalOpen = true
+                                        }
+                                    }
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                             }
@@ -344,7 +412,11 @@ fun ProfileScreen(
                             imageUrl = userData.imageUrl,
                             onDismissRequest = { isAvatarExpanded = false },
                             onEditClick = {
-                                singleImagePicker.launch()
+                                if (!connectivityChecker.isConnected()) {
+                                    profileNotificationMessage = "No internet connection"
+                                } else {
+                                    singleImagePicker.launch()
+                                }
                                 isAvatarExpanded = false
                             }
                         )
@@ -377,6 +449,120 @@ fun ProfileScreen(
                                 animatedVisibilityScope = this,
                                 onDismiss = { selectedBadge = null }
                             )
+                        }
+                    }
+
+                    // Offline Profile Warning Banner
+                    AnimatedVisibility(
+                        visible = showOfflineBanner,
+                        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 90.dp, start = 16.dp, end = 16.dp)
+                            .zIndex(15f)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = AppColors.SurfaceDark.copy(alpha = 0.95f),
+                            shadowElevation = 6.dp,
+                            border = BorderStroke(1.dp, Color(0xFFEF5350).copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(Color(0xFFEF5350).copy(alpha = 0.2f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Cancel,
+                                        contentDescription = "Offline",
+                                        tint = Color(0xFFEF5350),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = stringResource(SharedRes.string.offline_profile_warning),
+                                    color = AppColors.TextPrimary,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                IconButton(
+                                    onClick = { showOfflineBanner = false },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Close",
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Connection Restored Success Banner
+                    AnimatedVisibility(
+                        visible = showSuccessBanner,
+                        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 90.dp, start = 16.dp, end = 16.dp)
+                            .zIndex(15f)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = AppColors.SurfaceDark.copy(alpha = 0.95f),
+                            shadowElevation = 6.dp,
+                            border = BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(Color(0xFF4CAF50).copy(alpha = 0.2f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Online",
+                                        tint = Color(0xFF4CAF50),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = stringResource(SharedRes.string.connection_restored),
+                                    color = AppColors.TextPrimary,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                IconButton(
+                                    onClick = { showSuccessBanner = false },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Close",
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }

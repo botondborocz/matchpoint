@@ -59,9 +59,27 @@ class ProfileViewModel(
 
     fun fetchUserProfile(showLoading: Boolean = true) {
         viewModelScope.launch {
-            if (showLoading || _uiState.value !is ProfileState.Success) {
-                _uiState.value = ProfileState.Loading
+            try {
+                val cachedUser = tokenStorage.getUserProfile()
+                val cachedMetrics = tokenStorage.getBadgeMetrics()
+                if (cachedUser != null) {
+                    _uiState.value = ProfileState.Success(
+                        name = cachedUser.name, elo = cachedUser.elo, winRate = cachedUser.winRate,
+                        language = cachedUser.preferredLanguage, imageUrl = cachedUser.imageUrl,
+                        blade = cachedUser.blade, rubberFh = cachedUser.rubberFh, rubberBh = cachedUser.rubberBh,
+                        bio = cachedUser.bio, birthDate = cachedUser.birthDate,
+                        skillLevel = cachedUser.skillLevel, age = cachedUser.age,
+                        badgeMetrics = cachedMetrics, isPremium = cachedUser.isPremium
+                    )
+                } else if (showLoading || _uiState.value !is ProfileState.Success) {
+                    _uiState.value = ProfileState.Loading
+                }
+            } catch (e: Exception) {
+                if (showLoading || _uiState.value !is ProfileState.Success) {
+                    _uiState.value = ProfileState.Loading
+                }
             }
+
             try {
                 // 1. Fetch the main profile data
                 val user = userRepository.getMyProfile()
@@ -71,7 +89,7 @@ class ProfileViewModel(
                     userRepository.getBadgeMetrics()
                 } catch (e: Exception) {
                     e.printStackTrace()
-                    null // Fallback to null if the network request fails
+                    tokenStorage.getBadgeMetrics() // Fallback to local badge cache if network fails
                 }
 
                 // 3. Update the UI state with BOTH profile and badge data
