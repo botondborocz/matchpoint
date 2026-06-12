@@ -39,6 +39,7 @@ sealed class ChatEvent {
     data class Message(val message: MessageDto) : ChatEvent()
     data class Reaction(val messageId: String, val userId: String, val emoji: String) : ChatEvent()
     data class RemoveReaction(val messageId: String, val userId: String) : ChatEvent()
+    data class Read(val readerId: String) : ChatEvent()
 }
 
 interface ChatRepository {
@@ -207,7 +208,21 @@ class ChatRepositoryImpl (
                             } catch (e: Exception) { e.printStackTrace() }
 
                             emit(ChatEvent.RemoveReaction(msgId, userId))
+                        } else if (type == "read") {
+                            val readerId = jsonElement["readerId"]!!.jsonPrimitive.content
+                            
+                            // Update local cache: mark messages sent by others (not readerId) as READ
+                            try {
+                                val currentCached = chatDatabase.getMessages(connectionId)
+                                val updated = currentCached.map { msg ->
+                                    if (msg.senderId != readerId && msg.status != MessageStatus.READ) {
+                                        msg.copy(status = MessageStatus.READ)
+                                    } else msg
+                                }
+                                chatDatabase.saveMessages(connectionId, updated)
+                            } catch (e: Exception) { e.printStackTrace() }
 
+                            emit(ChatEvent.Read(readerId))
                         } else {
                             // It's a standard message! Decode it safely.
                             val message = jsonParser.decodeFromString<MessageDto>(text)

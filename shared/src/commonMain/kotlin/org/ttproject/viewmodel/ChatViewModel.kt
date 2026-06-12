@@ -76,7 +76,12 @@ class ChatViewModel(
                         // Standard message: Add it to the top of the list
                         _messages.update { currentList ->
                             currentList + event.message
-                        }                    }
+                        }
+                        // If the message is NOT from me, we are actively viewing the screen, so it is read!
+                        if (event.message.senderId != tokenStorage.getUserId()) {
+                            markMessagesAsRead()
+                        }
+                    }
                     is ChatEvent.Reaction -> {
                         _messages.update { currentList ->
                             currentList.map { msg ->
@@ -99,6 +104,15 @@ class ChatViewModel(
                                     // Filter out the user's reaction
                                     val updatedReactions = msg.reactions.filter { it.userId != event.userId }
                                     msg.copy(reactions = updatedReactions)
+                                } else msg
+                            }
+                        }
+                    }
+                    is ChatEvent.Read -> {
+                        _messages.update { currentList ->
+                            currentList.map { msg ->
+                                if (msg.senderId != event.readerId && msg.status != MessageStatus.READ) {
+                                    msg.copy(status = MessageStatus.READ)
                                 } else msg
                             }
                         }
