@@ -118,6 +118,7 @@ class MatchViewModel(
             if (isMatch) {
                 _matchedPlayer.value = player
             }
+            NotificationEventBus.triggerRefresh()
         }
     }
 

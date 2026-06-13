@@ -493,6 +493,7 @@ fun ChatDetailScreen(
 
     var messageText by remember { mutableStateOf(TextFieldValue("")) }
     var forceShowIcons by remember { mutableStateOf(false) }
+    var selectedMediaBytes by remember { mutableStateOf<List<ByteArray>>(emptyList()) }
 
     LaunchedEffect(messageText) {
 
@@ -542,8 +543,7 @@ fun ChatDetailScreen(
             scope.launch {
                 val byteArrays = files.mapNotNull { it.readBytes() }
                 if (byteArrays.isNotEmpty()) {
-                    viewModel.sendImagesMessage(chatId, byteArrays, replyingToMessageId)
-                    replyingToMessageId = null
+                    selectedMediaBytes = selectedMediaBytes + byteArrays
                 }
             }
         }
@@ -756,6 +756,7 @@ fun ChatDetailScreen(
                                 isOlderSame = visuallyConnectToOlder,
                                 isNewerSame = visuallyConnectToNewer,
                                 isSelected = isSelected,
+                                isLastMessage = (index == 0), // 👈 PASS
                                 repliedText = repliedText,
                                 repliedSender = repliedSender,
                                 reactions = msg.reactions,
@@ -1051,6 +1052,99 @@ fun ChatDetailScreen(
                     }
                 }
 
+                AnimatedVisibility(
+                    visible = selectedMediaBytes.isNotEmpty(),
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                    ) {
+                        androidx.compose.foundation.lazy.LazyRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 12.dp, end = 48.dp, bottom = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            itemsIndexed(selectedMediaBytes) { index, bytes ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(60.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color.Black.copy(alpha = 0.05f))
+                                ) {
+                                    val isVideo = bytes.size > 8 &&
+                                            bytes[4].toInt().toChar() == 'f' &&
+                                            bytes[5].toInt().toChar() == 't' &&
+                                            bytes[6].toInt().toChar() == 'y' &&
+                                            bytes[7].toInt().toChar() == 'p'
+
+                                    if (isVideo) {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(Res.drawable.video),
+                                                contentDescription = "Video Preview",
+                                                tint = currentTheme.myBubbleColor,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                    } else {
+                                        AsyncImage(
+                                            model = bytes,
+                                            contentDescription = "Image Preview",
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    }
+
+                                    // Remove individual item button
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(4.dp)
+                                            .size(18.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.Black.copy(alpha = 0.6f))
+                                            .clickable {
+                                                selectedMediaBytes = selectedMediaBytes.filterIndexed { idx, _ -> idx != index }
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Remove item",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Clear all button on the right
+                        IconButton(
+                            onClick = { selectedMediaBytes = emptyList() },
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 8.dp)
+                                .size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Clear All",
+                                tint = AppColors.TextGray,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1165,24 +1259,31 @@ fun ChatDetailScreen(
                             }
                         )
 
-                        val hasText = messageText.text.isNotBlank()
+                        val hasSendableContent = messageText.text.isNotBlank() || selectedMediaBytes.isNotEmpty()
                         Box(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(CircleShape)
                                 .background(currentTheme.myBubbleColor)
                                 .clickable {
-                                    if (hasText) {
-                                        viewModel.sendMessage(messageText.text, replyingToMessageId)
-                                        messageText = TextFieldValue("")
-                                        replyingToMessageId = null
+                                    if (hasSendableContent) {
+                                        if (selectedMediaBytes.isNotEmpty()) {
+                                            viewModel.sendImagesMessage(chatId, selectedMediaBytes, replyingToMessageId)
+                                            selectedMediaBytes = emptyList()
+                                            replyingToMessageId = null
+                                        }
+                                        if (messageText.text.isNotBlank()) {
+                                            viewModel.sendMessage(messageText.text, replyingToMessageId)
+                                            messageText = TextFieldValue("")
+                                            replyingToMessageId = null
+                                        }
                                     } else {
                                         voiceRecorder.startRecording { isRecordingVoice = true }
                                     }
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            if (hasText) {
+                            if (hasSendableContent) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.Send,
                                     contentDescription = "Send",
@@ -1576,7 +1677,7 @@ fun AnimatedMessageBubble(
     text: String,
     isMe: Boolean,
     time: String,
-    status: MessageStatus = MessageStatus.SENT,
+    status: MessageStatus? = MessageStatus.SENT,
     playAnimation: Boolean,
     showTimeHeader: Boolean,
     isOlderSame: Boolean,
@@ -1592,6 +1693,7 @@ fun AnimatedMessageBubble(
     audioPlayer: AudioPlayer,
     onVoiceClick: (String) -> Unit,
     isHighlighted: Boolean,
+    isLastMessage: Boolean = false, // 👈 ADDED
     onQuoteClick: () -> Unit,
     onClick: () -> Unit,
     onImageClick: (Int, List<String>) -> Unit,
@@ -1601,6 +1703,9 @@ fun AnimatedMessageBubble(
     onLongPressEnd: (Boolean) -> Unit,
     onSwipeToReply: () -> Unit
 ) {
+    val recentPattern = stringResource(SharedRes.string.message_date_format_recent)
+    val olderPattern = stringResource(SharedRes.string.message_date_format_older)
+
     // 👇 2. Remove the 'hasAnimated' rememberSaveable entirely.
     // Instead, strictly obey the parent's command using Animatable.
     val alphaAnim = remember { androidx.compose.animation.core.Animatable(if (playAnimation) 0.01f else 1f) }
@@ -1685,7 +1790,7 @@ fun AnimatedMessageBubble(
         // --- THE CENTERED TIMESTAMP ---
         if (showTimeHeader) {
             Text(
-                text = formatMessageTime(time),
+                text = formatMessageTime(time, recentPattern, olderPattern),
                 color = AppColors.TextGray,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
@@ -1700,7 +1805,7 @@ fun AnimatedMessageBubble(
                 exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top)
             ) {
                 Text(
-                    text = formatMessageTime(time),
+                    text = formatMessageTime(time, recentPattern, olderPattern),
                     color = AppColors.TextGray,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
@@ -1763,6 +1868,7 @@ fun AnimatedMessageBubble(
                 isOlderSame = isOlderSame,
                 isNewerSame = isNewerSame,
                 isSelected = isSelected,
+                isLastMessage = isLastMessage, // 👈 PASS
                 repliedText = repliedText,
                 repliedSender = repliedSender,
                 reactions = reactions,
@@ -1832,6 +1938,7 @@ fun ChatBubble(
     isOlderSame: Boolean,
     isNewerSame: Boolean,
     isSelected: Boolean,
+    isLastMessage: Boolean = false, // 👈 ADDED
     // 👇 Accept the new parameters
     repliedText: String?,
     repliedSender: String?,
@@ -1842,7 +1949,7 @@ fun ChatBubble(
     isAudioPlaying: Boolean,           // 👈 NEW
     audioPlayer: AudioPlayer,
     onVoiceClick: (String) -> Unit,
-    status: MessageStatus = MessageStatus.SENT,
+    status: MessageStatus? = MessageStatus.SENT,
     modifier: Modifier = Modifier,
     onQuoteClick: () -> Unit,
     onClick: () -> Unit,
@@ -1911,6 +2018,7 @@ fun ChatBubble(
                 Column(
                     modifier = Modifier
                         .maxWidthPercent(0.80f) // 👈 KMP SAFE AND BLAZING FAST
+                        .animateContentSize()
                         .onGloballyPositioned { coordinates ->
                             bubbleBounds = coordinates.boundsInRoot()
                         }
@@ -2024,18 +2132,13 @@ fun ChatBubble(
                                 themeColor = if (isMe) Color.White else myBubbleColor,
                                 onPlayToggle = { url -> onVoiceClick(url) }
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Row(
-                                modifier = Modifier.align(Alignment.End),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = formatMessageTime(time),
-                                    color = if (isMe) Color.White.copy(alpha = 0.6f) else AppColors.TextGray.copy(alpha = 0.8f),
-                                    fontSize = 10.sp
-                                )
-                                if (isMe) {
+                            if (isMe && (isLastMessage || isSelected)) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Row(
+                                    modifier = Modifier.align(Alignment.End),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
                                     MessageStatusIndicator(status)
                                 }
                             }
@@ -2156,23 +2259,32 @@ fun ChatBubble(
                                 if (isSelected) {
                                     Box(modifier = Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.4f)))
                                 }
+                                if (status == MessageStatus.PENDING) {
+                                    Box(
+                                        modifier = Modifier
+                                            .matchParentSize()
+                                            .background(Color.Black.copy(alpha = 0.4f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator(
+                                            color = Color.White,
+                                            modifier = Modifier.size(36.dp),
+                                            strokeWidth = 3.dp
+                                        )
+                                    }
+                                }
                             }
-                            // Overlay timestamp and ticks!
-                            Row(
-                                modifier = Modifier
-                                    .padding(6.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color.Black.copy(alpha = 0.5f))
-                                    .padding(horizontal = 6.dp, vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = formatMessageTime(time),
-                                    color = Color.White.copy(alpha = 0.9f),
-                                    fontSize = 10.sp
-                                )
-                                if (isMe) {
+                            // Overlay ticks!
+                            if (isMe && (isLastMessage || isSelected)) {
+                                Row(
+                                    modifier = Modifier
+                                        .padding(6.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color.Black.copy(alpha = 0.5f))
+                                        .padding(horizontal = 6.dp, vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
                                     MessageStatusIndicator(status)
                                 }
                             }
@@ -2181,18 +2293,13 @@ fun ChatBubble(
                         // Text message
                         Column {
                             Text(text = text, color = if (isMe) Color.White else AppColors.TextPrimary, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Row(
-                                modifier = Modifier.align(Alignment.End),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = formatMessageTime(time),
-                                    color = if (isMe) Color.White.copy(alpha = 0.6f) else AppColors.TextGray.copy(alpha = 0.8f),
-                                    fontSize = 10.sp
-                                )
-                                if (isMe) {
+                            if (isMe && (isLastMessage || isSelected)) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Row(
+                                    modifier = Modifier.align(Alignment.End),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
                                     MessageStatusIndicator(status)
                                 }
                             }
@@ -2272,6 +2379,8 @@ fun ChatBubble(
 
 @Composable
 fun ChatListItem(thread: ChatThreadDto, onClick: () -> Unit) {
+    val recentPattern = stringResource(SharedRes.string.message_date_format_recent)
+    val olderPattern = stringResource(SharedRes.string.message_date_format_older)
     Surface(
         color = Color.Transparent,
         modifier = Modifier.fillMaxWidth().clickable { onClick() }
@@ -2323,7 +2432,7 @@ fun ChatListItem(thread: ChatThreadDto, onClick: () -> Unit) {
                     Text(thread.otherUserName, color = AppColors.TextPrimary, fontWeight = if (thread.unreadCount > 0) FontWeight.Bold else FontWeight.Medium, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = formatMessageTime(thread.timestamp),
+                        text = formatMessageTime(thread.timestamp, recentPattern, olderPattern),
                         color = if (thread.unreadCount > 0) AppColors.AccentOrange else AppColors.TextGray,
                         fontSize = 12.sp,
                         fontWeight = if (thread.unreadCount > 0) FontWeight.Bold else FontWeight.Normal
@@ -2853,8 +2962,9 @@ fun Modifier.maxWidthPercent(percent: Float) = this.layout { measurable, constra
 }
 
 @Composable
-fun MessageStatusIndicator(status: MessageStatus) {
-    when (status) {
+fun MessageStatusIndicator(status: MessageStatus?) {
+    val resolvedStatus = status ?: MessageStatus.SENT
+    when (resolvedStatus) {
         MessageStatus.PENDING -> {
             Box(
                 modifier = Modifier

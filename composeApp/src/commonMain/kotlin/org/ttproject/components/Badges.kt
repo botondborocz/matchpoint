@@ -36,75 +36,143 @@ import org.ttproject.data.BadgeData
 import org.ttproject.data.BadgeTierDefinition
 import org.ttproject.data.UserBadgeMetricsDto
 import kotlin.math.sqrt
+import org.jetbrains.compose.resources.stringResource
+import org.ttproject.shared.resources.badge_desc_addedTables
+import org.ttproject.shared.resources.badge_desc_currentStreak
+import org.ttproject.shared.resources.badge_desc_invitedFriends
+import org.ttproject.shared.resources.badge_desc_profileSwipes
+import org.ttproject.shared.resources.badge_desc_sentMessages
+import org.ttproject.shared.resources.badge_desc_successfulMatches
+import org.ttproject.shared.resources.badge_desc_uploadedPhotos
+import org.ttproject.shared.resources.badge_desc_writtenReviews
+import org.ttproject.shared.resources.badge_levelup_dismiss
+import org.ttproject.shared.resources.badge_name_addedTables
+import org.ttproject.shared.resources.badge_name_currentStreak
+import org.ttproject.shared.resources.badge_name_invitedFriends
+import org.ttproject.shared.resources.badge_name_profileSwipes
+import org.ttproject.shared.resources.badge_name_sentMessages
+import org.ttproject.shared.resources.badge_name_successfulMatches
+import org.ttproject.shared.resources.badge_name_uploadedPhotos
+import org.ttproject.shared.resources.badge_name_writtenReviews
+import org.ttproject.shared.resources.badge_unit_addedTables
+import org.ttproject.shared.resources.badge_unit_currentStreak
+import org.ttproject.shared.resources.badge_unit_invitedFriends
+import org.ttproject.shared.resources.badge_unit_profileSwipes
+import org.ttproject.shared.resources.badge_unit_sentMessages
+import org.ttproject.shared.resources.badge_unit_successfulMatches
+import org.ttproject.shared.resources.badge_unit_uploadedPhotos
+import org.ttproject.shared.resources.badge_unit_writtenReviews
+import org.ttproject.shared.resources.badges_title
+import org.ttproject.shared.resources.tier_1
+import org.ttproject.shared.resources.tier_2
+import org.ttproject.shared.resources.tier_3
+import org.ttproject.shared.resources.tier_4
+import org.ttproject.shared.resources.Res as SharedRes
 
 
+@Composable
 fun mapMetricsToBadges(metrics: UserBadgeMetricsDto?): List<BadgeData> {
     val safeMetrics = metrics ?: UserBadgeMetricsDto()
 
     return listOf(
         BadgeData(
-            "Asztalfelderítő", "Új pingpong asztalok és edzőtermek sikeres hozzáadása a közösségi térképhez.",
+            stringResource(SharedRes.string.badge_name_addedTables),
+            stringResource(SharedRes.string.badge_desc_addedTables),
             Icons.Default.Place, safeMetrics.addedTables, listOf(
-                BadgeTierDefinition(1, "asztal"), BadgeTierDefinition(5, "asztal"), BadgeTierDefinition(15, "asztal"), BadgeTierDefinition(50, "asztal")
+                BadgeTierDefinition(1, stringResource(SharedRes.string.badge_unit_addedTables)),
+                BadgeTierDefinition(5, stringResource(SharedRes.string.badge_unit_addedTables)),
+                BadgeTierDefinition(15, stringResource(SharedRes.string.badge_unit_addedTables)),
+                BadgeTierDefinition(50, stringResource(SharedRes.string.badge_unit_addedTables))
             )),
         BadgeData(
-            "Helyszínelő", "Saját fotók feltöltése a térképen szereplő asztalokhoz, hogy mások is lássák a minőséget.",
+            stringResource(SharedRes.string.badge_name_uploadedPhotos),
+            stringResource(SharedRes.string.badge_desc_uploadedPhotos),
             Icons.Default.CameraAlt, safeMetrics.uploadedPhotos, listOf(
-                BadgeTierDefinition(1, "fotó"), BadgeTierDefinition(10, "fotó"), BadgeTierDefinition(50, "fotó"), BadgeTierDefinition(150, "fotó")
+                BadgeTierDefinition(1, stringResource(SharedRes.string.badge_unit_uploadedPhotos)),
+                BadgeTierDefinition(10, stringResource(SharedRes.string.badge_unit_uploadedPhotos)),
+                BadgeTierDefinition(50, stringResource(SharedRes.string.badge_unit_uploadedPhotos)),
+                BadgeTierDefinition(150, stringResource(SharedRes.string.badge_unit_uploadedPhotos))
             )),
         BadgeData(
-            "Helyi Szakértő", "Szöveges értékelések és vélemények írása az alkalmazásban található helyszínekről.",
+            stringResource(SharedRes.string.badge_name_writtenReviews),
+            stringResource(SharedRes.string.badge_desc_writtenReviews),
             Icons.Default.RateReview, safeMetrics.writtenReviews, listOf(
-                BadgeTierDefinition(1, "értékelés"), BadgeTierDefinition(5, "értékelés"), BadgeTierDefinition(20, "értékelés"), BadgeTierDefinition(50, "értékelés")
+                BadgeTierDefinition(1, stringResource(SharedRes.string.badge_unit_writtenReviews)),
+                BadgeTierDefinition(5, stringResource(SharedRes.string.badge_unit_writtenReviews)),
+                BadgeTierDefinition(20, stringResource(SharedRes.string.badge_unit_writtenReviews)),
+                BadgeTierDefinition(50, stringResource(SharedRes.string.badge_unit_writtenReviews))
             )),
         BadgeData(
-            "Jégtörő", "Sikeres 'Match' (párba állás) létrejötte más játékosokkal a környékeden.",
+            stringResource(SharedRes.string.badge_name_successfulMatches),
+            stringResource(SharedRes.string.badge_desc_successfulMatches),
             Icons.Default.Bolt, safeMetrics.successfulMatches, listOf(
-                BadgeTierDefinition(1, "Match"), BadgeTierDefinition(10, "Match"), BadgeTierDefinition(50, "Match"), BadgeTierDefinition(200, "Match")
+                BadgeTierDefinition(1, stringResource(SharedRes.string.badge_unit_successfulMatches)),
+                BadgeTierDefinition(10, stringResource(SharedRes.string.badge_unit_successfulMatches)),
+                BadgeTierDefinition(50, stringResource(SharedRes.string.badge_unit_successfulMatches)),
+                BadgeTierDefinition(200, stringResource(SharedRes.string.badge_unit_successfulMatches))
             )),
         BadgeData(
-            "Hálózatépítő", "Elküldött chat üzenetek száma. Építsd a közösséget és szervezz meccseket!",
+            stringResource(SharedRes.string.badge_name_sentMessages),
+            stringResource(SharedRes.string.badge_desc_sentMessages),
             Icons.Default.Message, safeMetrics.sentMessages, listOf(
-                BadgeTierDefinition(10, "üzenet"), BadgeTierDefinition(100, "üzenet"), BadgeTierDefinition(500, "üzenet"), BadgeTierDefinition(2000, "üzenet")
+                BadgeTierDefinition(10, stringResource(SharedRes.string.badge_unit_sentMessages)),
+                BadgeTierDefinition(100, stringResource(SharedRes.string.badge_unit_sentMessages)),
+                BadgeTierDefinition(500, stringResource(SharedRes.string.badge_unit_sentMessages)),
+                BadgeTierDefinition(2000, stringResource(SharedRes.string.badge_unit_sentMessages))
             )),
         BadgeData(
-            "Radar", "Játékoskártyák értékelése. Minden jobbra vagy balra húzás számít!",
+            stringResource(SharedRes.string.badge_name_profileSwipes),
+            stringResource(SharedRes.string.badge_desc_profileSwipes),
             Icons.Default.Radar, safeMetrics.profileSwipes, listOf(
-                BadgeTierDefinition(50, "húzás"), BadgeTierDefinition(500, "húzás"), BadgeTierDefinition(2000, "húzás"), BadgeTierDefinition(10000, "húzás")
+                BadgeTierDefinition(50, stringResource(SharedRes.string.badge_unit_profileSwipes)),
+                BadgeTierDefinition(500, stringResource(SharedRes.string.badge_unit_profileSwipes)),
+                BadgeTierDefinition(2000, stringResource(SharedRes.string.badge_unit_profileSwipes)),
+                BadgeTierDefinition(10000, stringResource(SharedRes.string.badge_unit_profileSwipes))
             )),
-//        BadgeData(
-//            "Okos Vágó", "Az AI által sikeresen megvágott és kielemezett edzésvideóid száma.",
-//            Icons.Default.ContentCut, safeMetrics.trimmedVideos, listOf(
-//                BadgeTierDefinition(1, "videó"), BadgeTierDefinition(10, "videó"), BadgeTierDefinition(50, "videó"), BadgeTierDefinition(200, "videó")
-//            )),
-//        BadgeData(
-//            "Kíváncsi Elme", "Az AI edzőnek feltett szakmai kérdések és indított beszélgetések száma.",
-//            Icons.Default.Psychology, safeMetrics.aiQuestions, listOf(
-//                BadgeTierDefinition(3, "kérdés"), BadgeTierDefinition(20, "kérdés"), BadgeTierDefinition(100, "kérdés"), BadgeTierDefinition(500, "kérdés")
-//            )),
         BadgeData(
-            "Vasakarat", "Egymást követő napok száma (Streak), amikor megnyitottad és használtad az alkalmazást.",
+            stringResource(SharedRes.string.badge_name_currentStreak),
+            stringResource(SharedRes.string.badge_desc_currentStreak),
             Icons.Default.LocalFireDepartment, safeMetrics.currentStreak, listOf(
-                BadgeTierDefinition(3, "nap"), BadgeTierDefinition(7, "nap"), BadgeTierDefinition(30, "nap"), BadgeTierDefinition(100, "nap")
+                BadgeTierDefinition(3, stringResource(SharedRes.string.badge_unit_currentStreak)),
+                BadgeTierDefinition(7, stringResource(SharedRes.string.badge_unit_currentStreak)),
+                BadgeTierDefinition(30, stringResource(SharedRes.string.badge_unit_currentStreak)),
+                BadgeTierDefinition(100, stringResource(SharedRes.string.badge_unit_currentStreak))
             )),
         BadgeData(
-            "Nagykövet", "Saját meghívó kódoddal regisztrált új játékosok száma. Hívd meg a barátaidat!",
+            stringResource(SharedRes.string.badge_name_invitedFriends),
+            stringResource(SharedRes.string.badge_desc_invitedFriends),
             Icons.Default.Campaign, safeMetrics.invitedFriends, listOf(
-                BadgeTierDefinition(1, "barát"), BadgeTierDefinition(5, "barát"), BadgeTierDefinition(15, "barát"), BadgeTierDefinition(50, "barát")
+                BadgeTierDefinition(1, stringResource(SharedRes.string.badge_unit_invitedFriends)),
+                BadgeTierDefinition(5, stringResource(SharedRes.string.badge_unit_invitedFriends)),
+                BadgeTierDefinition(15, stringResource(SharedRes.string.badge_unit_invitedFriends)),
+                BadgeTierDefinition(50, stringResource(SharedRes.string.badge_unit_invitedFriends))
             ))
     )
 }
 
 
-// Prefixek a popup soraihoz
+@Composable
 fun getTierPrefix(levelIndex: Int): String {
-    return when (levelIndex) {
-        0 -> "Kezdő"
-        1 -> "Haladó"
-        2 -> "Profi"
-        3 -> "Legenda"
+    val resId = when (levelIndex) {
+        0 -> SharedRes.string.tier_1
+        1 -> SharedRes.string.tier_2
+        2 -> SharedRes.string.tier_3
+        3 -> SharedRes.string.tier_4
+        else -> null
+    }
+    return resId?.let { stringResource(it) } ?: ""
+}
+
+@Composable
+fun getLocalizedFullName(badge: BadgeData): String {
+    val prefix = when (badge.currentLevel) {
+        1 -> stringResource(SharedRes.string.tier_1)
+        2 -> stringResource(SharedRes.string.tier_2)
+        3 -> stringResource(SharedRes.string.tier_3)
+        4 -> stringResource(SharedRes.string.tier_4)
         else -> ""
     }
+    return if (prefix.isEmpty()) badge.baseName else "$prefix ${badge.baseName}"
 }
 
 // Helpler function to get the correct color based on level status
@@ -242,7 +310,7 @@ fun SharedTransitionScope.BadgesSection(
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Default.MilitaryTech, contentDescription = null, tint = AppColors.TextGray, modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("KITŰZŐK", color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(SharedRes.string.badges_title), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -311,7 +379,7 @@ fun SharedTransitionScope.BadgeDetailsOverlay(
 
             // Dinamikus Teljes Név
             Text(
-                text = badge.fullName,
+                text = getLocalizedFullName(badge),
                 color = AppColors.TextPrimary,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -407,7 +475,7 @@ fun SharedTransitionScope.BadgeDetailsOverlay(
                     // Szöveg
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = tierName.uppercase(),
+                            text = tierName,
                             color = rowColor,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
@@ -435,7 +503,7 @@ fun SharedTransitionScope.BadgeDetailsOverlay(
                 colors = ButtonDefaults.buttonColors(containerColor = AppColors.AccentOrange),
                 modifier = Modifier.fillMaxWidth(0.6f)
             ) {
-                Text("Király!", color = Color.White, fontWeight = FontWeight.Bold)
+                Text(stringResource(SharedRes.string.badge_levelup_dismiss), color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
     }

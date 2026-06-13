@@ -131,7 +131,7 @@ fun Application.module() {
     routing {
         authRoutes()
         userRoutes(badgeService)
-        locationRoutes()
+        locationRoutes(badgeService)
         messageRoutes(badgeService)
         badgeRouting(badgeService)
 

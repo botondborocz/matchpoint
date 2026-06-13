@@ -134,6 +134,12 @@ class UserRepositoryImpl(
         // Save locally first so the UI updates instantly
         tokenStorage.saveLanguage(language)
         
+        // Also update the cached user profile's language field so subsequent cache reads are consistent
+        val cachedProfile = tokenStorage.getUserProfile()
+        if (cachedProfile != null) {
+            tokenStorage.saveUserProfile(cachedProfile.copy(preferredLanguage = language))
+        }
+
         return try {
             val response = httpClient.put("${SERVER_IP}/api/users/language") {
                 contentType(ContentType.Application.Json)

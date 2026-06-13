@@ -23,7 +23,7 @@ data class MessageDto(
     val createdAt: String,
     val replyToMessageId: String? = null,
     val reactions: List<ReactionDto> = emptyList(),
-    val status: MessageStatus = MessageStatus.SENT
+    val status: MessageStatus? = MessageStatus.SENT
 )
 
 @Serializable

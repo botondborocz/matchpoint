@@ -34,6 +34,10 @@ import org.ttproject.database.PendingMessage
 import org.ttproject.util.ConnectivityChecker
 import org.ttproject.data.MessageStatus
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 sealed class ChatEvent {
     data class Message(val message: MessageDto) : ChatEvent()
@@ -82,6 +86,7 @@ class ChatRepositoryImpl (
     // Memory cache of pending media byte-arrays mapped to temporary IDs
     private val pendingMediaMap = mutableMapOf<String, List<ByteArray>>()
     private val syncScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default + kotlinx.coroutines.SupervisorJob())
+    private val syncMutex = Mutex()
 
     init {
         // Populate the pending media map on startup so that Coil can display pending media picked in a previous offline session
@@ -143,107 +148,118 @@ class ChatRepositoryImpl (
     }
 
     // 2. Open WebSocket and return a stream (Flow) of incoming messages
-    // 2. Open WebSocket and return a stream (Flow) of incoming messages
     override fun observeLiveMessages(connectionId: String): Flow<ChatEvent> = flow {
-        val token = tokenStorage.getToken() ?: throw Exception("No auth token found")
-        // 👇 A lenient parser prevents crashes if the server adds new fields later
+        // A lenient parser prevents crashes if the server adds new fields later
         val jsonParser = Json { ignoreUnknownKeys = true }
 
-        try {
-            client.webSocket(
-                urlString = "wss://${SERVER_DNS}/api/connections/$connectionId/chat",
-                request = {
-                    header(HttpHeaders.Authorization, "Bearer $token")
-                }
-            ) {
-                webSocketSession = this
+        while (true) {
+            val token = tokenStorage.getToken()
+            if (token == null) {
+                // No auth token, wait and try again
+                kotlinx.coroutines.delay(3000)
+                continue
+            }
 
-                while (true) {
-                    val frame = incoming.receive()
-                    if (frame is Frame.Text) {
-                        val text = frame.readText()
+            try {
+                client.webSocket(
+                    urlString = "wss://${SERVER_DNS}/api/connections/$connectionId/chat",
+                    request = {
+                        header(HttpHeaders.Authorization, "Bearer $token")
+                    }
+                ) {
+                    webSocketSession = this
 
-                        // 👇 Peek at the JSON to see what type of event it is!
-                        val jsonElement = Json.parseToJsonElement(text).jsonObject
-                        val type = jsonElement["type"]?.jsonPrimitive?.content
+                    while (true) {
+                        val frame = incoming.receive()
+                        if (frame is Frame.Text) {
+                            val text = frame.readText()
 
-                        if (type == "reaction") {
-                            // 👇 Extract the userId alongside msgId and emoji!
-                            val msgId = jsonElement["messageId"]!!.jsonPrimitive.content
-                            val userId = jsonElement["userId"]!!.jsonPrimitive.content
-                            val emoji = jsonElement["emoji"]!!.jsonPrimitive.content
+                            // Peek at the JSON to see what type of event it is!
+                            val jsonElement = Json.parseToJsonElement(text).jsonObject
+                            val type = jsonElement["type"]?.jsonPrimitive?.content
 
-                            // Save reaction in local cache
-                            try {
-                                val currentCached = chatDatabase.getMessages(connectionId)
-                                val updated = currentCached.map { msg ->
-                                    if (msg.id == msgId) {
-                                        val updatedReactions = msg.reactions
-                                            .filter { it.userId != userId }
-                                            .toMutableList()
-                                            .apply { add(org.ttproject.data.ReactionDto(userId, emoji)) }
-                                        msg.copy(reactions = updatedReactions)
-                                    } else msg
-                                }
-                                chatDatabase.saveMessages(connectionId, updated)
-                            } catch (e: Exception) { e.printStackTrace() }
+                            if (type == "reaction") {
+                                // Extract the userId alongside msgId and emoji!
+                                val msgId = jsonElement["messageId"]!!.jsonPrimitive.content
+                                val userId = jsonElement["userId"]!!.jsonPrimitive.content
+                                val emoji = jsonElement["emoji"]!!.jsonPrimitive.content
 
-                            emit(ChatEvent.Reaction(msgId, userId, emoji))
+                                // Save reaction in local cache
+                                try {
+                                    val currentCached = chatDatabase.getMessages(connectionId)
+                                    val updated = currentCached.map { msg ->
+                                        if (msg.id == msgId) {
+                                            val updatedReactions = msg.reactions
+                                                .filter { it.userId != userId }
+                                                .toMutableList()
+                                                .apply { add(org.ttproject.data.ReactionDto(userId, emoji)) }
+                                            msg.copy(reactions = updatedReactions)
+                                        } else msg
+                                    }
+                                    chatDatabase.saveMessages(connectionId, updated)
+                                } catch (e: Exception) { e.printStackTrace() }
 
-                        } else if (type == "remove_reaction") {
-                            // 👇 Extract the userId here too!
-                            val msgId = jsonElement["messageId"]!!.jsonPrimitive.content
-                            val userId = jsonElement["userId"]!!.jsonPrimitive.content
+                                emit(ChatEvent.Reaction(msgId, userId, emoji))
 
-                            // Remove reaction from local cache
-                            try {
-                                val currentCached = chatDatabase.getMessages(connectionId)
-                                val updated = currentCached.map { msg ->
-                                    if (msg.id == msgId) {
-                                        val updatedReactions = msg.reactions.filter { it.userId != userId }
-                                        msg.copy(reactions = updatedReactions)
-                                    } else msg
-                                }
-                                chatDatabase.saveMessages(connectionId, updated)
-                            } catch (e: Exception) { e.printStackTrace() }
+                            } else if (type == "remove_reaction") {
+                                // Extract the userId here too!
+                                val msgId = jsonElement["messageId"]!!.jsonPrimitive.content
+                                val userId = jsonElement["userId"]!!.jsonPrimitive.content
 
-                            emit(ChatEvent.RemoveReaction(msgId, userId))
-                        } else if (type == "read") {
-                            val readerId = jsonElement["readerId"]!!.jsonPrimitive.content
-                            
-                            // Update local cache: mark messages sent by others (not readerId) as READ
-                            try {
-                                val currentCached = chatDatabase.getMessages(connectionId)
-                                val updated = currentCached.map { msg ->
-                                    if (msg.senderId != readerId && msg.status != MessageStatus.READ) {
-                                        msg.copy(status = MessageStatus.READ)
-                                    } else msg
-                                }
-                                chatDatabase.saveMessages(connectionId, updated)
-                            } catch (e: Exception) { e.printStackTrace() }
+                                // Remove reaction from local cache
+                                try {
+                                    val currentCached = chatDatabase.getMessages(connectionId)
+                                    val updated = currentCached.map { msg ->
+                                        if (msg.id == msgId) {
+                                            val updatedReactions = msg.reactions.filter { it.userId != userId }
+                                            msg.copy(reactions = updatedReactions)
+                                        } else msg
+                                    }
+                                    chatDatabase.saveMessages(connectionId, updated)
+                                } catch (e: Exception) { e.printStackTrace() }
 
-                            emit(ChatEvent.Read(readerId))
-                        } else {
-                            // It's a standard message! Decode it safely.
-                            val message = jsonParser.decodeFromString<MessageDto>(text)
+                                emit(ChatEvent.RemoveReaction(msgId, userId))
+                            } else if (type == "read") {
+                                val readerId = jsonElement["readerId"]!!.jsonPrimitive.content
+                                
+                                // Update local cache: mark messages sent by others (not readerId) as READ
+                                try {
+                                    val currentCached = chatDatabase.getMessages(connectionId)
+                                    val updated = currentCached.map { msg ->
+                                        if (msg.senderId != readerId && msg.status != MessageStatus.READ) {
+                                            msg.copy(status = MessageStatus.READ)
+                                        } else msg
+                                    }
+                                    chatDatabase.saveMessages(connectionId, updated)
+                                } catch (e: Exception) { e.printStackTrace() }
 
-                            // Save to local cache in background
-                            try {
-                                val currentCached = chatDatabase.getMessages(connectionId)
-                                if (!currentCached.any { it.id == message.id }) {
-                                    chatDatabase.saveMessages(connectionId, currentCached + message)
-                                }
-                            } catch (e: Exception) { e.printStackTrace() }
+                                emit(ChatEvent.Read(readerId))
+                            } else {
+                                // It's a standard message! Decode it safely.
+                                val message = jsonParser.decodeFromString<MessageDto>(text)
 
-                            emit(ChatEvent.Message(message))
+                                // Save to local cache in background
+                                try {
+                                    val currentCached = chatDatabase.getMessages(connectionId)
+                                    if (!currentCached.any { it.id == message.id }) {
+                                        chatDatabase.saveMessages(connectionId, currentCached + message)
+                                    }
+                                } catch (e: Exception) { e.printStackTrace() }
+
+                                emit(ChatEvent.Message(message))
+                            }
                         }
                     }
                 }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                e.printStackTrace()
+            } finally {
+                webSocketSession = null
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        } finally {
-            webSocketSession = null
+
+            // Connection lost/failed. Wait 3 seconds and retry.
+            kotlinx.coroutines.delay(3000)
         }
     }
 
@@ -422,7 +438,8 @@ class ChatRepositoryImpl (
     }
 
     override fun isConnected(): Boolean {
-        return connectivityChecker.isConnected()
+        val session = webSocketSession
+        return connectivityChecker.isConnected() && session != null && session.isActive
     }
 
     override fun getPendingMedia(url: String): ByteArray? {
@@ -473,123 +490,125 @@ class ChatRepositoryImpl (
 
     override fun triggerPendingSync() {
         syncScope.launch {
-            if (!isConnected()) return@launch
-            val pendingList = chatDatabase.getPendingMessages()
-            if (pendingList.isEmpty()) return@launch
+            syncMutex.withLock {
+                if (!isConnected()) return@withLock
+                val pendingList = chatDatabase.getPendingMessages()
+                if (pendingList.isEmpty()) return@withLock
 
-            val token = tokenStorage.getToken() ?: return@launch
-            val toRemove = mutableListOf<String>()
+                val token = tokenStorage.getToken() ?: return@withLock
+                val toRemove = mutableListOf<String>()
 
-            for (p in pendingList) {
-                try {
-                    when (p.mediaType) {
-                        "TEXT" -> {
-                            val payload = IncomingMessageDto(
-                                content = p.text,
-                                replyToMessageId = p.replyToId,
-                                type = "message"
-                            )
-                            val jsonString = Json.encodeToString(payload)
-                            client.webSocket(
-                                urlString = "wss://${SERVER_DNS}/api/connections/${p.connectionId}/chat",
-                                request = { header(HttpHeaders.Authorization, "Bearer $token") }
-                            ) {
-                                send(Frame.Text(jsonString))
-                            }
-                        }
-                        "IMAGE" -> {
-                            val bytesList = p.mediaBytes ?: emptyList()
-                            if (bytesList.isNotEmpty()) {
-                                val uploadResult = uploadChatImages(p.connectionId, bytesList)
-                                if (uploadResult.isSuccess) {
-                                    val urls = uploadResult.getOrThrow()
-                                    val tag = if (urls.size == 1) "[IMAGE]" else "[IMAGES]"
-                                    val joinedUrls = urls.joinToString(",")
-                                    val payload = IncomingMessageDto(
-                                        content = "$tag$joinedUrls",
-                                        replyToMessageId = p.replyToId,
-                                        type = "message"
-                                    )
-                                    val jsonString = Json.encodeToString(payload)
-                                    client.webSocket(
-                                        urlString = "wss://${SERVER_DNS}/api/connections/${p.connectionId}/chat",
-                                        request = { header(HttpHeaders.Authorization, "Bearer $token") }
-                                    ) {
-                                        send(Frame.Text(jsonString))
-                                    }
-                                } else {
-                                    throw Exception("Image upload failed during sync")
+                for (p in pendingList) {
+                    try {
+                        when (p.mediaType) {
+                            "TEXT" -> {
+                                val payload = IncomingMessageDto(
+                                    content = p.text,
+                                    replyToMessageId = p.replyToId,
+                                    type = "message"
+                                )
+                                val jsonString = Json.encodeToString(payload)
+                                client.webSocket(
+                                    urlString = "wss://${SERVER_DNS}/api/connections/${p.connectionId}/chat",
+                                    request = { header(HttpHeaders.Authorization, "Bearer $token") }
+                                ) {
+                                    send(Frame.Text(jsonString))
                                 }
                             }
-                        }
-                        "VIDEO" -> {
-                            val bytesList = p.mediaBytes ?: emptyList()
-                            if (bytesList.isNotEmpty()) {
-                                val uploadResult = uploadChatImages(p.connectionId, bytesList)
-                                if (uploadResult.isSuccess) {
-                                    val urls = uploadResult.getOrThrow()
-                                    val videoUrl = urls.find { it.contains(".mp4") } ?: ""
-                                    val thumbUrl = urls.find { it.contains(".jpg") || it.contains(".jpeg") } ?: ""
-                                    val payloadStr = if (thumbUrl.isNotBlank()) {
-                                        "[VIDEO]$thumbUrl,$videoUrl"
+                            "IMAGE" -> {
+                                val bytesList = p.mediaBytes ?: emptyList()
+                                if (bytesList.isNotEmpty()) {
+                                    val uploadResult = uploadChatImages(p.connectionId, bytesList)
+                                    if (uploadResult.isSuccess) {
+                                        val urls = uploadResult.getOrThrow()
+                                        val tag = if (urls.size == 1) "[IMAGE]" else "[IMAGES]"
+                                        val joinedUrls = urls.joinToString(",")
+                                        val payload = IncomingMessageDto(
+                                            content = "$tag$joinedUrls",
+                                            replyToMessageId = p.replyToId,
+                                            type = "message"
+                                        )
+                                        val jsonString = Json.encodeToString(payload)
+                                        client.webSocket(
+                                            urlString = "wss://${SERVER_DNS}/api/connections/${p.connectionId}/chat",
+                                            request = { header(HttpHeaders.Authorization, "Bearer $token") }
+                                        ) {
+                                            send(Frame.Text(jsonString))
+                                        }
                                     } else {
-                                        "[VIDEO]$videoUrl"
+                                        throw Exception("Image upload failed during sync")
                                     }
-                                    val payload = IncomingMessageDto(
-                                        content = payloadStr,
-                                        replyToMessageId = p.replyToId,
-                                        type = "message"
-                                    )
-                                    val jsonString = Json.encodeToString(payload)
-                                    client.webSocket(
-                                        urlString = "wss://${SERVER_DNS}/api/connections/${p.connectionId}/chat",
-                                        request = { header(HttpHeaders.Authorization, "Bearer $token") }
-                                    ) {
-                                        send(Frame.Text(jsonString))
+                                }
+                            }
+                            "VIDEO" -> {
+                                val bytesList = p.mediaBytes ?: emptyList()
+                                if (bytesList.isNotEmpty()) {
+                                    val uploadResult = uploadChatImages(p.connectionId, bytesList)
+                                    if (uploadResult.isSuccess) {
+                                        val urls = uploadResult.getOrThrow()
+                                        val videoUrl = urls.find { it.contains(".mp4") } ?: ""
+                                        val thumbUrl = urls.find { it.contains(".jpg") || it.contains(".jpeg") } ?: ""
+                                        val payloadStr = if (thumbUrl.isNotBlank()) {
+                                            "[VIDEO]$thumbUrl,$videoUrl"
+                                        } else {
+                                            "[VIDEO]$videoUrl"
+                                        }
+                                        val payload = IncomingMessageDto(
+                                            content = payloadStr,
+                                            replyToMessageId = p.replyToId,
+                                            type = "message"
+                                        )
+                                        val jsonString = Json.encodeToString(payload)
+                                        client.webSocket(
+                                            urlString = "wss://${SERVER_DNS}/api/connections/${p.connectionId}/chat",
+                                            request = { header(HttpHeaders.Authorization, "Bearer $token") }
+                                        ) {
+                                            send(Frame.Text(jsonString))
+                                        }
+                                    } else {
+                                        throw Exception("Video upload failed during sync")
                                     }
-                                } else {
-                                    throw Exception("Video upload failed during sync")
+                                }
+                            }
+                            "VOICE" -> {
+                                val voiceBytes = p.mediaBytes?.firstOrNull()
+                                if (voiceBytes != null) {
+                                    val uploadResult = uploadAudioMessage(p.connectionId, voiceBytes)
+                                    if (uploadResult.isSuccess) {
+                                        val url = uploadResult.getOrThrow()
+                                        val payload = IncomingMessageDto(
+                                            content = "[VOICE]$url",
+                                            replyToMessageId = p.replyToId,
+                                            type = "message"
+                                        )
+                                        val jsonString = Json.encodeToString(payload)
+                                        client.webSocket(
+                                            urlString = "wss://${SERVER_DNS}/api/connections/${p.connectionId}/chat",
+                                            request = { header(HttpHeaders.Authorization, "Bearer $token") }
+                                        ) {
+                                            send(Frame.Text(jsonString))
+                                        }
+                                    } else {
+                                        throw Exception("Audio upload failed during sync")
+                                    }
                                 }
                             }
                         }
-                        "VOICE" -> {
-                            val voiceBytes = p.mediaBytes?.firstOrNull()
-                            if (voiceBytes != null) {
-                                val uploadResult = uploadAudioMessage(p.connectionId, voiceBytes)
-                                if (uploadResult.isSuccess) {
-                                    val url = uploadResult.getOrThrow()
-                                    val payload = IncomingMessageDto(
-                                        content = "[VOICE]$url",
-                                        replyToMessageId = p.replyToId,
-                                        type = "message"
-                                    )
-                                    val jsonString = Json.encodeToString(payload)
-                                    client.webSocket(
-                                        urlString = "wss://${SERVER_DNS}/api/connections/${p.connectionId}/chat",
-                                        request = { header(HttpHeaders.Authorization, "Bearer $token") }
-                                    ) {
-                                        send(Frame.Text(jsonString))
-                                    }
-                                } else {
-                                    throw Exception("Audio upload failed during sync")
-                                }
-                            }
-                        }
+                        toRemove.add(p.id)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
-                    toRemove.add(p.id)
-                } catch (e: Exception) {
-                    e.printStackTrace()
                 }
-            }
 
-            if (toRemove.isNotEmpty()) {
-                val currentPending = chatDatabase.getPendingMessages()
-                val updatedPending = currentPending.filter { !toRemove.contains(it.id) }
-                chatDatabase.savePendingMessages(updatedPending)
-                for (id in toRemove) {
-                    pendingMediaMap.remove(id)
+                if (toRemove.isNotEmpty()) {
+                    val currentPending = chatDatabase.getPendingMessages()
+                    val updatedPending = currentPending.filter { !toRemove.contains(it.id) }
+                    chatDatabase.savePendingMessages(updatedPending)
+                    for (id in toRemove) {
+                        pendingMediaMap.remove(id)
+                    }
+                    org.ttproject.util.NotificationEventBus.triggerRefresh()
                 }
-                org.ttproject.util.NotificationEventBus.triggerRefresh()
             }
         }
     }

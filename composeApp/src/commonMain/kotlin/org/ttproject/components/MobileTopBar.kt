@@ -9,10 +9,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.SegmentedButtonDefaults.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -40,7 +40,9 @@ import ttproject.composeapp.generated.resources.matchpoint_logo_long_light
 @Composable
 fun MobileTopBar(
     showSearch: Boolean = false,
-    onSearchClick: () -> Unit = {}
+    onSearchClick: () -> Unit = {},
+    showSettings: Boolean = false,
+    onSettingsClick: () -> Unit = {}
 ) {
     TopAppBar(
         title = {
@@ -61,7 +63,15 @@ fun MobileTopBar(
         },
         // 👇 Removed the navigationIcon entirely!
         actions = {
-            if (showSearch) {
+            if (showSettings) {
+                IconButton(onClick = onSettingsClick) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = AppColors.TextPrimary
+                    )
+                }
+            } else if (showSearch) {
                 IconButton(onClick = onSearchClick) {
                     Icon(
                         imageVector = Icons.Default.Search,

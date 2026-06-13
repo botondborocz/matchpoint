@@ -5,8 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,9 +23,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.stringResource
 import org.ttproject.AppColors
 import org.ttproject.icon.PremiumAppIcon
 import org.ttproject.icon.availableAppIcons
+import org.ttproject.shared.resources.*
+import org.ttproject.shared.resources.Res as SharedRes
+
 
 @Composable
 fun PremiumAppIconSelector(
@@ -46,24 +48,40 @@ fun PremiumAppIconSelector(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
 
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        val chunkedIcons = availableAppIcons.chunked(3)
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            items(availableAppIcons) { icon ->
-                AppIconGridItem(
-                    icon = icon,
-                    isSelected = currentAppIcon == icon,
-                    isUserPremium = isUserPremium,
-                    onClick = {
-                        if (icon.isPremium && !isUserPremium) {
-                            onPremiumLockedClick()
-                        } else {
-                            onIconSelected(icon)
+            chunkedIcons.forEach { rowIcons ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    rowIcons.forEach { icon ->
+                        Box(modifier = Modifier.weight(1f)) {
+                            AppIconGridItem(
+                                icon = icon,
+                                isSelected = currentAppIcon == icon,
+                                isUserPremium = isUserPremium,
+                                onClick = {
+                                    if (icon.isPremium && !isUserPremium) {
+                                        onPremiumLockedClick()
+                                    } else {
+                                        onIconSelected(icon)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
                     }
-                )
+                    val emptySlots = 3 - rowIcons.size
+                    if (emptySlots > 0) {
+                        repeat(emptySlots) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
             }
         }
     }
@@ -74,18 +92,19 @@ private fun AppIconGridItem(
     icon: PremiumAppIcon,
     isSelected: Boolean,
     isUserPremium: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val isLocked = icon.isPremium && !isUserPremium
 
-
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(72.dp)
+        modifier = modifier
     ) {
         Box(
             modifier = Modifier
-                .size(72.dp)
+                .aspectRatio(1f)
+                .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
                 .clickable { onClick() }
                 .border(
@@ -148,7 +167,7 @@ private fun AppIconGridItem(
 
         // Label Text
         Text(
-            text = icon.title,
+            text = icon.getLocalizedTitle(),
             color = if (isSelected) AppColors.AccentOrange
             else if (isLocked) AppColors.TextGray
             else AppColors.TextPrimary,
@@ -158,5 +177,29 @@ private fun AppIconGridItem(
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
             lineHeight = 12.sp
         )
+    }
+}
+
+@Composable
+fun PremiumAppIcon.getLocalizedTitle(): String {
+    return when (this) {
+        PremiumAppIcon.DEFAULT -> stringResource(SharedRes.string.icon_default)
+        PremiumAppIcon.LIGHT -> stringResource(SharedRes.string.icon_light)
+        PremiumAppIcon.GOLD_ELITE -> stringResource(SharedRes.string.icon_gold_elite)
+        PremiumAppIcon.GOLD_ELITE_DARK -> stringResource(SharedRes.string.icon_gold_elite_dark)
+        PremiumAppIcon.STEALTH -> stringResource(SharedRes.string.icon_stealth)
+        PremiumAppIcon.STEALTH_DARK -> stringResource(SharedRes.string.icon_stealth_dark)
+        PremiumAppIcon.CYBER -> stringResource(SharedRes.string.icon_cyber)
+        PremiumAppIcon.CYBER_DARK -> stringResource(SharedRes.string.icon_cyber_dark)
+        PremiumAppIcon.SYNTHWAVE -> stringResource(SharedRes.string.icon_synthwave)
+        PremiumAppIcon.SYNTHWAVE_DARK -> stringResource(SharedRes.string.icon_synthwave_dark)
+        PremiumAppIcon.SYNTHWAVE_EXTRA -> stringResource(SharedRes.string.icon_synthwave_extra)
+        PremiumAppIcon.ICE -> stringResource(SharedRes.string.icon_ice)
+        PremiumAppIcon.ICE_DARK -> stringResource(SharedRes.string.icon_ice_dark)
+        PremiumAppIcon.ICE_EXTRA -> stringResource(SharedRes.string.icon_ice_extra)
+        PremiumAppIcon.CHAMPIONSHIP -> stringResource(SharedRes.string.icon_championship)
+        PremiumAppIcon.CHAMPIONSHIP_DARK -> stringResource(SharedRes.string.icon_championship_dark)
+        PremiumAppIcon.ADRENALIN -> stringResource(SharedRes.string.icon_adrenalin)
+        PremiumAppIcon.ADRENALIN_DARK -> stringResource(SharedRes.string.icon_adrenalin_dark)
     }
 }

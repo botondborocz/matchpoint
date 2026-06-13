@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
 import org.ttproject.AppColors
@@ -26,7 +27,9 @@ import org.ttproject.AppColors
 fun InAppNotification(
     message: String?,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    icon: ImageVector = Icons.Default.Cancel,
+    iconColor: Color = Color(0xFFEF5350)
 ) {
     // Auto-dismiss timer
     LaunchedEffect(message) {
@@ -67,9 +70,9 @@ fun InAppNotification(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Cancel,
-                        contentDescription = "Error",
-                        tint = Color(0xFFEF5350), // Soft warning red
+                        imageVector = icon,
+                        contentDescription = "Notification Icon",
+                        tint = iconColor,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))

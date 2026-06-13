@@ -13,6 +13,7 @@ import org.ttproject.data.AddReviewRequest
 import org.ttproject.data.AddTableRequest
 import org.ttproject.data.TTReview
 import org.ttproject.repository.LocationRepository
+import org.ttproject.util.NotificationEventBus
 
 sealed class LocationsUiState {
     object Loading : LocationsUiState()
@@ -88,6 +89,7 @@ class LocationViewModel(
 
             if (result.isSuccess) {
                 fetchNearbyLocations()
+                NotificationEventBus.triggerRefresh()
                 onSuccess()
             } else {
                 println("Error adding table: ${result.exceptionOrNull()?.message}")
@@ -120,6 +122,7 @@ class LocationViewModel(
             val result = repository.addReview(locationId, request)
             if (result.isSuccess) {
                 loadReviewsForClub(locationId)
+                NotificationEventBus.triggerRefresh()
                 onSuccess()
             }
         }
@@ -131,6 +134,7 @@ class LocationViewModel(
             if (result.isSuccess) {
                 // Refresh the master list so the new images are available globally!
                 fetchNearbyLocations()
+                NotificationEventBus.triggerRefresh()
                 onSuccess()
             } else {
                 println("Error adding standalone images: ${result.exceptionOrNull()?.message}")

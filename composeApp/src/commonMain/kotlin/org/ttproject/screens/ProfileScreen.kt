@@ -2,6 +2,7 @@ package org.ttproject.screens
 
 import BadgeDetailsOverlay
 import BadgesSection
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -14,8 +15,11 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,9 +31,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.ArrowBackIosNew
 import androidx.compose.material3.*
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
+import androidx.navigationevent.NavigationEventInfo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,6 +56,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
@@ -64,6 +74,9 @@ import org.ttproject.shared.resources.Res as SharedRes
 import org.ttproject.viewmodel.ProfileState
 import org.ttproject.viewmodel.ProfileViewModel
 import org.ttproject.util.ThemeMode
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.text.style.TextAlign
 import coil3.compose.AsyncImage
 import com.preat.peekaboo.image.picker.SelectionMode
 import com.preat.peekaboo.image.picker.rememberImagePickerLauncher
@@ -72,6 +85,7 @@ import mapMetricsToBadges
 import org.koin.compose.koinInject
 import org.ttproject.AppThemeStyle
 import org.ttproject.LocalAppThemeStyle
+import org.ttproject.components.MobileTopBar
 import org.ttproject.components.NativeDatePickerField
 import org.ttproject.components.NativeDropdownField
 import org.ttproject.components.PremiumAppIconSelector
@@ -84,14 +98,21 @@ import org.ttproject.util.ConnectivityChecker
 import org.ttproject.components.InAppNotification
 import androidx.compose.ui.zIndex
 
+enum class SettingsSubScreen {
+    None, Main, Appearance, AppIcon, Language, Premium
+}
+
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun ProfileScreen(
+    isVisible: Boolean = true,
     currentLanguage: String = "en",
     currentAppThemeStyle: AppThemeStyle = LocalAppThemeStyle.current,
     currentAppIcon: PremiumAppIcon = PremiumAppIcon.DEFAULT,
     isUserPremium: Boolean = true,
     currentThemeMode: ThemeMode = ThemeMode.System,
+    activeSettingsScreen: SettingsSubScreen = SettingsSubScreen.None,
+    onActiveSettingsScreenChange: (SettingsSubScreen) -> Unit = {},
     onLogoutClick: () -> Unit = {},
     onChangeLanguage: (String) -> Unit = {},
     onChangeTheme: (ThemeMode) -> Unit = {},
@@ -111,6 +132,9 @@ fun ProfileScreen(
     var isMatchCardPreviewOpen by remember { mutableStateOf(false) }
     var selectedBadge by remember { mutableStateOf<BadgeData?>(null) }
 
+    // 🌟 THE FIX: Optimistic lock tracking token to reject stale database values
+    var locallySelectedLanguage by remember { mutableStateOf<String?>(null) }
+
     val scope = rememberCoroutineScope()
     var imageToUpload by remember { mutableStateOf<ByteArray?>(null) }
 
@@ -124,9 +148,29 @@ fun ProfileScreen(
         }
     )
 
-    LaunchedEffect(isAvatarExpanded, isMatchCardPreviewOpen) {
-        onOverlayActive(isAvatarExpanded || isMatchCardPreviewOpen)
+    LaunchedEffect(isAvatarExpanded, isMatchCardPreviewOpen, activeSettingsScreen) {
+        onOverlayActive(isAvatarExpanded || isMatchCardPreviewOpen || activeSettingsScreen != SettingsSubScreen.None)
     }
+
+    val profileNavState = rememberNavigationEventState(NavigationEventInfo.None)
+    NavigationBackHandler(
+        state = profileNavState,
+        isBackEnabled = isAvatarExpanded || isMatchCardPreviewOpen || selectedBadge != null || activeSettingsScreen != SettingsSubScreen.None,
+        onBackCompleted = {
+            when {
+                isAvatarExpanded -> isAvatarExpanded = false
+                isMatchCardPreviewOpen -> isMatchCardPreviewOpen = false
+                selectedBadge != null -> selectedBadge = null
+                activeSettingsScreen != SettingsSubScreen.None -> {
+                    if (activeSettingsScreen == SettingsSubScreen.Main) {
+                        onActiveSettingsScreenChange(SettingsSubScreen.None)
+                    } else {
+                        onActiveSettingsScreenChange(SettingsSubScreen.Main)
+                    }
+                }
+            }
+        }
+    )
 
     if (imageToUpload != null) {
         AvatarFramerDialog(
@@ -139,14 +183,17 @@ fun ProfileScreen(
         )
     }
 
-
-
     var profileNotificationMessage by remember { mutableStateOf<String?>(null) }
     var showOfflineBanner by remember { mutableStateOf(false) }
     var showSuccessBanner by remember { mutableStateOf(false) }
 
+    LaunchedEffect(isVisible) {
+        if (isVisible) {
+            viewModel.fetchUserProfile(showLoading = false)
+        }
+    }
+
     LaunchedEffect(Unit) {
-        viewModel.fetchUserProfile(showLoading = false)
         var wasConnected = connectivityChecker.isConnected()
         showOfflineBanner = !wasConnected
         while (true) {
@@ -156,6 +203,7 @@ fun ProfileScreen(
                 showOfflineBanner = false
                 if (!wasConnected) {
                     showSuccessBanner = true
+                    viewModel.fetchUserProfile(showLoading = false)
                 }
             } else if (!connected && wasConnected) {
                 showOfflineBanner = true
@@ -189,9 +237,28 @@ fun ProfileScreen(
             var animateTrigger by remember { mutableStateOf(true) }
             val snackbarHostState = remember { SnackbarHostState() }
 
+            // 🌟 REWRITTEN: Protects local selection from stale background read emissions
             LaunchedEffect(userData.language) {
-                if (userData.language != null && userData.language != currentLanguage) {
-                    onChangeLanguage(userData.language!!)
+                if (userData.language != null) {
+                    // Release the optimistic selection lock once backend catches up
+                    if (userData.language == locallySelectedLanguage) {
+                        locallySelectedLanguage = null
+                    }
+                    // Only pass language updates downstream if we are not waiting on a pending selection write
+                    if (locallySelectedLanguage == null && userData.language != currentLanguage) {
+                        onChangeLanguage(userData.language!!)
+                    }
+                }
+            }
+
+            LaunchedEffect(userData.isPremium) {
+                if (!userData.isPremium) {
+                    if (currentAppThemeStyle.isPremium) {
+                        onChangeAppThemeStyle(AppThemeStyle.DEFAULT)
+                    }
+                    if (currentAppIcon.isPremium) {
+                        onChangeAppIcon(PremiumAppIcon.DEFAULT)
+                    }
                 }
             }
 
@@ -273,121 +340,112 @@ fun ProfileScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .verticalScroll(scrollState)
-                            .padding(
-                                start = 24.dp,
-                                end = 24.dp,
-                                top = topPadding,
-                                bottom = bottomPadding
-                            ),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .padding(bottom = bottomPadding)
                     ) {
-                        AnimatedVisibility(
-                            visible = animateTrigger,
-                            enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { 50 }
+                        MobileTopBar(
+                            showSettings = true,
+                            onSettingsClick = { onActiveSettingsScreenChange(SettingsSubScreen.Main) }
+                        )
+
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .verticalScroll(scrollState)
+                                .padding(
+                                    start = 24.dp,
+                                    end = 24.dp,
+                                    top = 16.dp,
+                                    bottom = 16.dp
+                                ),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Column {
-                                ProfileHeader(
-                                    isAvatarExpanded = isAvatarExpanded, // 👈 Triggers source morph
-                                    isMatchCardPreviewOpen = isMatchCardPreviewOpen, // 👈 Triggers source morph
-                                    profileData = userData,
-                                    onAvatarClick = { isAvatarExpanded = true },
-                                    onPhotoEditClick = {
-                                        if (!connectivityChecker.isConnected()) {
-                                            profileNotificationMessage = "No internet connection"
-                                        } else {
-                                            singleImagePicker.launch()
-                                        }
-                                    },
-                                    onUsernameEditClick = {
-                                        if (!connectivityChecker.isConnected()) {
-                                            profileNotificationMessage = "No internet connection"
-                                        } else {
-                                            isEditUsernameModalOpen = true
-                                        }
-                                    },
-                                    onBioEditClick = {
-                                        if (!connectivityChecker.isConnected()) {
-                                            profileNotificationMessage = "No internet connection"
-                                        } else {
-                                            isEditBioModalOpen = true
-                                        }
-                                    },
-                                    onPreviewMatchcardClick = { isMatchCardPreviewOpen = true }
-                                )
-                                Spacer(modifier = Modifier.height(32.dp))
-                            }
-                        }
 
-                        AnimatedVisibility(
-                            visible = animateTrigger,
-                            enter = fadeIn(tween(400, delayMillis = 50)) + slideInVertically(tween(400, delayMillis = 50)) { 50 }
-                        ) {
-                            Column {
-                                BadgesSection(
-                                    metrics = userData.badgeMetrics,
-                                    selectedBadge = selectedBadge,
-                                    onBadgeClick = { clickedBadge -> selectedBadge = clickedBadge }
-                                )
-                                Spacer(modifier = Modifier.height(32.dp))
+                            AnimatedVisibility(
+                                visible = animateTrigger,
+                                enter = fadeIn(tween(400)) + slideInVertically(tween(400)) { 50 }
+                            ) {
+                                Column {
+                                    ProfileHeader(
+                                        isAvatarExpanded = isAvatarExpanded,
+                                        isMatchCardPreviewOpen = isMatchCardPreviewOpen,
+                                        profileData = userData,
+                                        onAvatarClick = { isAvatarExpanded = true },
+                                        onPhotoEditClick = {
+                                            if (!connectivityChecker.isConnected()) {
+                                                profileNotificationMessage = "No internet connection"
+                                            } else {
+                                                singleImagePicker.launch()
+                                            }
+                                        },
+                                        onUsernameEditClick = {
+                                            if (!connectivityChecker.isConnected()) {
+                                                profileNotificationMessage = "No internet connection"
+                                            } else {
+                                                isEditUsernameModalOpen = true
+                                            }
+                                        },
+                                        onBioEditClick = {
+                                            if (!connectivityChecker.isConnected()) {
+                                                profileNotificationMessage = "No internet connection"
+                                            } else {
+                                                isEditBioModalOpen = true
+                                            }
+                                        },
+                                        onPreviewMatchcardClick = { isMatchCardPreviewOpen = true }
+                                    )
+                                    Spacer(modifier = Modifier.height(32.dp))
+                                }
                             }
-                        }
 
-                        AnimatedVisibility(
-                            visible = animateTrigger,
-                            enter = fadeIn(tween(400, delayMillis = 100)) + slideInVertically(tween(400, delayMillis = 100)) { 50 }) {
-                            Column {
-                                BasicInfoSection(
-                                    profileData = userData,
-                                    onEditClick = {
-                                        if (!connectivityChecker.isConnected()) {
-                                            profileNotificationMessage = "No internet connection"
-                                        } else {
-                                            isEditBasicInfoModalOpen = true
+                            AnimatedVisibility(
+                                visible = animateTrigger,
+                                enter = fadeIn(tween(400, delayMillis = 50)) + slideInVertically(tween(400, delayMillis = 50)) { 50 }
+                            ) {
+                                Column {
+                                    BadgesSection(
+                                        metrics = userData.badgeMetrics,
+                                        selectedBadge = selectedBadge,
+                                        onBadgeClick = { clickedBadge -> selectedBadge = clickedBadge }
+                                    )
+                                    Spacer(modifier = Modifier.height(32.dp))
+                                }
+                            }
+
+                            AnimatedVisibility(
+                                visible = animateTrigger,
+                                enter = fadeIn(tween(400, delayMillis = 100)) + slideInVertically(tween(400, delayMillis = 100)) { 50 }) {
+                                Column {
+                                    BasicInfoSection(
+                                        profileData = userData,
+                                        onEditClick = {
+                                            if (!connectivityChecker.isConnected()) {
+                                                profileNotificationMessage = "No internet connection"
+                                            } else {
+                                                isEditBasicInfoModalOpen = true
+                                            }
                                         }
-                                    }
-                                )
-                                Spacer(modifier = Modifier.height(16.dp))
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                }
                             }
-                        }
 
-                        AnimatedVisibility(
-                            visible = animateTrigger,
-                            enter = fadeIn(tween(400, delayMillis = 150)) + slideInVertically(tween(400, delayMillis = 150)) { 50 }) {
-                            Column {
-                                GearSection(
-                                    profileData = userData,
-                                    onGearEditClick = {
-                                        if (!connectivityChecker.isConnected()) {
-                                            profileNotificationMessage = "No internet connection"
-                                        } else {
-                                            isEditGearModalOpen = true
+                            AnimatedVisibility(
+                                visible = animateTrigger,
+                                enter = fadeIn(tween(400, delayMillis = 150)) + slideInVertically(tween(400, delayMillis = 150)) { 50 }) {
+                                Column {
+                                    GearSection(
+                                        profileData = userData,
+                                        onGearEditClick = {
+                                            if (!connectivityChecker.isConnected()) {
+                                                profileNotificationMessage = "No internet connection"
+                                            } else {
+                                                isEditGearModalOpen = true
+                                            }
                                         }
-                                    }
-                                )
-                                Spacer(modifier = Modifier.height(16.dp))
-                            }
-                        }
-
-                        AnimatedVisibility(
-                            visible = animateTrigger,
-                            enter = fadeIn(tween(400, delayMillis = 300)) + slideInVertically(tween(400, delayMillis = 300)) { 50 }) {
-                            Column {
-                                SettingsAndLogout(
-                                    currentLanguage = currentLanguage,
-                                    currentThemeMode = currentThemeMode,
-                                    currentAppThemeStyle = currentAppThemeStyle,
-                                    currentAppIcon = currentAppIcon,
-                                    isUserPremium = userData.isPremium,
-                                    onLogoutClick = { viewModel.clearData(); onLogoutClick() },
-                                    onChangeLanguage = onChangeLanguage,
-                                    onChangeTheme = onChangeTheme,
-                                    onChangeAppThemeStyle = onChangeAppThemeStyle,
-                                    onChangeAppIcon = onChangeAppIcon,
-                                    viewModel = viewModel,
-                                    snackbarHostState = snackbarHostState
-                                )
-                                Spacer(modifier = Modifier.height(20.dp))
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                }
                             }
                         }
                     }
@@ -399,7 +457,6 @@ fun ProfileScreen(
                             .padding(bottom = 90.dp)
                     )
 
-                    // 🌟 DESTINATION 1: MORPHING AVATAR PREVIEW
                     AnimatedVisibility(
                         visible = isAvatarExpanded,
                         enter = fadeIn(tween(400)),
@@ -422,7 +479,6 @@ fun ProfileScreen(
                         )
                     }
 
-                    // 🌟 DESTINATION 2: MORPHING MATCHCARD PREVIEW
                     AnimatedVisibility(
                         visible = isMatchCardPreviewOpen,
                         enter = fadeIn(tween(400)),
@@ -436,7 +492,6 @@ fun ProfileScreen(
                         )
                     }
 
-                    // 🌟 DESTINATION 3: MORPHING BADGE DETAILS PREVIEW
                     AnimatedVisibility(
                         visible = selectedBadge != null,
                         enter = fadeIn(tween(400)),
@@ -452,7 +507,43 @@ fun ProfileScreen(
                         }
                     }
 
-                    // Offline Profile Warning Banner
+                    AnimatedVisibility(
+                        visible = activeSettingsScreen != SettingsSubScreen.None,
+                        enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(tween(300)),
+                        exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(tween(300)),
+                        modifier = Modifier.fillMaxSize().zIndex(12f)
+                    ) {
+                        SettingsOverlay(
+                            activeScreen = activeSettingsScreen,
+                            onNavigateBack = {
+                                if (activeSettingsScreen == SettingsSubScreen.Main) {
+                                    onActiveSettingsScreenChange(SettingsSubScreen.None)
+                                } else {
+                                    onActiveSettingsScreenChange(SettingsSubScreen.Main)
+                                }
+                            },
+                            onNavigateTo = { screen -> onActiveSettingsScreenChange(screen) },
+                            currentLanguage = currentLanguage,
+                            currentThemeMode = currentThemeMode,
+                            currentAppThemeStyle = currentAppThemeStyle,
+                            currentAppIcon = currentAppIcon,
+                            isUserPremium = userData.isPremium,
+                            onLogoutClick = {
+                                viewModel.clearData()
+                                onLogoutClick()
+                                onActiveSettingsScreenChange(SettingsSubScreen.None)
+                            },
+                            onChangeLanguage = onChangeLanguage,
+                            onChangeTheme = onChangeTheme,
+                            onChangeAppThemeStyle = onChangeAppThemeStyle,
+                            onChangeAppIcon = onChangeAppIcon,
+                            viewModel = viewModel,
+                            snackbarHostState = snackbarHostState,
+                            // 🌟 PASSING REFERENCE TO TARGET OPTIONS SUB-SCREEN
+                            onPendingLanguageChange = { selection -> locallySelectedLanguage = selection }
+                        )
+                    }
+
                     AnimatedVisibility(
                         visible = showOfflineBanner,
                         enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
@@ -509,7 +600,6 @@ fun ProfileScreen(
                         }
                     }
 
-                    // Connection Restored Success Banner
                     AnimatedVisibility(
                         visible = showSuccessBanner,
                         enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
@@ -616,15 +706,14 @@ private fun SharedTransitionScope.MatchCardPreviewOverlay(
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 👇 Morph boundary Target
             Box(
                 modifier = Modifier
+                    .fillMaxWidth(0.85f)
+                    .aspectRatio(3f / 4f)
                     .sharedBounds(
                         sharedContentState = rememberSharedContentState(key = "matchcard_transition"),
                         animatedVisibilityScope = animatedVisibilityScope
                     )
-                    .fillMaxWidth(0.85f)
-                    .aspectRatio(3f / 4f)
             ) {
                 MatchCard(
                     player = meAsPlayer,
@@ -670,7 +759,6 @@ private fun SharedTransitionScope.AvatarPreviewOverlay(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // 👇 Morph boundary Target
             Box(
                 modifier = Modifier
                     .sharedBounds(
@@ -733,8 +821,8 @@ private fun SharedTransitionScope.AvatarPreviewOverlay(
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun SharedTransitionScope.ProfileHeader(
-    isAvatarExpanded: Boolean, // 👈 New: Drives source morph state
-    isMatchCardPreviewOpen: Boolean, // 👈 New: Drives source morph state
+    isAvatarExpanded: Boolean,
+    isMatchCardPreviewOpen: Boolean,
     profileData: ProfileState.Success,
     onPhotoEditClick: () -> Unit,
     onUsernameEditClick: () -> Unit,
@@ -748,74 +836,79 @@ private fun SharedTransitionScope.ProfileHeader(
 
     val avatarGradient = Brush.linearGradient(colors = listOf(Color(0xFFFF4B4B), Color(0xFF9C27B0)))
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        // 📦 FIXED SIZE WRAPPER: Prevents layout collapse when the avatar flies out
-        Box(modifier = Modifier.size(100.dp).clickable { onAvatarClick() }) {
-
-            // 👇 Morph boundary Source - Disappears exactly when the big one appears
-            androidx.compose.animation.AnimatedVisibility(
-                visible = !isAvatarExpanded,
-                enter = fadeIn(tween(400)),
-                exit = fadeOut(tween(400))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .sharedBounds(
-                            sharedContentState = rememberSharedContentState(key = "avatar_transition"),
-                            animatedVisibilityScope = this@AnimatedVisibility
-                        )
-                        .fillMaxSize()
-                        .clip(CircleShape)
-                        .background(AppColors.SurfaceDark)
-                        .border(4.dp, avatarGradient, CircleShape),
-                    contentAlignment = Alignment.Center
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(modifier = Modifier.size(100.dp).clickable { onAvatarClick() }) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = !isAvatarExpanded,
+                    enter = fadeIn(tween(400)),
+                    exit = fadeOut(tween(400))
                 ) {
-                    if (!imageUrl.isNullOrBlank()) {
-                        AsyncImage(model = imageUrl, contentDescription = "Profile Picture", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alignment = BiasAlignment(0f, 0f))
-                    } else {
-                        Text(text = getInitials(username), color = AppColors.TextPrimary, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Box(
+                        modifier = Modifier
+                            .sharedBounds(
+                                sharedContentState = rememberSharedContentState(key = "avatar_transition"),
+                                animatedVisibilityScope = this@AnimatedVisibility
+                            )
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                            .background(AppColors.SurfaceDark)
+                            .border(4.dp, avatarGradient, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (!imageUrl.isNullOrBlank()) {
+                            AsyncImage(model = imageUrl, contentDescription = "Profile Picture", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alignment = BiasAlignment(0f, 0f))
+                        } else {
+                            Text(text = getInitials(username), color = AppColors.TextPrimary, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+
+                Box(modifier = Modifier.align(Alignment.BottomEnd).offset(x = (-2).dp, y = (-2).dp).clip(CircleShape).background(AppColors.Background).padding(3.dp)) {
+                    Box(modifier = Modifier.size(26.dp).clip(CircleShape).clickable { onPhotoEditClick() }.background(AppColors.AccentOrange), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Filled.CameraAlt, contentDescription = "Edit Profile Picture", tint = Color.Black, modifier = Modifier.size(14.dp))
                     }
                 }
             }
 
-            Box(modifier = Modifier.align(Alignment.BottomEnd).offset(x = (-2).dp, y = (-2).dp).clip(CircleShape).background(AppColors.Background).padding(3.dp)) {
-                Box(modifier = Modifier.size(26.dp).clip(CircleShape).clickable { onPhotoEditClick() }.background(AppColors.AccentOrange), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.CameraAlt, contentDescription = "Edit Profile Picture", tint = Color.Black, modifier = Modifier.size(14.dp))
+            Spacer(modifier = Modifier.width(20.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onUsernameEditClick() }
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Text(text = username, color = AppColors.TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(Icons.Default.Edit, contentDescription = "Edit Username", tint = AppColors.TextGray, modifier = Modifier.size(16.dp))
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onBioEditClick() }
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = bio.takeIf { it.isNotBlank() } ?: "Add a bio...",
+                        color = if (bio.isNotBlank()) AppColors.TextPrimary else AppColors.TextGray,
+                        fontSize = 14.sp
+                    )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onUsernameEditClick() }.padding(horizontal = 8.dp, vertical = 4.dp)
-        ) {
-            Text(text = username, color = AppColors.TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-            Spacer(modifier = Modifier.width(8.dp))
-            Icon(Icons.Default.Edit, contentDescription = "Edit Username", tint = AppColors.TextGray, modifier = Modifier.size(18.dp))
-        }
-
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { onBioEditClick() }
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            Text(
-                text = bio.takeIf { it.isNotBlank() } ?: "Add a bio...",
-                color = if (bio.isNotBlank()) AppColors.TextPrimary else AppColors.TextGray,
-                fontSize = 14.sp,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 📦 FIXED SIZE WRAPPER: Prevents UI jumping when button leaves
         Box(modifier = Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
-
-            // 👇 Morph boundary Source - Disappears exactly when the big Matchcard appears
             androidx.compose.animation.AnimatedVisibility(
                 visible = !isMatchCardPreviewOpen,
                 enter = fadeIn(tween(400)),
@@ -834,7 +927,7 @@ private fun SharedTransitionScope.ProfileHeader(
                 ) {
                     Icon(Icons.Default.Visibility, contentDescription = null, tint = AppColors.AccentOrange, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(stringResource(SharedRes.string.preview_matchcard_btn).uppercase(), color = AppColors.AccentOrange, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.sp)
+                    Text(stringResource(SharedRes.string.preview_matchcard_btn), color = AppColors.AccentOrange, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 1.sp)
                 }
             }
         }
@@ -842,8 +935,6 @@ private fun SharedTransitionScope.ProfileHeader(
         Spacer(modifier = Modifier.height(16.dp))
     }
 }
-
-// --- STANDARD LEAF CORE SNEAK DIALOG LAYOUTS RETAINED BELOW (UNTOUCHED) ---
 
 @Composable
 fun EditBasicInfoDialog(
@@ -879,7 +970,7 @@ fun EditBasicInfoDialog(
 
             NativeDatePickerField(
                 value = birthDate,
-                label = "BIRTH DATE",
+                label = "Birth Date",
                 onDateSelected = { birthDate = it }
             )
 
@@ -887,7 +978,7 @@ fun EditBasicInfoDialog(
 
             NativeDropdownField(
                 value = level,
-                label = "SKILL LEVEL",
+                label = "Skill Level",
                 options = skillLevels,
                 onOptionSelected = { level = it }
             )
@@ -916,7 +1007,7 @@ private fun BasicInfoSection(
         ) {
             Icon(Icons.Default.Person, contentDescription = null, tint = AppColors.TextGray, modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text(stringResource(SharedRes.string.basic_info_header).uppercase(), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(stringResource(SharedRes.string.basic_info_header), color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -940,7 +1031,7 @@ private fun BasicInfoSection(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(text = stringResource(SharedRes.string.age_label).uppercase(), color = AppColors.TextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Text(text = stringResource(SharedRes.string.age_label), color = AppColors.TextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(text = ageDisplay, color = AppColors.TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
@@ -953,7 +1044,7 @@ private fun BasicInfoSection(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(text = stringResource(SharedRes.string.level_label).uppercase(), color = AppColors.TextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Text(text = stringResource(SharedRes.string.level_label), color = AppColors.TextGray, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(text = skillLevel, color = AppColors.AccentOrange, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
@@ -969,7 +1060,7 @@ private fun EditTextField(
     onValueChange: (String) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(text = label.uppercase(), color = AppColors.TextGray, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+        Text(text = label, color = AppColors.TextGray, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
         Spacer(modifier = Modifier.height(6.dp))
         OutlinedTextField(
             value = value,
@@ -1079,28 +1170,43 @@ private fun GearSection(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        GearItem(
-            label = stringResource(SharedRes.string.blade).uppercase(),
-            value = profileData.blade ?: "Butterfly Viscaria",
-            iconContent = { Text("🏓", fontSize = 16.sp) }
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        GearItem(
-            label = stringResource(SharedRes.string.forehand).uppercase(),
-            value = profileData.rubberFh ?: "Tenergy 05",
-            iconContent = { Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(Color(0xFFFF4B4B))) }
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        GearItem(
-            label = stringResource(SharedRes.string.backhand).uppercase(),
-            value = profileData.rubberBh ?: "DHS Hurricane 3 Neo",
-            iconContent = { Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(Color.Black)) }
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(AppColors.SurfaceDark)
+        ) {
+            GearRowItem(
+                label = stringResource(SharedRes.string.blade),
+                value = profileData.blade ?: "Butterfly Viscaria",
+                iconContent = { Text("🏓", fontSize = 16.sp) }
+            )
+            HorizontalDivider(
+                color = AppColors.TextPrimary.copy(alpha = 0.08f),
+                thickness = 1.dp,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            GearRowItem(
+                label = stringResource(SharedRes.string.forehand),
+                value = profileData.rubberFh ?: "Tenergy 05",
+                iconContent = { Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(Color(0xFFFF4B4B))) }
+            )
+            HorizontalDivider(
+                color = AppColors.TextPrimary.copy(alpha = 0.08f),
+                thickness = 1.dp,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            GearRowItem(
+                label = stringResource(SharedRes.string.backhand),
+                value = profileData.rubberBh ?: "DHS Hurricane 3 Neo",
+                iconContent = { Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(Color.Black)) }
+            )
+        }
     }
 }
 
 @Composable
-private fun GearItem(
+private fun GearRowItem(
     label: String,
     value: String,
     iconContent: @Composable () -> Unit
@@ -1108,8 +1214,6 @@ private fun GearItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(AppColors.SurfaceDark)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1134,7 +1238,10 @@ private fun GearItem(
 }
 
 @Composable
-private fun SettingsAndLogout(
+fun SettingsOverlay(
+    activeScreen: SettingsSubScreen,
+    onNavigateBack: () -> Unit,
+    onNavigateTo: (SettingsSubScreen) -> Unit,
     currentLanguage: String,
     currentThemeMode: ThemeMode,
     currentAppThemeStyle: AppThemeStyle,
@@ -1147,9 +1254,11 @@ private fun SettingsAndLogout(
     onChangeAppIcon: (PremiumAppIcon) -> Unit,
     viewModel: ProfileViewModel,
     snackbarHostState: SnackbarHostState,
-    tokenStorage: TokenStorage = koinInject()
+    tokenStorage: TokenStorage = koinInject(),
+    onPendingLanguageChange: (String) -> Unit = {} // 👈 NEW: Lambda passed to communicate with the success block
 ) {
     val scope = rememberCoroutineScope()
+    var isLanguageLoading by remember { mutableStateOf(false) }
     val premiumThemeLockedMsg = stringResource(SharedRes.string.premium_theme_locked_msg)
     val premiumIconLockedMsg = stringResource(SharedRes.string.premium_icon_locked_msg)
     val mapResetSuccessMsg = stringResource(SharedRes.string.map_preference_reset_success)
@@ -1159,231 +1268,503 @@ private fun SettingsAndLogout(
     val tapUnlockPremiumSub = stringResource(SharedRes.string.tap_to_unlock_premium)
     val resetMapChoiceLabel = stringResource(SharedRes.string.reset_map_choice)
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // 🌟 NEW: THE DEBUG MODE MEMBERSHIP PREMIUM STATUS TOGGLE CARD STRIP
-        Row(
+    val topPadding = if (isIosPlatform()) {
+        WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    } else {
+        32.dp
+    }
+
+    val backIcon = if (isIosPlatform()) Icons.Filled.ArrowBackIosNew else Icons.AutoMirrored.Filled.ArrowBack
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppColors.Background)
+            .pointerInput(Unit) { detectTapGestures { /* swallow tags */ } }
+    ) {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(AppColors.SurfaceDark)
-                .clickable { viewModel.togglePremiumStatus() } // 👈 Execution hook trigger
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .padding(horizontal = 24.dp)
+                .padding(top = topPadding, bottom = 24.dp)
         ) {
-            Icon(
-                imageVector = if (isUserPremium) Icons.Default.Star else Icons.Default.StarBorder,
-                contentDescription = null,
-                tint = if (isUserPremium) Color(0xFFFFD700) else AppColors.TextGray,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = if (isUserPremium) premiumActiveTitle else upgradePremiumTitle,
-                    color = AppColors.TextPrimary,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = if (isUserPremium) tapFreePlanSub else tapUnlockPremiumSub,
-                    color = AppColors.TextGray,
-                    fontSize = 12.sp
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        PremiumThemeSelector(
-            currentThemeStyle = currentAppThemeStyle,
-            isUserPremium = isUserPremium,
-            onThemeSelected = onChangeAppThemeStyle,
-            onPremiumLockedClick = {
-                scope.launch {
-                    snackbarHostState.showSnackbar(premiumThemeLockedMsg)
-                }
-            }
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        PremiumAppIconSelector(
-            currentAppIcon = currentAppIcon,
-            isUserPremium = isUserPremium,
-            onIconSelected = onChangeAppIcon,
-            onPremiumLockedClick = {
-                scope.launch { snackbarHostState.showSnackbar(premiumIconLockedMsg) }
-            }
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        LanguageSelector(currentLanguage, onChangeLanguage, viewModel)
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        ThemeSelector(currentThemeMode, onChangeTheme)
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        if (isIosPlatform()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(AppColors.SurfaceDark)
-                    .clickable {
-                        tokenStorage.clearMapChoice()
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                message = mapResetSuccessMsg,
-                                duration = SnackbarDuration.Short
-                            )
-                        }
-                    }
-                    .padding(16.dp),
+                    .padding(bottom = 24.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Default.Map,
-                    contentDescription = resetMapChoiceLabel,
-                    tint = AppColors.TextGray,
-                    modifier = Modifier.size(24.dp)
-                )
+                IconButton(onClick = onNavigateBack) {
+                    Icon(
+                        imageVector = backIcon,
+                        contentDescription = "Back",
+                        tint = AppColors.TextPrimary
+                    )
+                }
                 Spacer(modifier = Modifier.width(16.dp))
+                val title = when (activeScreen) {
+                    SettingsSubScreen.Main -> stringResource(SharedRes.string.settings_title)
+                    SettingsSubScreen.Appearance -> stringResource(SharedRes.string.appearance_title)
+                    SettingsSubScreen.AppIcon -> stringResource(SharedRes.string.app_icon_title)
+                    SettingsSubScreen.Language -> stringResource(SharedRes.string.language)
+                    SettingsSubScreen.Premium -> stringResource(SharedRes.string.premium_title)
+                    else -> ""
+                }
                 Text(
-                    resetMapChoiceLabel,
+                    text = title,
                     color = AppColors.TextPrimary,
-                    fontSize = 16.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
+
+            AnimatedContent(
+                targetState = activeScreen,
+                transitionSpec = {
+                    if (targetState == SettingsSubScreen.Main) {
+                        slideInHorizontally(initialOffsetX = { -it }) + fadeIn() togetherWith
+                                slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
+                    } else {
+                        slideInHorizontally(initialOffsetX = { it }) + fadeIn() togetherWith
+                                slideOutHorizontally(targetOffsetX = { -it }) + fadeOut()
+                    }
+                },
+                label = "settings_subscreen_transition",
+                modifier = Modifier.weight(1f)
+            ) { screen ->
+                when (screen) {
+                    SettingsSubScreen.Main -> {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(AppColors.SurfaceDark)
+                            ) {
+                                SettingsMenuRow(
+                                    icon = Icons.Default.Palette,
+                                    title = stringResource(SharedRes.string.appearance_title),
+                                    onClick = { onNavigateTo(SettingsSubScreen.Appearance) }
+                                )
+                                HorizontalDivider(color = AppColors.TextPrimary.copy(alpha = 0.08f), thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+
+                                SettingsMenuRow(
+                                    icon = Icons.Default.Star,
+                                    title = stringResource(SharedRes.string.app_icon_title),
+                                    onClick = { onNavigateTo(SettingsSubScreen.AppIcon) }
+                                )
+                                HorizontalDivider(color = AppColors.TextPrimary.copy(alpha = 0.08f), thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+
+                                SettingsMenuRow(
+                                    icon = Icons.Default.Language,
+                                    title = stringResource(SharedRes.string.language),
+                                    onClick = { onNavigateTo(SettingsSubScreen.Language) }
+                                )
+
+                                if (isIosPlatform()) {
+                                    HorizontalDivider(color = AppColors.TextPrimary.copy(alpha = 0.08f), thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+                                    SettingsMenuRow(
+                                        icon = Icons.Default.Map,
+                                        title = resetMapChoiceLabel,
+                                        onClick = {
+                                            tokenStorage.clearMapChoice()
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar(mapResetSuccessMsg)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(AppColors.SurfaceDark)
+                            ) {
+                                SettingsMenuRow(
+                                    icon = Icons.Default.Person,
+                                    title = stringResource(SharedRes.string.settings_account_details),
+                                    onClick = {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Account Details Clicked (Placeholder)")
+                                        }
+                                    }
+                                )
+                                HorizontalDivider(color = AppColors.TextPrimary.copy(alpha = 0.08f), thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+
+                                SettingsMenuRow(
+                                    icon = if (isUserPremium) Icons.Default.Stars else Icons.Default.StarBorder,
+                                    title = stringResource(SharedRes.string.premium_title),
+                                    onClick = { onNavigateTo(SettingsSubScreen.Premium) }
+                                )
+                                HorizontalDivider(color = AppColors.TextPrimary.copy(alpha = 0.08f), thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+
+                                SettingsMenuRow(
+                                    icon = Icons.Default.Description,
+                                    title = stringResource(SharedRes.string.settings_terms_of_service),
+                                    onClick = {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Terms of Service Clicked (Placeholder)")
+                                        }
+                                    }
+                                )
+                                HorizontalDivider(color = AppColors.TextPrimary.copy(alpha = 0.08f), thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+
+                                SettingsMenuRow(
+                                    icon = Icons.Default.ThumbUp,
+                                    title = stringResource(SharedRes.string.settings_rate_us),
+                                    onClick = {
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Rate Us Clicked (Placeholder)")
+                                        }
+                                    }
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color(0xFFFF4B4B).copy(alpha = 0.1f))
+                                    .border(1.dp, Color(0xFFFF4B4B).copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                                    .clickable { onLogoutClick() }
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Logout", tint = Color(0xFFFF4B4B), modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(stringResource(SharedRes.string.logout), color = Color(0xFFFF4B4B), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    SettingsSubScreen.Appearance -> {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            ThemeModeSelector(currentThemeMode, onChangeTheme)
+
+                            PremiumThemeSelector(
+                                currentThemeStyle = currentAppThemeStyle,
+                                isUserPremium = isUserPremium,
+                                onThemeSelected = onChangeAppThemeStyle,
+                                onPremiumLockedClick = {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(premiumThemeLockedMsg)
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    SettingsSubScreen.AppIcon -> {
+                        Box(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                            PremiumAppIconSelector(
+                                currentAppIcon = currentAppIcon,
+                                isUserPremium = isUserPremium,
+                                onIconSelected = onChangeAppIcon,
+                                onPremiumLockedClick = {
+                                    scope.launch { snackbarHostState.showSnackbar(premiumIconLockedMsg) }
+                                }
+                            )
+                        }
+                    }
+
+                    SettingsSubScreen.Language -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            LanguageGridItem(
+                                title = "English",
+                                flag = "🇬🇧 🇺🇸",
+                                isSelected = currentLanguage == "en",
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    scope.launch {
+                                        isLanguageLoading = true
+                                        onPendingLanguageChange("en") // 👈 Set lock token
+                                        val success = viewModel.changeLanguageSuspend("en")
+                                        if (success) {
+                                            onChangeLanguage("en")
+                                            viewModel.fetchUserProfile(showLoading = false)
+                                            kotlinx.coroutines.delay(800)
+                                        } else {
+                                            onPendingLanguageChange("") // Reset token on failure
+                                            snackbarHostState.showSnackbar("Failed to update language")
+                                        }
+                                        isLanguageLoading = false
+                                    }
+                                }
+                            )
+
+                            LanguageGridItem(
+                                title = "Magyar",
+                                flag = "🇭🇺",
+                                isSelected = currentLanguage == "hu",
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    scope.launch {
+                                        isLanguageLoading = true
+                                        onPendingLanguageChange("hu") // 👈 Set lock token
+                                        val success = viewModel.changeLanguageSuspend("hu")
+                                        if (success) {
+                                            onChangeLanguage("hu")
+                                            viewModel.fetchUserProfile(showLoading = false)
+                                            kotlinx.coroutines.delay(800)
+                                        } else {
+                                            onPendingLanguageChange("") // Reset token on failure
+                                            snackbarHostState.showSnackbar("Failed to update language")
+                                        }
+                                        isLanguageLoading = false
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    SettingsSubScreen.Premium -> {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(AppColors.SurfaceDark)
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (isUserPremium) premiumActiveTitle else upgradePremiumTitle,
+                                    color = AppColors.TextPrimary,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = if (isUserPremium) tapFreePlanSub else tapUnlockPremiumSub,
+                                    color = AppColors.TextGray,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            Switch(
+                                checked = isUserPremium,
+                                onCheckedChange = { viewModel.togglePremiumStatus() },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = AppColors.AccentOrange,
+                                    checkedTrackColor = AppColors.AccentOrange.copy(alpha = 0.5f),
+                                    uncheckedThumbColor = AppColors.TextGray,
+                                    uncheckedTrackColor = AppColors.TextGray.copy(alpha = 0.2f)
+                                )
+                            )
+                        }
+                    }
+                    else -> {}
+                }
+            }
         }
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFFFF4B4B).copy(alpha = 0.1f))
-                .border(1.dp, Color(0xFFFF4B4B).copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-                .clickable { onLogoutClick() }
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Logout", tint = Color(0xFFFF4B4B), modifier = Modifier.size(20.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(stringResource(SharedRes.string.logout), color = Color(0xFFFF4B4B), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        if (isLanguageLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .pointerInput(Unit) { detectTapGestures { /* swallow click threads */ } },
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(
+                        color = AppColors.AccentOrange,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = stringResource(SharedRes.string.settings_changing_language),
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun LanguageSelector(
-    currentLanguage: String,
-    onChangeLanguage: (String) -> Unit,
-    viewModel: ProfileViewModel
+fun SettingsMenuRow(
+    icon: ImageVector,
+    title: String,
+    onClick: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val rotation by animateFloatAsState(targetValue = if (expanded) 180f else 0f)
-
-    val displayLanguage = when (currentLanguage) {
-        "hu" -> "Magyar"
-        "en" -> "English"
-        else -> "English"
-    }
-
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(AppColors.SurfaceDark)
-            .animateContentSize()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = !expanded }
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Default.Language, contentDescription = null, tint = TextGray, modifier = Modifier.size(24.dp))
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(stringResource(SharedRes.string.language), color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            Text(displayLanguage, color = TextGray, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            Spacer(modifier = Modifier.width(4.dp))
-            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = TextGray, modifier = Modifier.rotate(rotation))
-        }
-
-        AnimatedVisibility(visible = expanded, enter = expandVertically(expandFrom = Alignment.Top), exit = shrinkVertically(shrinkTowards = Alignment.Top)) {
-            Column(modifier = Modifier.fillMaxWidth().clipToBounds().padding(bottom = 8.dp)) {
-                HorizontalDivider(color = AppColors.TextPrimary.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp))
-                LanguageOptionRow("English", currentLanguage == "en") { viewModel.changeLanguage("en"); onChangeLanguage("en"); viewModel.fetchUserProfile(); expanded = false }
-                LanguageOptionRow("Magyar", currentLanguage == "hu") { viewModel.changeLanguage("hu"); onChangeLanguage("hu"); viewModel.fetchUserProfile(); expanded = false }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LanguageOptionRow(text: String, isSelected: Boolean, onClick: () -> Unit) {
-    val textColor = if (isSelected) AppColors.AccentOrange else AppColors.TextPrimary
-    val fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 56.dp, vertical = 12.dp),
+            .clickable { onClick() }
+            .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = text, color = textColor, fontSize = 15.sp, fontWeight = fontWeight)
-        Spacer(modifier = Modifier.weight(1f))
-        if (isSelected) {
-            Icon(Icons.Default.Check, contentDescription = "Selected", tint = AppColors.AccentOrange, modifier = Modifier.size(18.dp))
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = AppColors.TextGray,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(
+            text = title,
+            color = AppColors.TextPrimary,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(
+            imageVector = Icons.Default.KeyboardArrowDown,
+            contentDescription = null,
+            tint = AppColors.TextGray,
+            modifier = Modifier.size(20.dp).rotate(-90f)
+        )
+    }
+}
+
+@Composable
+private fun ThemeModeSelector(
+    currentThemeMode: ThemeMode,
+    onChangeTheme: (ThemeMode) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(SharedRes.string.theme).uppercase(),
+            color = AppColors.TextGray,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val modes = listOf(
+                Triple(ThemeMode.System, stringResource(SharedRes.string.system_default), "system"),
+                Triple(ThemeMode.Light, stringResource(SharedRes.string.light), "light"),
+                Triple(ThemeMode.Dark, stringResource(SharedRes.string.dark), "dark")
+            )
+
+            modes.forEach { (mode, title, key) ->
+                val isSelected = currentThemeMode == mode
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .aspectRatio(3f / 4f)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { onChangeTheme(mode) }
+                            .border(
+                                width = if (isSelected) 3.dp else 0.dp,
+                                color = if (isSelected) AppColors.AccentOrange else Color.Transparent,
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                    ) {
+                        Canvas(modifier = Modifier.fillMaxSize()) {
+                            val w = size.width
+                            val h = size.height
+
+                            when (mode) {
+                                ThemeMode.Light -> {
+                                    drawRect(color = Color(0xFFF8F9FA))
+                                }
+                                ThemeMode.Dark -> {
+                                    drawRect(color = Color(0xFF0F172A))
+                                }
+                                ThemeMode.System -> {
+                                    val lightPath = Path().apply {
+                                        moveTo(0f, 0f)
+                                        lineTo(w, 0f)
+                                        lineTo(0f, h)
+                                        close()
+                                    }
+                                    drawPath(lightPath, color = Color(0xFFF8F9FA))
+
+                                    val darkPath = Path().apply {
+                                        moveTo(w, 0f)
+                                        lineTo(w, h)
+                                        lineTo(0f, h)
+                                        close()
+                                    }
+                                    drawPath(darkPath, color = Color(0xFF0F172A))
+                                }
+                            }
+
+                            drawCircle(
+                                color = Color(0xFFFF6B00),
+                                radius = 24f,
+                                center = center
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = title,
+                        color = if (isSelected) AppColors.AccentOrange else AppColors.TextPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun ThemeSelector(currentThemeMode: ThemeMode, onChangeTheme: (ThemeMode) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    val rotation by animateFloatAsState(targetValue = if (expanded) 180f else 0f)
-
-    val displayTheme = when (currentThemeMode) {
-        ThemeMode.Light -> stringResource(SharedRes.string.light)
-        ThemeMode.Dark -> stringResource(SharedRes.string.dark)
-        ThemeMode.System -> stringResource(SharedRes.string.system_default)
-    }
+private fun LanguageGridItem(
+    title: String,
+    flag: String,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val borderCol = if (isSelected) AppColors.AccentOrange else Color.Transparent
+    val borderThick = if (isSelected) 3.dp else 0.dp
 
     Column(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(AppColors.SurfaceDark).animateContentSize()
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(AppColors.SurfaceDark)
+            .clickable { onClick() }
+            .border(borderThick, borderCol, RoundedCornerShape(16.dp))
+            .padding(vertical = 24.dp, horizontal = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Default.Palette, contentDescription = null, tint = AppColors.TextGray, modifier = Modifier.size(24.dp))
-            Spacer(modifier = Modifier.width(16.dp))
-            Text(stringResource(SharedRes.string.theme), color = AppColors.TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            Text(displayTheme, color = AppColors.TextGray, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            Spacer(modifier = Modifier.width(4.dp))
-            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = AppColors.TextGray, modifier = Modifier.rotate(rotation))
-        }
-
-        AnimatedVisibility(visible = expanded, enter = expandVertically(expandFrom = Alignment.Top), exit = shrinkVertically(shrinkTowards = Alignment.Top)) {
-            Column(modifier = Modifier.fillMaxWidth().clipToBounds().padding(bottom = 8.dp)) {
-                HorizontalDivider(color = AppColors.TextPrimary.copy(alpha = 0.05f), modifier = Modifier.padding(horizontal = 16.dp))
-                ThemeOptionRow(stringResource(SharedRes.string.system_default), currentThemeMode == ThemeMode.System) { onChangeTheme(ThemeMode.System) }
-                ThemeOptionRow(stringResource(SharedRes.string.light), currentThemeMode == ThemeMode.Light) { onChangeTheme(ThemeMode.Light) }
-                ThemeOptionRow(stringResource(SharedRes.string.dark), currentThemeMode == ThemeMode.Dark) { onChangeTheme(ThemeMode.Dark) }
-            }
-        }
+        Text(
+            text = flag,
+            fontSize = 36.sp,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+        Text(
+            text = title,
+            color = if (isSelected) AppColors.AccentOrange else AppColors.TextPrimary,
+            fontSize = 16.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+        )
     }
 }
 
@@ -1575,5 +1956,47 @@ fun EditGearDialog(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun AppThemeStyle.getLocalizedTitle(): String {
+    return when (this) {
+        AppThemeStyle.DEFAULT -> stringResource(SharedRes.string.theme_default)
+        AppThemeStyle.VIP -> stringResource(SharedRes.string.theme_vip)
+        AppThemeStyle.ADRENALIN -> stringResource(SharedRes.string.theme_adrenalin)
+        AppThemeStyle.MATRIX -> stringResource(SharedRes.string.theme_matrix)
+        AppThemeStyle.ARCTIC -> stringResource(SharedRes.string.theme_arctic)
+        AppThemeStyle.NEON -> stringResource(SharedRes.string.theme_neon)
+        AppThemeStyle.STEALTH -> stringResource(SharedRes.string.theme_stealth)
+        AppThemeStyle.TOKYO -> stringResource(SharedRes.string.theme_tokyo)
+        AppThemeStyle.CLASSIC -> stringResource(SharedRes.string.theme_classic)
+        AppThemeStyle.ROYAL -> stringResource(SharedRes.string.theme_royal)
+        AppThemeStyle.VOLT -> stringResource(SharedRes.string.theme_volt)
+        AppThemeStyle.SUNSET -> stringResource(SharedRes.string.theme_sunset)
+    }
+}
+
+@Composable
+fun PremiumAppIcon.getLocalizedTitle(): String {
+    return when (this) {
+        PremiumAppIcon.DEFAULT -> stringResource(SharedRes.string.icon_default)
+        PremiumAppIcon.LIGHT -> stringResource(SharedRes.string.icon_light)
+        PremiumAppIcon.GOLD_ELITE -> stringResource(SharedRes.string.icon_gold_elite)
+        PremiumAppIcon.GOLD_ELITE_DARK -> stringResource(SharedRes.string.icon_gold_elite_dark)
+        PremiumAppIcon.STEALTH -> stringResource(SharedRes.string.icon_stealth)
+        PremiumAppIcon.STEALTH_DARK -> stringResource(SharedRes.string.icon_stealth_dark)
+        PremiumAppIcon.CYBER -> stringResource(SharedRes.string.icon_cyber)
+        PremiumAppIcon.CYBER_DARK -> stringResource(SharedRes.string.icon_cyber_dark)
+        PremiumAppIcon.SYNTHWAVE -> stringResource(SharedRes.string.icon_synthwave)
+        PremiumAppIcon.SYNTHWAVE_DARK -> stringResource(SharedRes.string.icon_synthwave_dark)
+        PremiumAppIcon.SYNTHWAVE_EXTRA -> stringResource(SharedRes.string.icon_synthwave_extra)
+        PremiumAppIcon.ICE -> stringResource(SharedRes.string.icon_ice)
+        PremiumAppIcon.ICE_DARK -> stringResource(SharedRes.string.icon_ice_dark)
+        PremiumAppIcon.ICE_EXTRA -> stringResource(SharedRes.string.icon_ice_extra)
+        PremiumAppIcon.CHAMPIONSHIP -> stringResource(SharedRes.string.icon_championship)
+        PremiumAppIcon.CHAMPIONSHIP_DARK -> stringResource(SharedRes.string.icon_championship_dark)
+        PremiumAppIcon.ADRENALIN -> stringResource(SharedRes.string.icon_adrenalin)
+        PremiumAppIcon.ADRENALIN_DARK -> stringResource(SharedRes.string.icon_adrenalin_dark)
     }
 }

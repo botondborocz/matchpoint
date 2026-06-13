@@ -12,6 +12,16 @@ import org.ttproject.icon.AppIconManager
 import org.ttproject.icon.PremiumAppIcon
 import org.ttproject.repository.UserRepository
 
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class BadgeProgressEvent(
+    val badgeKey: String,
+    val newValue: Int,
+    val newLevel: Int,
+    val isLevelUp: Boolean
+)
+
 sealed class ProfileState {
     object Loading : ProfileState()
     // 👇 Added imageUrl here
@@ -53,8 +63,75 @@ class ProfileViewModel(
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
 
+    private val _badgeProgressEvent = MutableStateFlow<BadgeProgressEvent?>(null)
+    val badgeProgressEvent: StateFlow<BadgeProgressEvent?> = _badgeProgressEvent.asStateFlow()
+
+    fun dismissBadgeProgressEvent() {
+        _badgeProgressEvent.value = null
+    }
+
+    private var lastMetrics: UserBadgeMetricsDto? = null
+
     init {
         fetchUserProfile()
+        viewModelScope.launch {
+            org.ttproject.util.NotificationEventBus.refreshEvents.collect {
+                fetchUserProfile(showLoading = false)
+            }
+        }
+    }
+
+    private fun getLevel(value: Int, thresholds: List<Int>): Int {
+        var level = 0
+        for (t in thresholds) {
+            if (value >= t) level++
+            else break
+        }
+        return level
+    }
+
+    private fun checkBadgeProgress(newMetrics: UserBadgeMetricsDto) {
+        val old = lastMetrics
+        if (old != null && old != newMetrics) {
+            val thresholds = mapOf(
+                "addedTables" to listOf(1, 5, 15, 50),
+                "uploadedPhotos" to listOf(1, 10, 50, 150),
+                "writtenReviews" to listOf(1, 5, 20, 50),
+                "successfulMatches" to listOf(1, 10, 50, 200),
+                "sentMessages" to listOf(10, 100, 500, 2000),
+                "profileSwipes" to listOf(50, 500, 2000, 10000),
+                "currentStreak" to listOf(3, 7, 30, 100),
+                "invitedFriends" to listOf(1, 5, 15, 50)
+            )
+
+            fun getValue(m: UserBadgeMetricsDto, key: String): Int {
+                return when (key) {
+                    "addedTables" -> m.addedTables
+                    "uploadedPhotos" -> m.uploadedPhotos
+                    "writtenReviews" -> m.writtenReviews
+                    "successfulMatches" -> m.successfulMatches
+                    "sentMessages" -> m.sentMessages
+                    "profileSwipes" -> m.profileSwipes
+                    "currentStreak" -> m.currentStreak
+                    "invitedFriends" -> m.invitedFriends
+                    else -> 0
+                }
+            }
+
+            for ((key, thresh) in thresholds) {
+                val oldVal = getValue(old, key)
+                val newVal = getValue(newMetrics, key)
+                if (newVal > oldVal) {
+                    val oldLevel = getLevel(oldVal, thresh)
+                    val newLevel = getLevel(newVal, thresh)
+                    val isLevelUp = newLevel > oldLevel
+
+                    _badgeProgressEvent.value = BadgeProgressEvent(key, newVal, newLevel, isLevelUp)
+                    break
+                }
+            }
+        }
+        lastMetrics = newMetrics
     }
 
     fun fetchUserProfile(showLoading: Boolean = true) {
@@ -71,6 +148,9 @@ class ProfileViewModel(
                         skillLevel = cachedUser.skillLevel, age = cachedUser.age,
                         badgeMetrics = cachedMetrics, isPremium = cachedUser.isPremium
                     )
+                    if (cachedMetrics != null && lastMetrics == null) {
+                        lastMetrics = cachedMetrics
+                    }
                 } else if (showLoading || _uiState.value !is ProfileState.Success) {
                     _uiState.value = ProfileState.Loading
                 }
@@ -90,6 +170,10 @@ class ProfileViewModel(
                 } catch (e: Exception) {
                     e.printStackTrace()
                     tokenStorage.getBadgeMetrics() // Fallback to local badge cache if network fails
+                }
+
+                if (metrics != null) {
+                    checkBadgeProgress(metrics)
                 }
 
                 // 3. Update the UI state with BOTH profile and badge data
@@ -159,12 +243,35 @@ class ProfileViewModel(
 
             if (result.isSuccess) {
                 _updateState.value = UpdateState.Success
+                val current = _uiState.value
+                if (current is ProfileState.Success) {
+                    _uiState.value = current.copy(language = newLanguage)
+                }
             } else {
                 val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
                 _updateState.value = UpdateState.Error(errorMsg)
             }
         }
     }
+
+    suspend fun changeLanguageSuspend(newLanguage: String): Boolean {
+        _updateState.value = UpdateState.Loading
+        val result = userRepository.updateLanguage(newLanguage)
+        return if (result.isSuccess) {
+            _updateState.value = UpdateState.Success
+            val current = _uiState.value
+            if (current is ProfileState.Success) {
+                _uiState.value = current.copy(language = newLanguage)
+            }
+            true
+        } else {
+            val errorMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+            _updateState.value = UpdateState.Error(errorMsg)
+            false
+        }
+    }
+
+
 
     fun resetState() {
         _updateState.value = UpdateState.Idle
