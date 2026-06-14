@@ -1,9 +1,6 @@
 package org.ttproject.util
 
-import platform.SystemConfiguration.SCNetworkReachabilityCreateWithAddress
-import platform.SystemConfiguration.SCNetworkReachabilityGetFlags
-import platform.SystemConfiguration.kSCNetworkReachabilityFlagsReachable
-import platform.SystemConfiguration.kSCNetworkReachabilityFlagsConnectionRequired
+import platform.SystemConfiguration.*
 import platform.posix.sockaddr_in
 import platform.posix.AF_INET
 import kotlinx.cinterop.*
