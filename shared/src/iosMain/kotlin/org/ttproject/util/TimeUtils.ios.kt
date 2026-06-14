@@ -8,6 +8,7 @@ import platform.Foundation.NSISO8601DateFormatWithInternetDateTime
 import platform.Foundation.NSISO8601DateFormatWithFractionalSeconds
 import platform.Foundation.NSLocale
 import platform.Foundation.currentLocale
+import platform.Foundation.timeIntervalSinceDate
 
 actual fun formatMessageTime(isoTimestamp: String, recentPattern: String, olderPattern: String): String {
     return try {

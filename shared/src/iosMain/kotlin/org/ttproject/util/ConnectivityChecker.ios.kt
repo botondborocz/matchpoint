@@ -4,15 +4,9 @@ import platform.SystemConfiguration.SCNetworkReachabilityCreateWithAddress
 import platform.SystemConfiguration.SCNetworkReachabilityGetFlags
 import platform.SystemConfiguration.kSCNetworkReachabilityFlagsReachable
 import platform.SystemConfiguration.kSCNetworkReachabilityFlagsConnectionRequired
-import kotlinx.cinterop.alloc
-import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.ptr
 import platform.posix.sockaddr_in
 import platform.posix.AF_INET
-import kotlinx.cinterop.sizeOf
-import kotlinx.cinterop.ExperimentalForeignApi
-import platform.SystemConfiguration.SCNetworkReachabilityFlagsVar
-import kotlinx.cinterop.reinterpret
+import kotlinx.cinterop.*
 
 class IosConnectivityChecker : ConnectivityChecker {
     @OptIn(ExperimentalForeignApi::class)
