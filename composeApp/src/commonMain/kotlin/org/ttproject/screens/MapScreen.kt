@@ -214,21 +214,33 @@ fun MapScreen(
         var wasConnected = connectivityChecker.isConnected()
         delay(3500)
         if (!isMapLoadedInternal && !connectivityChecker.isConnected()) {
-            showOfflineMapBanner = true
+            if (isIosPlatform()) {
+                org.ttproject.components.PlatformNotificationManager.showNotification("No internet connection", "wifi_off")
+            } else {
+                showOfflineMapBanner = true
+            }
         }
         while (true) {
             delay(1000)
             val connected = connectivityChecker.isConnected()
             if (connected) {
                 if (!wasConnected) {
-                    showSuccessBanner = true
-                    showOfflineMapBanner = false
+                    if (isIosPlatform()) {
+                        org.ttproject.components.PlatformNotificationManager.showNotification("Connection restored", "wifi_on")
+                    } else {
+                        showSuccessBanner = true
+                        showOfflineMapBanner = false
+                    }
                 }
             } else {
                 if (wasConnected) {
-                    showSuccessBanner = false
-                    if (!isMapLoadedInternal) {
-                        showOfflineMapBanner = true
+                    if (isIosPlatform()) {
+                        org.ttproject.components.PlatformNotificationManager.showNotification("No internet connection", "wifi_off")
+                    } else {
+                        showSuccessBanner = false
+                        if (!isMapLoadedInternal) {
+                            showOfflineMapBanner = true
+                        }
                     }
                 }
             }
@@ -1012,7 +1024,7 @@ fun MapScreen(
 
         // Offline Map Warning Banner
         AnimatedVisibility(
-            visible = showOfflineMapBanner && isActive && !isDetailsExpanded && !isAddingTable && !isPickingLocation,
+            visible = showOfflineMapBanner && isActive && !isDetailsExpanded && !isAddingTable && !isPickingLocation && !isIosPlatform(),
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             modifier = Modifier
@@ -1069,7 +1081,7 @@ fun MapScreen(
 
         // Connection Restored Success Banner
         AnimatedVisibility(
-            visible = showSuccessBanner && isActive && !isDetailsExpanded && !isAddingTable && !isPickingLocation,
+            visible = showSuccessBanner && isActive && !isDetailsExpanded && !isAddingTable && !isPickingLocation && !isIosPlatform(),
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             modifier = Modifier

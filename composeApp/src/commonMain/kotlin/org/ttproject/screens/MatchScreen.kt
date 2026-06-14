@@ -86,18 +86,34 @@ fun MatchScreen(
         viewModel.checkPremiumStatus()
         
         var wasConnected = connectivityChecker.isConnected()
-        showOfflineBanner = !wasConnected
+        if (isIosPlatform()) {
+            if (!wasConnected) {
+                org.ttproject.components.PlatformNotificationManager.showNotification("No internet connection", "wifi_off")
+            }
+        } else {
+            showOfflineBanner = !wasConnected
+        }
         while (true) {
             kotlinx.coroutines.delay(1000)
             val connected = connectivityChecker.isConnected()
             if (connected) {
-                showOfflineBanner = false
-                if (!wasConnected) {
-                    showSuccessBanner = true
+                if (isIosPlatform()) {
+                    if (!wasConnected) {
+                        org.ttproject.components.PlatformNotificationManager.showNotification("Connection restored", "wifi_on")
+                    }
+                } else {
+                    showOfflineBanner = false
+                    if (!wasConnected) {
+                        showSuccessBanner = true
+                    }
                 }
             } else if (!connected && wasConnected) {
-                showOfflineBanner = true
-                showSuccessBanner = false
+                if (isIosPlatform()) {
+                    org.ttproject.components.PlatformNotificationManager.showNotification("No internet connection", "wifi_off")
+                } else {
+                    showOfflineBanner = true
+                    showSuccessBanner = false
+                }
             }
             wasConnected = connected
         }
@@ -496,7 +512,7 @@ fun MatchScreen(
 
         // Offline Match Warning Banner
         AnimatedVisibility(
-            visible = showOfflineBanner,
+            visible = showOfflineBanner && !isIosPlatform(),
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             modifier = Modifier
@@ -553,7 +569,7 @@ fun MatchScreen(
 
         // Connection Restored Success Banner
         AnimatedVisibility(
-            visible = showSuccessBanner,
+            visible = showSuccessBanner && !isIosPlatform(),
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             modifier = Modifier

@@ -178,18 +178,34 @@ fun MessagesScreen(
 
     LaunchedEffect(Unit) {
         var wasConnected = connectivityChecker.isConnected()
-        showOfflineBanner = !wasConnected
+        if (isIosPlatform()) {
+            if (!wasConnected) {
+                org.ttproject.components.PlatformNotificationManager.showNotification("No internet connection", "wifi_off")
+            }
+        } else {
+            showOfflineBanner = !wasConnected
+        }
         while (true) {
             kotlinx.coroutines.delay(1000)
             val connected = connectivityChecker.isConnected()
             if (connected) {
-                showOfflineBanner = false
-                if (!wasConnected) {
-                    showSuccessBanner = true
+                if (isIosPlatform()) {
+                    if (!wasConnected) {
+                        org.ttproject.components.PlatformNotificationManager.showNotification("Connection restored", "wifi_on")
+                    }
+                } else {
+                    showOfflineBanner = false
+                    if (!wasConnected) {
+                        showSuccessBanner = true
+                    }
                 }
             } else if (!connected && wasConnected) {
-                showOfflineBanner = true
-                showSuccessBanner = false
+                if (isIosPlatform()) {
+                    org.ttproject.components.PlatformNotificationManager.showNotification("No internet connection", "wifi_off")
+                } else {
+                    showOfflineBanner = true
+                    showSuccessBanner = false
+                }
             }
             wasConnected = connected
         }
@@ -325,7 +341,7 @@ fun MessagesScreen(
 
             // Offline Warning Banner
             androidx.compose.animation.AnimatedVisibility(
-                visible = showOfflineBanner,
+                visible = showOfflineBanner && !isIosPlatform(),
                 enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
                 modifier = Modifier
@@ -382,7 +398,7 @@ fun MessagesScreen(
 
             // Connection Restored Success Banner
             androidx.compose.animation.AnimatedVisibility(
-                visible = showSuccessBanner,
+                visible = showSuccessBanner && !isIosPlatform(),
                 enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
                 modifier = Modifier
@@ -459,18 +475,34 @@ fun ChatDetailScreen(
 
     LaunchedEffect(Unit) {
         var wasConnected = connectivityChecker.isConnected()
-        showOfflineBanner = !wasConnected
+        if (isIosPlatform()) {
+            if (!wasConnected) {
+                org.ttproject.components.PlatformNotificationManager.showNotification("No internet connection", "wifi_off")
+            }
+        } else {
+            showOfflineBanner = !wasConnected
+        }
         while (true) {
             kotlinx.coroutines.delay(1000)
             val connected = connectivityChecker.isConnected()
             if (connected) {
-                showOfflineBanner = false
-                if (!wasConnected) {
-                    showSuccessBanner = true
+                if (isIosPlatform()) {
+                    if (!wasConnected) {
+                        org.ttproject.components.PlatformNotificationManager.showNotification("Connection restored", "wifi_on")
+                    }
+                } else {
+                    showOfflineBanner = false
+                    if (!wasConnected) {
+                        showSuccessBanner = true
+                    }
                 }
             } else if (!connected && wasConnected) {
-                showOfflineBanner = true
-                showSuccessBanner = false
+                if (isIosPlatform()) {
+                    org.ttproject.components.PlatformNotificationManager.showNotification("No internet connection", "wifi_off")
+                } else {
+                    showOfflineBanner = true
+                    showSuccessBanner = false
+                }
             }
             wasConnected = connected
         }
@@ -914,7 +946,7 @@ fun ChatDetailScreen(
 
                 // Offline Warning Banner
                 androidx.compose.animation.AnimatedVisibility(
-                    visible = showOfflineBanner,
+                    visible = showOfflineBanner && !isIosPlatform(),
                     enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
                     exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
                     modifier = Modifier
@@ -971,7 +1003,7 @@ fun ChatDetailScreen(
 
                 // Connection Restored Success Banner
                 androidx.compose.animation.AnimatedVisibility(
-                    visible = showSuccessBanner,
+                    visible = showSuccessBanner && !isIosPlatform(),
                     enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
                     exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
                     modifier = Modifier

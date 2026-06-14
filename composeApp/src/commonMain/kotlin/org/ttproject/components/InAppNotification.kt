@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
 import org.ttproject.AppColors
+import org.ttproject.isIosPlatform
 
 @Composable
 fun InAppNotification(
@@ -31,6 +32,17 @@ fun InAppNotification(
     icon: ImageVector = Icons.Default.Cancel,
     iconColor: Color = Color(0xFFEF5350)
 ) {
+    if (isIosPlatform()) {
+        LaunchedEffect(message) {
+            if (message != null) {
+                val type = if (iconColor == Color(0xFFEF5350)) "error" else "success"
+                PlatformNotificationManager.showNotification(message, type)
+                onDismiss()
+            }
+        }
+        return
+    }
+
     // Auto-dismiss timer
     LaunchedEffect(message) {
         if (message != null) {

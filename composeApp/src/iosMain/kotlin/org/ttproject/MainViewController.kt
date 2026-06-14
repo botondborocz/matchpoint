@@ -53,3 +53,7 @@ fun TabViewController(
         }
     )
 }
+
+fun setNotificationListener(listener: (String, String) -> Unit) {
+    org.ttproject.components.PlatformNotificationManager.setListener(listener)
+}
