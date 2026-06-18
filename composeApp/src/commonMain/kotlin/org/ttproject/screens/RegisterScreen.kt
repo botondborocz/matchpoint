@@ -78,14 +78,44 @@ fun RegisterScreen(
         isVisible = true
     }
 
+    var showVerificationDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(uiState) {
         if (uiState is LoginState.Success) {
             isGoogleLoading = false
             onRegisterSuccess()
             viewModel.resetState()
+        } else if (uiState is LoginState.VerificationSent) {
+            isGoogleLoading = false
+            showVerificationDialog = true
         } else if (uiState is LoginState.Error) {
             isGoogleLoading = false
         }
+    }
+
+    if (showVerificationDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showVerificationDialog = false
+                viewModel.resetState()
+                onNavigateToLogin()
+            },
+            title = { Text("Verify your email", fontWeight = FontWeight.Bold, color = AppColors.TextPrimary) },
+            text = { Text("We've sent a verification link to $email. Please check your inbox and click the link to activate your account.", color = AppColors.TextGray) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showVerificationDialog = false
+                        viewModel.resetState()
+                        onNavigateToLogin()
+                    }
+                ) {
+                    Text("OK", color = AppColors.AccentOrange, fontWeight = FontWeight.Bold)
+                }
+            },
+            shape = RoundedCornerShape(16.dp),
+            containerColor = AppColors.Background
+        )
     }
 
     Box(

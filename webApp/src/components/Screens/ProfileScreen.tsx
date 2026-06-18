@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import {
     Wrench, Globe, Palette, Settings as SettingsIcon, LogOut,
     ChevronDown, ChevronRight, Check,
-    Map, Camera, X, Edit2
+    Map, Camera, X, Edit2, Star
 } from 'lucide-react';
-import { fetchUserProfile, clearProfileCache, UserProfile } from '../../services/UserService.ts'; // Adjust path
+import { fetchUserProfile, clearProfileCache, togglePremiumStatus, UserProfile } from '../../services/UserService.ts'; // Adjust path
 import './ProfileScreen.css';
 import { useTheme } from '../../theme/ThemeContext';
 import { SharedRes } from '../../shared/SharedRes.ts';
@@ -241,6 +241,16 @@ export default function ProfileScreen({ onLogout }: ProfileScreenProps) {
             setEditError("Network error. Check your connection.");
         } finally {
             setIsSavingProfile(false);
+        }
+    };
+
+    const handleTogglePremium = async () => {
+        try {
+            const newPremiumState = await togglePremiumStatus();
+            setProfile(prev => prev ? { ...prev, isPremium: newPremiumState } : null);
+            clearProfileCache(); // Wipe cache so tab switches fetch fresh status
+        } catch (err) {
+            console.error("Failed to toggle premium status:", err);
         }
     };
 
@@ -521,6 +531,19 @@ export default function ProfileScreen({ onLogout }: ProfileScreenProps) {
             {/* --- SECTION: SETTINGS (Delayed by 0.2s) --- */}
             <div className="content-section mt-6 animate-slide-up delay-2">
                 <div className="item-list settings-grid">
+
+                    {/* --- PREMIUM TOGGLE DEBUG CARD STRIP --- */}
+                    <div className="item-card clickable premium-debug-toggle-card" onClick={handleTogglePremium}>
+                        <Star size={22} className={profile?.isPremium ? "text-yellow-active" : "text-muted"} />
+                        <div className="flex-col-start">
+                            <span className="item-title font-bold">
+                                {profile?.isPremium ? "Premium Account Active" : "Upgrade to Premium"}
+                            </span>
+                            <span className="item-subtitle">
+                                {profile?.isPremium ? "Click to switch to Free Plan (Debug)" : "Click to instantly unlock all features (Debug)"}
+                            </span>
+                        </div>
+                    </div>
 
                     {/* --- LANGUAGE DROPDOWN --- */}
                     <div className={`expandable-card ${openDropdown === 'language' ? 'open' : ''}`}>

@@ -78,14 +78,107 @@
             isVisible = true
         }
 
+        var showForgotPasswordDialog by remember { mutableStateOf(false) }
+        var forgotEmail by remember { mutableStateOf("") }
+        var showResetSentDialog by remember { mutableStateOf(false) }
+
         LaunchedEffect(uiState) {
             if (uiState is LoginState.Success) {
                 isGoogleLoading = false
                 onLoginSuccess()
                 viewModel.resetState()
+            } else if (uiState is LoginState.PasswordResetSent) {
+                isGoogleLoading = false
+                showForgotPasswordDialog = false
+                showResetSentDialog = true
             } else if (uiState is LoginState.Error) {
                 isGoogleLoading = false
             }
+        }
+
+        if (showForgotPasswordDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showForgotPasswordDialog = false
+                    viewModel.resetState()
+                },
+                title = { Text("Reset Password", fontWeight = FontWeight.Bold, color = AppColors.TextPrimary) },
+                text = {
+                    Column {
+                        Text("Enter your email address to receive a password reset link.", color = AppColors.TextGray)
+                        Spacer(modifier = Modifier.height(16.dp))
+                        OutlinedTextField(
+                            value = forgotEmail,
+                            onValueChange = { forgotEmail = it },
+                            label = { Text("Email") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = AppColors.AccentOrange,
+                                unfocusedBorderColor = AppColors.TextGray.copy(alpha = 0.5f),
+                                focusedLabelColor = AppColors.AccentOrange,
+                                unfocusedLabelColor = AppColors.TextGray,
+                                focusedTextColor = AppColors.TextPrimary,
+                                unfocusedTextColor = AppColors.TextPrimary,
+                                cursorColor = AppColors.AccentOrange
+                            )
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (forgotEmail.isNotBlank()) {
+                                viewModel.sendPasswordResetEmail(forgotEmail)
+                            }
+                        },
+                        enabled = uiState !is LoginState.Loading
+                    ) {
+                        if (uiState is LoginState.Loading) {
+                            CircularProgressIndicator(color = AppColors.AccentOrange, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("Send Link", color = AppColors.AccentOrange, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showForgotPasswordDialog = false
+                            viewModel.resetState()
+                        }
+                    ) {
+                        Text("Cancel", color = AppColors.TextGray)
+                    }
+                },
+                shape = RoundedCornerShape(16.dp),
+                containerColor = AppColors.Background
+            )
+        }
+
+        if (showResetSentDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showResetSentDialog = false
+                    viewModel.resetState()
+                },
+                title = { Text("Reset Link Sent", fontWeight = FontWeight.Bold, color = AppColors.TextPrimary) },
+                text = { Text("Please check your inbox at $forgotEmail for a link to reset your password.", color = AppColors.TextGray) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showResetSentDialog = false
+                            viewModel.resetState()
+                        }
+                    ) {
+                        Text("OK", color = AppColors.AccentOrange, fontWeight = FontWeight.Bold)
+                    }
+                },
+                shape = RoundedCornerShape(16.dp),
+                containerColor = AppColors.Background
+            )
         }
 
         Box(
@@ -187,7 +280,10 @@
                             fontSize = 14.sp,
                             modifier = Modifier
                                 .align(Alignment.End)
-                                .clickable { /* TODO: Navigate to recovery */ }
+                                .clickable {
+                                    forgotEmail = email
+                                    showForgotPasswordDialog = true
+                                }
                                 .padding(4.dp)
                         )
                     }

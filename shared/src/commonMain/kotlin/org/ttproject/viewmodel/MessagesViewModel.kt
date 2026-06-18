@@ -73,6 +73,12 @@ class MessagesViewModel(
         _searchQuery.value = query
     }
 
+    fun clearData() {
+        _threads.value = emptyList()
+        _isLoading.value = true
+        _searchQuery.value = ""
+    }
+
     fun savePushToken(fcmToken: String) {
         viewModelScope.launch {
             repository.savePushToken(fcmToken)

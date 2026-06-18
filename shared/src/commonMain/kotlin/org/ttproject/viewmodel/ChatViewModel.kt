@@ -16,10 +16,13 @@ import org.ttproject.data.ReactionDto
 import org.ttproject.data.UserProfile
 import org.ttproject.repository.UserRepository
 import org.ttproject.util.generateVideoThumbnail
+import kotlinx.datetime.Clock
+import org.ttproject.data.MessageStatus
 
 class ChatViewModel(
     private val repository: ChatRepository,
     private val userRepository: UserRepository,
+    private val tokenStorage: org.ttproject.data.TokenStorage,
     private val connectionId: String,
 ) : ViewModel() {
 
@@ -34,6 +37,29 @@ class ChatViewModel(
 
     init {
         loadChat()
+        repository.triggerPendingSync()
+
+        viewModelScope.launch {
+            org.ttproject.util.NotificationEventBus.refreshEvents.collect {
+                repository.triggerPendingSync()
+                val history = repository.getMessageHistory(connectionId)
+                _messages.value = history
+            }
+        }
+
+        viewModelScope.launch {
+            var wasConnected = repository.isConnected()
+            while (true) {
+                kotlinx.coroutines.delay(2000)
+                val currentlyConnected = repository.isConnected()
+                if (currentlyConnected && !wasConnected) {
+                    repository.triggerPendingSync()
+                    val history = repository.getMessageHistory(connectionId)
+                    _messages.value = history
+                }
+                wasConnected = currentlyConnected
+            }
+        }
     }
 
     private fun loadChat() {
@@ -47,10 +73,19 @@ class ChatViewModel(
             repository.observeLiveMessages(connectionId).collect { event ->
                 when (event) {
                     is ChatEvent.Message -> {
-                        // Standard message: Add it to the top of the list
+                        // Standard message: Add it to the list, preventing duplicates
                         _messages.update { currentList ->
-                            currentList + event.message
-                        }                    }
+                            if (currentList.any { it.id == event.message.id }) {
+                                currentList.map { if (it.id == event.message.id) event.message else it }
+                            } else {
+                                currentList + event.message
+                            }
+                        }
+                        // If the message is NOT from me, we are actively viewing the screen, so it is read!
+                        if (event.message.senderId != tokenStorage.getUserId()) {
+                            markMessagesAsRead()
+                        }
+                    }
                     is ChatEvent.Reaction -> {
                         _messages.update { currentList ->
                             currentList.map { msg ->
@@ -77,6 +112,15 @@ class ChatViewModel(
                             }
                         }
                     }
+                    is ChatEvent.Read -> {
+                        _messages.update { currentList ->
+                            currentList.map { msg ->
+                                if (msg.senderId != event.readerId && msg.status != MessageStatus.READ) {
+                                    msg.copy(status = MessageStatus.READ)
+                                } else msg
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -86,11 +130,32 @@ class ChatViewModel(
         if (text.isBlank()) return
 
         viewModelScope.launch {
-            // Send it to the server.
-            // The server will broadcast it back, which will be caught by `observeLiveMessages`
-            // and automatically added to the UI!
-            repository.sendMessage(text, replyToMessageId)
-            NotificationEventBus.triggerRefresh()
+            if (!repository.isConnected()) {
+                val tempId = "pending_" + Clock.System.now().toEpochMilliseconds()
+                val currentUserId = tokenStorage.getUserId() ?: ""
+                val pendingMsg = MessageDto(
+                    id = tempId,
+                    senderId = currentUserId,
+                    content = text,
+                    createdAt = Clock.System.now().toString(),
+                    replyToMessageId = replyToMessageId,
+                    reactions = emptyList(),
+                    status = MessageStatus.PENDING
+                )
+                _messages.update { it + pendingMsg }
+                repository.queuePendingMessage(
+                    connectionId = connectionId,
+                    tempId = tempId,
+                    text = text,
+                    replyToId = replyToMessageId,
+                    mediaType = "TEXT",
+                    mediaBytes = null,
+                    createdAt = pendingMsg.createdAt
+                )
+            } else {
+                repository.sendMessage(text, replyToMessageId)
+                NotificationEventBus.triggerRefresh()
+            }
         }
     }
 
@@ -132,92 +197,132 @@ class ChatViewModel(
         }
     }
 
-    // 👇 Accepts a List of ByteArrays
-    // 👇 Accepts a List of ByteArrays from the Gallery Picker
     fun sendImagesMessage(connectionId: String, mediaBytes: List<ByteArray>, replyToMessageId: String?) {
         if (mediaBytes.isEmpty()) return
 
         viewModelScope.launch {
-            // TODO: Optional _isUploading.value = true
+            val images = mutableListOf<ByteArray>()
+            val videos = mutableListOf<ByteArray>()
 
-            val imageBytesList = mutableListOf<ByteArray>()
-
-            // 1. Sort the incoming files using Magic Bytes
             mediaBytes.forEach { bytes ->
-
                 val isVideo = bytes.size > 8 &&
                         bytes[4].toInt().toChar() == 'f' &&
                         bytes[5].toInt().toChar() == 't' &&
                         bytes[6].toInt().toChar() == 'y' &&
                         bytes[7].toInt().toChar() == 'p'
-
                 if (isVideo) {
-                    // 2. It's a video! Route it to our dedicated video pipeline
-                    // so it generates a local thumbnail and uploads properly.
-                    sendVideoMessage(connectionId, bytes, replyToMessageId)
+                    videos.add(bytes)
                 } else {
-                    // 3. It's an image! Queue it up for the bulk collage upload.
-                    imageBytesList.add(bytes)
+                    images.add(bytes)
                 }
             }
 
-            // 4. Upload all remaining true images as a grouped collage message
-            if (imageBytesList.isNotEmpty()) {
-                repository.uploadChatImages(connectionId, imageBytesList).onSuccess { urls ->
-                    val tag = if (urls.size == 1) "[IMAGE]" else "[IMAGES]"
-                    val joinedUrls = urls.joinToString(",")
-                    repository.sendMessage("$tag$joinedUrls", replyToMessageId)
-                }.onFailure {
-                    it.printStackTrace()
-                }
+            // Send each video individually
+            videos.forEach { videoBytes ->
+                sendVideoMessage(connectionId, videoBytes, replyToMessageId)
             }
 
-            // TODO: Optional _isUploading.value = false
+            // Send images as a grouped collage
+            if (images.isNotEmpty()) {
+                val tempId = "pending_" + Clock.System.now().toEpochMilliseconds() + "_" + kotlin.random.Random.nextInt(1000, 9999)
+                val currentUserId = tokenStorage.getUserId() ?: ""
+                val tag = if (images.size == 1) "[IMAGE]" else "[IMAGES]"
+                val pendingUrls = images.indices.joinToString(",") { index -> "pending_media_${tempId}_$index" }
+                val pendingMsg = MessageDto(
+                    id = tempId,
+                    senderId = currentUserId,
+                    content = "$tag$pendingUrls",
+                    createdAt = Clock.System.now().toString(),
+                    replyToMessageId = replyToMessageId,
+                    reactions = emptyList(),
+                    status = MessageStatus.PENDING
+                )
+                _messages.update { it + pendingMsg }
+                repository.queuePendingMessage(
+                    connectionId = connectionId,
+                    tempId = tempId,
+                    text = "$tag$pendingUrls",
+                    replyToId = replyToMessageId,
+                    mediaType = "IMAGE",
+                    mediaBytes = images,
+                    createdAt = pendingMsg.createdAt
+                )
+            }
+
+            if (repository.isConnected()) {
+                repository.triggerPendingSync()
+            }
         }
     }
 
     fun sendVideoMessage(connectionId: String, videoBytes: ByteArray, replyToMessageId: String?) {
         viewModelScope.launch {
-            // TODO: Set _isUploading = true here
-
-            // 1. Generate the thumbnail locally
+            val tempId = "pending_" + Clock.System.now().toEpochMilliseconds() + "_" + kotlin.random.Random.nextInt(1000, 9999)
+            val currentUserId = tokenStorage.getUserId() ?: ""
             val thumbnailBytes = generateVideoThumbnail(videoBytes)
-
-            println("📸 THUMBNAIL DEBUG: ${if (thumbnailBytes != null) "✅ SUCCESS! Extracted ${thumbnailBytes.size / 1024} KB JPEG" else "❌ FAILED! Extractor returned null"}")
-
-            // 2. Prepare the list of files to upload
-            val filesToUpload = if (thumbnailBytes != null) {
-                listOf(thumbnailBytes, videoBytes) // Upload both!
+            val contentPayload = if (thumbnailBytes != null) {
+                "[VIDEO]pending_media_${tempId}_0,pending_media_${tempId}_1"
             } else {
-                listOf(videoBytes) // Fallback if extraction fails
+                "[VIDEO]pending_media_${tempId}_0"
             }
-
-            // 3. Upload them simultaneously
-            repository.uploadChatImages(connectionId, filesToUpload).onSuccess { urls ->
-
-                // 4. Extract the URLs from the backend response
-                val videoUrl = urls.find { it.contains(".mp4") } ?: ""
-                val thumbUrl = urls.find { it.contains(".jpg") || it.contains(".jpeg") } ?: ""
-
-                // 5. Blast the formatted string to the WebSocket!
-                val payload = if (thumbUrl.isNotBlank()) {
-                    "[VIDEO]$thumbUrl,$videoUrl"
-                } else {
-                    "[VIDEO]$videoUrl" // Fallback UI will just show a black box with a play button
-                }
-
-                repository.sendMessage(payload, replyToMessageId)
-
-            }.onFailure {
-                it.printStackTrace()
+            val pendingMsg = MessageDto(
+                id = tempId,
+                senderId = currentUserId,
+                content = contentPayload,
+                createdAt = Clock.System.now().toString(),
+                replyToMessageId = replyToMessageId,
+                reactions = emptyList(),
+                status = MessageStatus.PENDING
+            )
+            _messages.update { it + pendingMsg }
+            val filesToSave = if (thumbnailBytes != null) {
+                listOf(thumbnailBytes, videoBytes)
+            } else {
+                listOf(videoBytes)
             }
+            repository.queuePendingMessage(
+                connectionId = connectionId,
+                tempId = tempId,
+                text = contentPayload,
+                replyToId = replyToMessageId,
+                mediaType = "VIDEO",
+                mediaBytes = filesToSave,
+                createdAt = pendingMsg.createdAt
+            )
 
-            // TODO: Set _isUploading = false here
+            if (repository.isConnected()) {
+                repository.triggerPendingSync()
+            }
         }
     }
 
     fun sendVoiceMessage(connectionId: String, audioBytes: ByteArray, replyToMessageId: String?) {
         viewModelScope.launch {
+            if (!repository.isConnected()) {
+                val tempId = "pending_" + Clock.System.now().toEpochMilliseconds()
+                val currentUserId = tokenStorage.getUserId() ?: ""
+                val pendingMsg = MessageDto(
+                    id = tempId,
+                    senderId = currentUserId,
+                    content = "[VOICE]pending_media_${tempId}_0",
+                    createdAt = Clock.System.now().toString(),
+                    replyToMessageId = replyToMessageId,
+                    reactions = emptyList(),
+                    status = MessageStatus.PENDING
+                )
+                _messages.update { it + pendingMsg }
+                repository.queuePendingMessage(
+                    connectionId = connectionId,
+                    tempId = tempId,
+                    text = "[VOICE]pending_media_${tempId}_0",
+                    replyToId = replyToMessageId,
+                    mediaType = "VOICE",
+                    mediaBytes = listOf(audioBytes),
+                    createdAt = pendingMsg.createdAt
+                )
+                return@launch
+            }
+
             // Upload to a dedicated voice endpoint (or reuse the images one)
             repository.uploadAudioMessage(connectionId, audioBytes).onSuccess { url ->
                 val payload = "[VOICE]$url"

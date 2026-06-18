@@ -8,8 +8,9 @@ import platform.Foundation.NSISO8601DateFormatWithInternetDateTime
 import platform.Foundation.NSISO8601DateFormatWithFractionalSeconds
 import platform.Foundation.NSLocale
 import platform.Foundation.currentLocale
+import platform.Foundation.timeIntervalSinceDate
 
-actual fun formatMessageTime(isoTimestamp: String): String {
+actual fun formatMessageTime(isoTimestamp: String, recentPattern: String, olderPattern: String): String {
     return try {
         val isoFormatter = NSISO8601DateFormatter()
 
@@ -26,15 +27,29 @@ actual fun formatMessageTime(isoTimestamp: String): String {
         // 3. If it STILL failed (bad data), just return the raw string
         if (date == null) return isoTimestamp
 
-        // 4. Format to local user time (e.g. "4:00 PM" or "16:00")
-        val displayFormatter = NSDateFormatter().apply {
+        val now = platform.Foundation.NSDate()
+        val timeInterval = now.timeIntervalSinceDate(date)
+        val oneWeekInSeconds = 7.0 * 24.0 * 60.0 * 60.0
+
+        val timeFormatter = NSDateFormatter().apply {
+            locale = NSLocale.currentLocale()
             dateStyle = NSDateFormatterNoStyle
             timeStyle = NSDateFormatterShortStyle
-            locale = NSLocale.currentLocale()
         }
+        val timeStr = timeFormatter.stringFromDate(date)
 
-        displayFormatter.stringFromDate(date)
-    } catch (e: Exception) {
+        val isToday = platform.Foundation.NSCalendar.currentCalendar.isDateInToday(date)
+        if (isToday) {
+            timeStr
+        } else {
+            val dateFormatter = NSDateFormatter().apply {
+                locale = NSLocale.currentLocale()
+                dateFormat = if (timeInterval < oneWeekInSeconds) recentPattern else olderPattern
+            }
+            val dateStr = dateFormatter.stringFromDate(date)
+            "$dateStr, $timeStr"
+        }
+    } catch (e: Throwable) {
         isoTimestamp
     }
 }

@@ -1,13 +1,16 @@
 package org.ttproject.di
 
 import io.ktor.client.HttpClient
+import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 
-fun createHttpClient(): HttpClient {
-    return HttpClient {
+expect fun provideHttpClientEngine(): HttpClientEngine
+
+fun createHttpClient(engine: HttpClientEngine): HttpClient {
+    return HttpClient(engine) {
         // 1. Install the JSON parser
         install(ContentNegotiation) {
             json(Json {

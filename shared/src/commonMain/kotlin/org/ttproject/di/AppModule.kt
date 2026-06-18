@@ -14,6 +14,8 @@ import org.ttproject.repository.MatchRepository
 import org.ttproject.repository.MatchRepositoryImpl
 import org.ttproject.repository.UserRepository
 import org.ttproject.repository.UserRepositoryImpl
+import org.ttproject.database.ChatDatabase
+import org.ttproject.util.ConnectivityChecker
 import org.ttproject.viewmodel.ChatViewModel
 import org.ttproject.viewmodel.LocationViewModel
 import org.ttproject.viewmodel.LoginViewModel
@@ -27,17 +29,17 @@ val appModule = module {
     // Loads the Android or iOS specific dependencies!
     includes(platformModule)
 
-    single { createHttpClient() }
+    single { createHttpClient(provideHttpClientEngine()) }
     single<AuthRepository> { AuthRepositoryImpl(get(), get()) }
-    single<MatchRepository> { MatchRepositoryImpl(get(), get()) }
+    single<MatchRepository> { MatchRepositoryImpl(get(), get(), get()) }
     single<UserRepository> { UserRepositoryImpl(get(), get()) }
-    single<LocationRepository> { LocationRepositoryImpl(get(), get()) }
-    single<ChatRepository> { ChatRepositoryImpl(get(), get()) }
+    single<LocationRepository> { LocationRepositoryImpl(get(), get(), get()) }
+    single<ChatRepository> { ChatRepositoryImpl(get(), get(), get(), get()) }
     viewModel { LoginViewModel(get()) }
-    viewModel { MatchViewModel(get()) }
+    viewModel { MatchViewModel(get(), get()) }
     viewModel { ProfileViewModel(get(), get(), get()) }
     viewModel { LocationViewModel(get()) }
-    viewModel { ChatViewModel(get(), get(), get()) }
+    viewModel { params -> ChatViewModel(get(), get(), get(), params.get()) }
     viewModel { MessagesViewModel(get()) }
 }
 

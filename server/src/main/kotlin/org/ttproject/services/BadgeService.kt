@@ -81,7 +81,7 @@ class BadgeService {
 
             val now = Instant.now()
             val today = LocalDate.ofInstant(now, zoneId)
-            val lastDate = lastCheckIn?.let { LocalDate.ofInstant(it, ZoneId.systemDefault()) }
+            val lastDate = lastCheckIn?.let { LocalDate.ofInstant(it, zoneId) }
 
             when {
                 // 1. First time or already checked in today -> Do nothing

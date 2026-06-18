@@ -13,6 +13,7 @@ import org.ttproject.data.AddReviewRequest
 import org.ttproject.data.AddTableRequest
 import org.ttproject.data.TTReview
 import org.ttproject.repository.LocationRepository
+import org.ttproject.util.NotificationEventBus
 
 sealed class LocationsUiState {
     object Loading : LocationsUiState()
@@ -33,16 +34,36 @@ class LocationViewModel(
 
     fun fetchNearbyLocations() {
         viewModelScope.launch {
-            _uiState.value = LocationsUiState.Loading
+            try {
+                val cached = withContext(Dispatchers.Default) {
+                    repository.getCachedLocations()
+                }
+                if (cached.isNotEmpty()) {
+                    _uiState.value = LocationsUiState.Success(cached)
+                } else {
+                    _uiState.value = LocationsUiState.Loading
+                }
+            } catch (e: Exception) {
+                println("Error loading cache: ${e.message}")
+                _uiState.value = LocationsUiState.Loading
+            }
+
             try {
                 val locations = withContext(Dispatchers.Default) {
                     repository.getNearbyLocations()
                 }
                 _uiState.value = LocationsUiState.Success(locations)
             } catch (e: Exception) {
-                _uiState.value = LocationsUiState.Error(e.message ?: "Unknown error occurred")
+                if (_uiState.value !is LocationsUiState.Success) {
+                    _uiState.value = LocationsUiState.Error(e.message ?: "Unknown error occurred")
+                }
             }
         }
+    }
+
+    fun clearData() {
+        _uiState.value = LocationsUiState.Loading
+        _clubReviews.value = emptyList()
     }
 
     fun submitNewTable(
@@ -68,6 +89,7 @@ class LocationViewModel(
 
             if (result.isSuccess) {
                 fetchNearbyLocations()
+                NotificationEventBus.triggerRefresh()
                 onSuccess()
             } else {
                 println("Error adding table: ${result.exceptionOrNull()?.message}")
@@ -100,6 +122,7 @@ class LocationViewModel(
             val result = repository.addReview(locationId, request)
             if (result.isSuccess) {
                 loadReviewsForClub(locationId)
+                NotificationEventBus.triggerRefresh()
                 onSuccess()
             }
         }
@@ -111,6 +134,7 @@ class LocationViewModel(
             if (result.isSuccess) {
                 // Refresh the master list so the new images are available globally!
                 fetchNearbyLocations()
+                NotificationEventBus.triggerRefresh()
                 onSuccess()
             } else {
                 println("Error adding standalone images: ${result.exceptionOrNull()?.message}")

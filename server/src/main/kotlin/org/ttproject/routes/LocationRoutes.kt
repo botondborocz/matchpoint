@@ -35,6 +35,8 @@ import org.ttproject.database.tables.Users
 import org.ttproject.utils.calculateDistanceKm
 import java.lang.System.currentTimeMillis
 import java.net.URLEncoder
+import org.ttproject.database.tables.UserBadgeMetrics
+import org.ttproject.services.BadgeService
 import java.util.UUID
 
 // 👇 Firebase Upload Helper
@@ -69,7 +71,7 @@ suspend fun uploadToFirebaseStorage(imagesBytes: List<ByteArray>, folder: String
     return urls.joinToString(",")
 }
 
-fun Route.locationRoutes() {
+fun Route.locationRoutes(badgeService: BadgeService) {
     route("/api") {
         get("/locations/nearby") {
             val userLat = call.request.queryParameters["lat"]?.toDoubleOrNull()
@@ -201,6 +203,12 @@ fun Route.locationRoutes() {
                     }
                 }
 
+                val creatorUuid = UUID.fromString(userId)
+                badgeService.incrementMetric(creatorUuid, UserBadgeMetrics.addedTables, 1)
+                if (imageBytesList.isNotEmpty()) {
+                    badgeService.incrementMetric(creatorUuid, UserBadgeMetrics.uploadedPhotos, imageBytesList.size)
+                }
+
                 call.respond(HttpStatusCode.Created, "Table added successfully!")
             }
 
@@ -262,6 +270,10 @@ fun Route.locationRoutes() {
                             }
                         }
                     }
+                    badgeService.incrementMetric(userUuid, UserBadgeMetrics.writtenReviews, 1)
+                    if (imageBytesList.isNotEmpty()) {
+                        badgeService.incrementMetric(userUuid, UserBadgeMetrics.uploadedPhotos, imageBytesList.size)
+                    }
                     call.respond(HttpStatusCode.Created, "Review added successfully")
 
                 } catch (e: Exception) {
@@ -275,8 +287,14 @@ fun Route.locationRoutes() {
                 val locationIdStr = call.parameters["id"]
                     ?: return@post call.respond(HttpStatusCode.BadRequest, "Missing location ID")
 
+                val principal = call.principal<JWTPrincipal>()
+                val userIdStr = principal?.payload?.getClaim("userId")?.asString()
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized, "Missing user claim")
+
                 val locationUuid = runCatching { UUID.fromString(locationIdStr) }.getOrNull()
                     ?: return@post call.respond(HttpStatusCode.BadRequest, "Invalid location UUID format")
+                val userUuid = runCatching { UUID.fromString(userIdStr) }.getOrNull()
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized, "Invalid user UUID format")
 
                 val multipart = call.receiveMultipart()
                 val imageBytesList = mutableListOf<ByteArray>()
@@ -310,6 +328,7 @@ fun Route.locationRoutes() {
                             it[imageUrls] = updatedUrls
                         }
                     }
+                    badgeService.incrementMetric(userUuid, UserBadgeMetrics.uploadedPhotos, imageBytesList.size)
                     call.respond(HttpStatusCode.OK, "Images added successfully")
 
                 } catch (e: Exception) {

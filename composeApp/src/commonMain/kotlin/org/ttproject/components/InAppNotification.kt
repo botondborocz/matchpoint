@@ -6,7 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -18,16 +18,31 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
 import org.ttproject.AppColors
+import org.ttproject.isIosPlatform
 
 @Composable
 fun InAppNotification(
     message: String?,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    icon: ImageVector = Icons.Default.Cancel,
+    iconColor: Color = Color(0xFFEF5350)
 ) {
+    if (isIosPlatform()) {
+        LaunchedEffect(message) {
+            if (message != null) {
+                val type = if (iconColor == Color(0xFFEF5350)) "error" else "success"
+                PlatformNotificationManager.showNotification(message, type)
+                onDismiss()
+            }
+        }
+        return
+    }
+
     // Auto-dismiss timer
     LaunchedEffect(message) {
         if (message != null) {
@@ -67,9 +82,9 @@ fun InAppNotification(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = "Success",
-                        tint = Color(0xFF4CAF50), // A nice success green
+                        imageVector = icon,
+                        contentDescription = "Notification Icon",
+                        tint = iconColor,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))

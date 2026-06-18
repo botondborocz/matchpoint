@@ -1,6 +1,11 @@
 import UIKit
 import SwiftUI
 import ComposeApp
+import shared
+
+// MARK: - Native Gallery Bridge Models
+// ... (previous contents unmodified)
+
 
 // MARK: - Native Gallery Bridge Models
 struct GalleryData: Identifiable {
@@ -19,7 +24,7 @@ class IOSGalleryLauncher: NativeGalleryLauncher {
         self.appState = appState
     }
 
-    func openGallery(images: [String], initialIndex: Int32, isMineList: [KotlinBoolean], onDelete: @escaping (String) -> Void, onReport: @escaping (String, String) -> Void) {
+    func openGallery(images: [String], initialIndex: Int32, isMineList: [ComposeApp.KotlinBoolean], onDelete: @escaping (String) -> Void, onReport: @escaping (String, String) -> Void) {
         DispatchQueue.main.async {
             self.appState.galleryData = GalleryData(
                 images: images,
@@ -81,17 +86,22 @@ struct ComposeTabViewControllerRepresentable: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
 }
 
-// MARK: - Main Native Tab Layout View
 struct ContentView: View {
     @StateObject var appState = AppState()
 
+    init() {
+        KoinHelper.shared.safeInitKoin()
+    }
+
     var body: some View {
-        // 🌟 Fix: Wrap the TabView inside an outer GeometryReader and ZStack
-        // to handle the edge-to-edge content sliding animation properly.
         GeometryReader { geometry in
             ZStack(alignment: .bottom) {
-
                 TabView(selection: $appState.currentTab) {
+                    // NativeMapScreenView(appState: appState)
+                    //     .ignoresSafeArea()
+                    //     .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
+                    //     .tabItem { Label("Map", systemImage: "map.fill") }
+                    //     .tag("map")
                     ComposeTabViewControllerRepresentable(tabName: "map", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
                         .ignoresSafeArea()
                         .tabItem { Label("Map", systemImage: "map.fill") }
@@ -99,8 +109,17 @@ struct ContentView: View {
 
                     ComposeTabViewControllerRepresentable(tabName: "match", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
                         .ignoresSafeArea()
-                        .tabItem { Label("Match", systemImage: "sportscourt.fill") }
+                        .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
+                        .tabItem { Label("Match", systemImage: "bolt.fill") }
                         .tag("match")
+
+                    // NavigationStack {
+                    //     NativeMessagesScreenView()
+                    // }
+                    // .environmentObject(appState)
+                    // .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
+                    // .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right.fill") }
+                    // .tag("messages")
 
                     ComposeTabViewControllerRepresentable(tabName: "messages", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
                         .ignoresSafeArea()
@@ -109,24 +128,21 @@ struct ContentView: View {
 
                     ComposeTabViewControllerRepresentable(tabName: "profile", launcher: IOSGalleryLauncher(appState: appState), appState: appState)
                         .ignoresSafeArea()
+                        .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
                         .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
                         .tag("profile")
                 }
                 .tint(appState.tabTintColor)
-                // 👈 1. Force the layout bar to disappear via the core view controller context state modifier
-                .toolbar(appState.isTabBarHidden ? .hidden : .visible, for: .tabBar)
-                // 👈 2. Add an explicit frame offset animation so the transition slides off smoothly
-                // instead of snapping instantly and leaving an awkward white block at the bottom
-                .offset(y: appState.isTabBarHidden ? geometry.safeAreaInsets.bottom + 49 : 0)
-                .animation(.spring(response: 0.35, dampingFraction: 0.82), value: appState.isTabBarHidden)
+                .ignoresSafeArea(.keyboard)
             }
-        }
-        .fullScreenCover(item: $appState.galleryData) { data in
-            NativeSwiftGalleryView(data: data)
-                .background(TransparentBackground())
+            .fullScreenCover(item: $appState.galleryData) { data in
+                NativeSwiftGalleryView(data: data)
+                    .background(TransparentBackground())
+            }
         }
     }
 }
+
 
 // MARK: - UIKIT Bridge Components
 struct TransparentBackground: UIViewRepresentable {
@@ -203,7 +219,7 @@ struct NativeSwiftGalleryView: View {
                         if abs(viewOffset.height) + abs(velocity) > 150 {
                             dismiss()
                         } else {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            withAnimation(Animation.spring(response: 0.3, dampingFraction: 0.8)) {
                                 viewOffset = .zero
                                 bgOpacity = 1.0
                             }

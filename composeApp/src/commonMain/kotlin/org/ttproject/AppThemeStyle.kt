@@ -48,7 +48,10 @@ enum class AppThemeStyle(
     ROYAL("MatchPoint", "#0F172A", "#1E293B", "#3B82F6", "#F0F9FF", "#FFFFFF", "#1D4ED8", true),
 
     // 10. VOLT (Sötét: Sötétlila -> Szürkéslila kártyák)
-    VOLT("Kinetikus", "#181824", "#252536", "#FFF000", "#FEFCE8", "#FFFFFF", "#A16207", true)
+    VOLT("Kinetikus", "#181824", "#252536", "#FFF000", "#FEFCE8", "#FFFFFF", "#A16207", true),
+
+    // 11. SUNSET (Fiery orange/peach colors)
+    SUNSET("Naplemente", "#1E0F0F", "#2D1919", "#FF5E3A", "#FFF5F2", "#FFEBE6", "#FF5E3A", true)
 }
 
 val LocalAppThemeStyle = staticCompositionLocalOf { AppThemeStyle.DEFAULT }

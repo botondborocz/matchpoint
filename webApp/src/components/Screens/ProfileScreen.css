@@ -620,3 +620,36 @@
 .mb-0 { margin-bottom: 0; }
 .mt-3 { margin-top: 12px; }
 .mt-6 { margin-top: 24px; }
+
+/* --- PREMIUM TOGGLE DEBUG CARD STRIP --- */
+.premium-debug-toggle-card {
+  display: flex;
+  align-items: center;
+  background-color: var(--surface-dark);
+  padding: 16px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  margin-bottom: 12px;
+}
+
+.premium-debug-toggle-card:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.text-yellow-active {
+  color: #FFD700 !important;
+}
+
+.flex-col-start {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-left: 16px;
+}
+
+.item-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}

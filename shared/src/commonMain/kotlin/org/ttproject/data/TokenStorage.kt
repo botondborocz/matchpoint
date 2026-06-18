@@ -20,4 +20,20 @@ interface TokenStorage {
     fun getAppTheme(): String?
     fun saveAppIcon(iconAlias: String)
     fun getAppIcon(): String?
+    fun savePremiumStatus(isPremium: Boolean)
+    fun getPremiumStatus(): Boolean
+    fun clearPremiumStatus()
+    
+    // 👇 Sidebar expanded state persistence
+    fun saveSidebarExpanded(isExpanded: Boolean)
+    fun getSidebarExpanded(): Boolean?
+
+    // 👇 Profile & Badge metrics caching for offline viewing
+    fun saveUserProfile(profile: UserProfile)
+    fun getUserProfile(): UserProfile?
+    fun saveBadgeMetrics(metrics: UserBadgeMetricsDto)
+    fun getBadgeMetrics(): UserBadgeMetricsDto?
+    fun setPendingLanguageSync(language: String?)
+    fun getPendingLanguageSync(): String?
+    fun clearPendingLanguageSync()
 }

@@ -42,9 +42,11 @@ actual fun NativeMap(
     selectedClub: TTClub?,
     userLocationTrigger: Int,
     bottomPadding: Dp,
+    leftPadding: Dp,
     isDark: Boolean,
     onMarkerClick: (TTClub) -> Unit,
-    onBoundsChanged: (MapBounds) -> Unit
+    onBoundsChanged: (MapBounds) -> Unit,
+    onMapLoaded: () -> Unit
 ) {
     val context = LocalContext.current
 
@@ -213,8 +215,9 @@ actual fun NativeMap(
     GoogleMap(
         modifier = modifier,
         cameraPositionState = cameraPositionState,
-        // 👇 Dynamic Bottom Padding applied here!
-        contentPadding = PaddingValues(top = 72.dp, bottom = bottomPadding),
+        onMapLoaded = onMapLoaded,
+        // 👇 Dynamic Left & Bottom Padding applied here!
+        contentPadding = PaddingValues(start = leftPadding, top = 72.dp, bottom = bottomPadding),
         properties = MapProperties(
             isMyLocationEnabled = false,
             // 👇 Apply Dark Mode JSON if app is in dark mode

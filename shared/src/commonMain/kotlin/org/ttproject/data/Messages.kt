@@ -3,6 +3,13 @@ package org.ttproject.data
 import kotlinx.serialization.Serializable
 
 @Serializable
+enum class MessageStatus {
+    PENDING,
+    SENT,
+    READ
+}
+
+@Serializable
 data class ReactionDto(
     val userId: String,
     val emoji: String
@@ -15,7 +22,8 @@ data class MessageDto(
     val content: String,
     val createdAt: String,
     val replyToMessageId: String? = null,
-    val reactions: List<ReactionDto> = emptyList()
+    val reactions: List<ReactionDto> = emptyList(),
+    val status: MessageStatus? = MessageStatus.SENT
 )
 
 @Serializable

@@ -160,7 +160,9 @@ fun Route.messageRoutes(badgeService: BadgeService) {
                             content = it[Messages.content],
                             createdAt = it[Messages.createdAt].toString(),
                             replyToMessageId = it[Messages.replyToMessageId]?.toString(),
-                            reactions = reactionsMap[it[Messages.id]] ?: emptyList()                        )
+                            reactions = reactionsMap[it[Messages.id]] ?: emptyList(),
+                            status = if (it[Messages.isRead]) org.ttproject.data.MessageStatus.READ else org.ttproject.data.MessageStatus.SENT
+                        )
                     }
                 }
 
@@ -188,6 +190,16 @@ fun Route.messageRoutes(badgeService: BadgeService) {
                         it[isRead] = true
                     }
                 }
+
+                // Broadcast real-time read receipt to all active users in the room
+                val payload = """
+                    {
+                        "type": "read",
+                        "readerId": "$currentUserId"
+                    }
+                """.trimIndent()
+                connectionManager.broadcast(connectionId, payload)
+
                 call.respond(HttpStatusCode.OK, "Messages marked as read")
             }
 

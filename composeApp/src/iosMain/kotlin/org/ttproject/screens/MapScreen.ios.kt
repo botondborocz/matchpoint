@@ -39,13 +39,20 @@ actual fun NativeMap(
     selectedClub: TTClub?,
     userLocationTrigger: Int,
     bottomPadding: Dp,
+    leftPadding: Dp,
     isDark: Boolean,
     onMarkerClick: (TTClub) -> Unit,
-    onBoundsChanged: (MapBounds) -> Unit
+    onBoundsChanged: (MapBounds) -> Unit,
+    onMapLoaded: () -> Unit
 ) {
     val currentLocations by rememberUpdatedState(locations)
     val currentOnMarkerClick by rememberUpdatedState(onMarkerClick)
     val currentOnBoundsChanged by rememberUpdatedState(onBoundsChanged)
+    val currentOnMapLoaded by rememberUpdatedState(onMapLoaded)
+
+    LaunchedEffect(Unit) {
+        currentOnMapLoaded()
+    }
 
     val currentAccentColor by rememberUpdatedState(AppColors.AccentOrange)
     var lastHandledTrigger by remember { mutableStateOf(0) }
@@ -131,7 +138,7 @@ actual fun NativeMap(
         ),
         update = { mapView ->
 
-            mapView.layoutMargins = UIEdgeInsetsMake(0.0, 0.0, bottomPadding.value.toDouble(), 0.0)
+            mapView.layoutMargins = UIEdgeInsetsMake(72.0, leftPadding.value.toDouble(), bottomPadding.value.toDouble(), 0.0)
             mapView.overrideUserInterfaceStyle = if (isDark) UIUserInterfaceStyle.UIUserInterfaceStyleDark else UIUserInterfaceStyle.UIUserInterfaceStyleLight
 
             // 👇 1. GRAB THE LATEST COLOR
@@ -174,7 +181,23 @@ actual fun NativeMap(
 
                 if (annotationToSelect != null) {
                     mapView.selectAnnotation(annotationToSelect, animated = true)
-                    val centerCoord = CLLocationCoordinate2DMake(selectedClub.lat, selectedClub.lng)
+                    var lat = selectedClub.lat
+                    var lng = selectedClub.lng
+
+                    if (leftPadding.value > 0.0) {
+                        val screenWidthPoints = mapView.bounds.useContents { size.width }
+                        if (screenWidthPoints > 0.0) {
+                            // MKCoordinateRegion span estimation for 1000m
+                            // 1 degree latitude is approx 111,000 meters.
+                            // 1 degree longitude is approx 111,000 * cos(lat) meters.
+                            // Zoom region is 1000m x 1000m.
+                            val lngDelta = 1000.0 / (111000.0 * kotlin.math.cos(lat * kotlin.math.PI / 180.0))
+                            // We shift center longitude to the left
+                            lng -= (leftPadding.value / 2.0 / screenWidthPoints) * lngDelta
+                        }
+                    }
+
+                    val centerCoord = CLLocationCoordinate2DMake(lat, lng)
                     val region = MKCoordinateRegionMakeWithDistance(centerCoord, 1000.0, 1000.0)
                     mapView.setRegion(region, animated = true)
                 }

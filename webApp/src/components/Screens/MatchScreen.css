@@ -525,3 +525,282 @@
     transform: scale(1) translateY(0); 
   }
 }
+
+/* --- LIKES PILL & COUNTER --- */
+.header-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.match-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 380px;
+  margin-bottom: 24px;
+}
+
+.likes-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--surface-dark);
+  padding: 6px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+}
+
+.likes-pill:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent-orange);
+}
+
+.likes-count {
+  color: var(--accent-orange);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* --- UNDO BUTTON --- */
+.undo-btn {
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--surface-dark);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  align-self: center;
+  opacity: 0.5;
+}
+
+.undo-btn.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: #9CA3AF;
+  border-color: transparent;
+}
+
+.undo-btn.active {
+  opacity: 1;
+  color: #FBBF24; /* yellow-400 */
+  border: 1px solid rgba(251, 191, 36, 0.6);
+}
+
+.undo-btn.active:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
+}
+
+/* --- CARD BLURRING --- */
+.card-blur-effect {
+  filter: blur(22px);
+}
+
+/* --- MODAL OVERLAYS & DIALOGS --- */
+.modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: fadeIn 0.2s ease;
+}
+
+.modal-card {
+  background-color: #111622;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 28px;
+  padding: 24px;
+  width: 90%;
+  max-width: 360px;
+  position: relative;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  animation: springUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.likes-modal-card {
+  max-width: 400px;
+  height: 80%;
+  display: flex;
+  flex-direction: column;
+}
+
+.close-modal-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+}
+
+.close-circle-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.modal-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.modal-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: white;
+  margin: 0;
+}
+
+.modal-subtitle {
+  color: #D1D5DB;
+  font-size: 15px;
+  line-height: 1.5;
+  text-align: center;
+  margin-top: 16px;
+  margin-bottom: 24px;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.blurred-content-wrapper.blurred-modal {
+  filter: blur(8px);
+  pointer-events: none;
+}
+
+/* --- LIKES POPUP CELL GRID --- */
+.likes-grid-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.likes-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  overflow-y: auto;
+  height: 100%;
+  padding-bottom: 16px;
+}
+
+.like-cell {
+  aspect-ratio: 3 / 4;
+  border-radius: 16px;
+  background-color: var(--surface-dark);
+  overflow: hidden;
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.like-cell-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.like-cell-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.like-cell-gradient {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to bottom, transparent 60%, rgba(21, 28, 44, 0.8) 100%);
+  z-index: 1;
+}
+
+.like-cell-info {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+}
+
+.like-cell-name {
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.like-cell-distance {
+  color: #D1D5DB;
+  font-size: 11px;
+}
+
+/* --- LIKES PAYWALL OVERLAY --- */
+.likes-paywall-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+}
+
+.likes-paywall-content {
+  background-color: #1C2232;
+  border: 1px solid rgba(255, 145, 0, 0.2);
+  border-radius: 20px;
+  padding: 24px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+.likes-paywall-content h3 {
+  color: white;
+  margin: 0 0 8px 0;
+  font-size: 18px;
+}
+
+.likes-paywall-content p {
+  color: #D1D5DB;
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0 0 20px 0;
+}
