@@ -46,6 +46,7 @@ struct iOSApp: App {
                 .liquidDropsHost()
                 .onOpenURL { url in
                     GIDSignIn.sharedInstance.handle(url)
+                    AuthEventBus.shared.handleDeeplink(url: url.absoluteString)
                 }
         }
     }

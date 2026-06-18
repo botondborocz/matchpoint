@@ -30,6 +30,7 @@ import kotlinx.serialization.json.jsonPrimitive
 data class LoginRequest(val email: String, val password: String)
 data class RegisterRequest(val email: String, val password: String, val username: String? = null, val fullName: String? = null)
 data class GoogleAuthRequest(val idToken: String)
+data class SupabaseAuthRequest(val supabaseToken: String)
 
 fun Route.authRoutes() {
     route("/api/auth") {
@@ -179,6 +180,67 @@ fun Route.authRoutes() {
                 }
             } catch (e: Exception) {
                 call.respondText("Malformed token format", status = HttpStatusCode.BadRequest)
+            }
+        }
+
+        post("/login-supabase") {
+            val req = try {
+                call.receive<SupabaseAuthRequest>()
+            } catch (e: Exception) {
+                return@post call.respondText("Invalid request body", status = HttpStatusCode.BadRequest)
+            }
+
+            if (req.supabaseToken.isBlank()) {
+                return@post call.respondText("Token is empty", status = HttpStatusCode.BadRequest)
+            }
+
+            val dotenv = dotenv {
+                ignoreIfMissing = true
+            }
+            val supabaseUrl = dotenv["SUPABASE_URL"] ?: System.getenv("SUPABASE_URL")
+            val supabaseAnonKey = dotenv["SUPABASE_ANON_KEY"] ?: System.getenv("SUPABASE_ANON_KEY")
+
+            try {
+                // Verify with Supabase Auth API
+                val client = HttpClient.newHttpClient()
+                val request = HttpRequest.newBuilder()
+                    .uri(URI.create("$supabaseUrl/auth/v1/user"))
+                    .header("Authorization", "Bearer ${req.supabaseToken}")
+                    .header("apikey", supabaseAnonKey)
+                    .GET()
+                    .build()
+
+                val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+
+                if (response.statusCode() == 200) {
+                    val body = response.body()
+                    val json = Json.parseToJsonElement(body).jsonObject
+                    val idStr = json["id"]?.jsonPrimitive?.content ?: throw Exception("ID not found in Supabase response")
+                    val emailStr = json["email"]?.jsonPrimitive?.content ?: throw Exception("Email not found in Supabase response")
+                    val userUuid = UUID.fromString(idStr)
+
+                    transaction {
+                        val existingUser = Users.select { Users.id eq userUuid }.singleOrNull()
+                        if (existingUser == null) {
+                            Users.insert {
+                                it[id] = userUuid
+                                it[email] = emailStr
+                                it[username] = emailStr.substringBefore("@") + "_" + UUID.randomUUID().toString().take(4)
+                                it[fullName] = "Player"
+                                it[skillLevel] = SkillLevel.Beginner
+                                it[createdAt] = java.time.Instant.now()
+                            }
+                        }
+                    }
+
+                    val token = JwtConfig.generateToken(userUuid.toString())
+                    call.respondText("""{"token": "$token"}""", ContentType.Application.Json)
+                } else {
+                    call.respondText("Invalid Supabase Token: ${response.body()}", status = HttpStatusCode.Unauthorized)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                call.respondText("Verification failed: ${e.message}", status = HttpStatusCode.InternalServerError)
             }
         }
     }

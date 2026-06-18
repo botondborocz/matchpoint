@@ -115,12 +115,9 @@ import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import org.ttproject.components.AudioPlayer
 import org.ttproject.components.FullScreenImageGallery
+
 import org.ttproject.components.NativeGalleryLauncher
 import org.ttproject.components.VideoPlayer
-import org.ttproject.components.rememberAudioPlayer
-import org.ttproject.components.rememberCameraLauncher
-import org.ttproject.components.rememberVideoLauncher
-import org.ttproject.components.rememberVoiceRecorder
 import org.ttproject.data.ReactionDto
 import org.ttproject.data.MessageStatus
 import org.ttproject.util.ConnectivityChecker
@@ -134,7 +131,14 @@ import ttproject.composeapp.generated.resources.camera
 import ttproject.composeapp.generated.resources.image
 import ttproject.composeapp.generated.resources.mic
 import ttproject.composeapp.generated.resources.video
+import ttproject.composeapp.generated.resources.message_circle
 import kotlin.math.abs
+import org.ttproject.components.rememberAudioPlayer
+import org.ttproject.components.rememberCameraLauncher
+import org.ttproject.components.rememberVideoLauncher
+import org.ttproject.components.rememberVoiceRecorder
+
+
 
 data class ChatThread(
     val id: String,
@@ -164,7 +168,8 @@ fun MessagesScreen(
     playAnimation: Boolean = true,
     bottomNavPadding: Dp,
     onNavigateToChat: (String, String, String?, String) -> Unit,
-    connectivityChecker: ConnectivityChecker = koinInject()
+    connectivityChecker: ConnectivityChecker = koinInject(),
+    galleryLauncher: NativeGalleryLauncher
 ) {
     val chatThreads by viewModel.filteredThreads.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
@@ -228,229 +233,104 @@ fun MessagesScreen(
         MutableTransitionState(!playAnimation).apply { targetState = true }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(bottom = bottomNavPadding + 0.dp)
-    ) {
-        MobileTopBar(
-            showSearch = true,
-            onSearchClick = { isSearchExpanded = true }
-        )
+    var selectedThread by remember { mutableStateOf<ChatThreadDto?>(null) }
 
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (isLoading && chatThreads.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = AppColors.AccentOrange)
-                }
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(top = 0.dp, bottom = 10.dp),
-                    modifier = Modifier.fillMaxSize()
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isTablet = maxWidth >= 600.dp
+
+        if (isTablet) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                // Left pane: Chat threads list (phone wide: 360.dp)
+                ThreadListPane(
+                    chatThreads = chatThreads,
+                    isLoading = isLoading,
+                    searchQuery = searchQuery,
+                    isSearchExpanded = isSearchExpanded,
+                    onSearchExpandedChange = { isSearchExpanded = it },
+                    onSearchQueryChange = { viewModel.updateSearchQuery(it) },
+                    onThreadClick = { thread ->
+                        keyboardController?.hide()
+                        isSearchExpanded = false
+                        viewModel.updateSearchQuery("")
+                        selectedThread = thread
+                    },
+                    showOfflineBanner = showOfflineBanner,
+                    onOfflineBannerDismiss = { showOfflineBanner = false },
+                    showSuccessBanner = showSuccessBanner,
+                    onSuccessBannerDismiss = { showSuccessBanner = false },
+                    selectedThreadId = selectedThread?.id,
+                    modifier = Modifier
+                        .width(360.dp)
+                        .fillMaxHeight()
+                )
+
+                VerticalDivider(
+                    color = AppColors.TextGray.copy(alpha = 0.2f),
+                    modifier = Modifier.width(1.dp).fillMaxHeight()
+                )
+
+                // Right pane: Active chat detail or placeholder
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
                 ) {
-                    // --- ALWAYS RENDER THE SEARCH BAR ---
-                    item {
-                        androidx.compose.animation.AnimatedVisibility(
-                            visible = isSearchExpanded,
-                            enter = expandVertically() + fadeIn(),
-                            exit = shrinkVertically() + fadeOut()
-                        ) {
-                            Column {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    LaunchedEffect(Unit) {
-                                        focusRequester.requestFocus()
-                                        keyboardController?.show()
-                                    }
-
-                                    OutlinedTextField(
-                                        value = searchQuery,
-                                        onValueChange = { viewModel.updateSearchQuery(it) },
-                                        placeholder = {
-                                            Text(
-                                                stringResource(SharedRes.string.search_username_placeholder),
-                                                color = AppColors.TextGray
-                                            )
-                                        },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .focusRequester(focusRequester),
-                                        singleLine = true,
-                                        shape = RoundedCornerShape(24.dp),
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = AppColors.AccentOrange,
-                                            unfocusedBorderColor = AppColors.TextGray.copy(alpha = 0.5f),
-                                            focusedTextColor = AppColors.TextPrimary,
-                                            unfocusedTextColor = AppColors.TextPrimary
-                                        ),
-                                        trailingIcon = {
-                                            IconButton(onClick = {
-                                                isSearchExpanded = false
-                                                viewModel.updateSearchQuery("")
-                                            }) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Close,
-                                                    contentDescription = "Close Search",
-                                                    tint = AppColors.TextPrimary
-                                                )
-                                            }
-                                        }
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                            }
-                        }
-                    }
-
-                    // --- CONDITIONALLY RENDER THE LIST OR EMPTY STATES ---
-                    if (chatThreads.isEmpty()) {
-                        item {
-                            if (searchQuery.isNotBlank()) {
-                                EmptySearchState(searchQuery)
-                            } else {
-                                EmptyMessagesState()
-                            }
+                    if (selectedThread != null) {
+                        val thread = selectedThread!!
+                        key(thread.id) {
+                            val chatViewModel = koinViewModel<ChatViewModel>(
+                                key = thread.id,
+                                parameters = { org.koin.core.parameter.parametersOf(thread.id) }
+                            )
+                            ChatDetailScreen(
+                                viewModel = chatViewModel,
+                                chatId = thread.id,
+                                otherUsername = thread.otherUserName,
+                                otherUserImageUrl = thread.otherUserImageUrl,
+                                initialThemeName = thread.theme,
+                                bottomNavPadding = 0.dp,
+                                onBack = { selectedThread = null },
+                                galleryLauncher = galleryLauncher,
+                                isTablet = true
+                            )
                         }
                     } else {
-                        itemsIndexed(chatThreads, key = { _, thread -> thread.id }) { index, thread ->
-                            Column {
-                                ChatListItem(
-                                    thread = thread,
-                                    onClick = {
-                                        keyboardController?.hide()
-                                        isSearchExpanded = false
-                                        viewModel.updateSearchQuery("")
-                                        onNavigateToChat(
-                                            thread.id,
-                                            thread.otherUserName,
-                                            thread.otherUserImageUrl,
-                                            thread.theme
-                                        )
-                                    }
-                                )
-                            }
-                        }
+                        ChatPlaceholder()
                     }
                 }
             }
-
-            // Offline Warning Banner
-            androidx.compose.animation.AnimatedVisibility(
-                visible = showOfflineBanner && !isIosPlatform(),
-                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+        } else {
+            // Single pane (mobile) layout
+            Column(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 16.dp, start = 16.dp, end = 16.dp)
-                    .zIndex(15f)
+                    .fillMaxSize()
+                    .padding(bottom = bottomNavPadding + 0.dp)
             ) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = AppColors.SurfaceDark.copy(alpha = 0.95f),
-                    shadowElevation = 6.dp,
-                    border = BorderStroke(1.dp, Color(0xFFEF5350).copy(alpha = 0.4f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(Color(0xFFEF5350).copy(alpha = 0.2f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Offline",
-                                tint = Color(0xFFEF5350),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = stringResource(SharedRes.string.offline_messages_warning),
-                            color = AppColors.TextPrimary,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.weight(1f)
+                ThreadListPane(
+                    chatThreads = chatThreads,
+                    isLoading = isLoading,
+                    searchQuery = searchQuery,
+                    isSearchExpanded = isSearchExpanded,
+                    onSearchExpandedChange = { isSearchExpanded = it },
+                    onSearchQueryChange = { viewModel.updateSearchQuery(it) },
+                    onThreadClick = { thread ->
+                        keyboardController?.hide()
+                        isSearchExpanded = false
+                        viewModel.updateSearchQuery("")
+                        onNavigateToChat(
+                            thread.id,
+                            thread.otherUserName,
+                            thread.otherUserImageUrl,
+                            thread.theme
                         )
-                        IconButton(
-                            onClick = { showOfflineBanner = false },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = Color.Gray,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Connection Restored Success Banner
-            androidx.compose.animation.AnimatedVisibility(
-                visible = showSuccessBanner && !isIosPlatform(),
-                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 16.dp, start = 16.dp, end = 16.dp)
-                    .zIndex(15f)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = AppColors.SurfaceDark.copy(alpha = 0.95f),
-                    shadowElevation = 6.dp,
-                    border = BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.4f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .background(Color(0xFF4CAF50).copy(alpha = 0.2f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "Online",
-                                tint = Color(0xFF4CAF50),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = stringResource(SharedRes.string.connection_restored),
-                            color = AppColors.TextPrimary,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(
-                            onClick = { showSuccessBanner = false },
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = Color.Gray,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                }
+                    },
+                    showOfflineBanner = showOfflineBanner,
+                    onOfflineBannerDismiss = { showOfflineBanner = false },
+                    showSuccessBanner = showSuccessBanner,
+                    onSuccessBannerDismiss = { showSuccessBanner = false },
+                    selectedThreadId = null,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
         }
     }
@@ -458,7 +338,7 @@ fun MessagesScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatDetailScreen(
-    viewModel: ChatViewModel = koinViewModel<ChatViewModel>(),
+    viewModel: ChatViewModel,
     chatId: String,
     otherUsername: String,
     otherUserImageUrl: String?,
@@ -466,7 +346,8 @@ fun ChatDetailScreen(
     bottomNavPadding: Dp,
     onBack: () -> Unit,
     galleryLauncher: NativeGalleryLauncher,
-    connectivityChecker: ConnectivityChecker = koinInject()
+    connectivityChecker: ConnectivityChecker = koinInject(),
+    isTablet: Boolean = false
 ) {
     val chatDatabase: org.ttproject.database.ChatDatabase = koinInject()
     val repository: ChatRepository = koinInject()
@@ -705,12 +586,14 @@ fun ChatDetailScreen(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            if (isIosPlatform()) Icons.Filled.ArrowBackIosNew else Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = currentTheme.myBubbleColor
-                        )
+                    if (!isTablet) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                if (isIosPlatform()) Icons.Filled.ArrowBackIosNew else Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = currentTheme.myBubbleColor
+                            )
+                        }
                     }
                 },
                 actions = {
@@ -2410,11 +2293,11 @@ fun ChatBubble(
 }
 
 @Composable
-fun ChatListItem(thread: ChatThreadDto, onClick: () -> Unit) {
+fun ChatListItem(thread: ChatThreadDto, isSelected: Boolean = false, onClick: () -> Unit) {
     val recentPattern = stringResource(SharedRes.string.message_date_format_recent)
     val olderPattern = stringResource(SharedRes.string.message_date_format_older)
     Surface(
-        color = Color.Transparent,
+        color = if (isSelected) AppColors.SurfaceDark else Color.Transparent,
         modifier = Modifier.fillMaxWidth().clickable { onClick() }
     ) {
         Row(
@@ -3052,6 +2935,307 @@ fun MessageStatusIndicator(status: MessageStatus?) {
                     tint = AppColors.AccentOrange,
                     modifier = Modifier.size(13.dp)
                 )
+            }
+        }
+    }
+}
+
+@Composable
+fun ChatPlaceholder(modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(AppColors.Background),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .clip(CircleShape)
+                    .background(
+                        brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                            colors = listOf(
+                                AppColors.AccentOrange.copy(alpha = 0.2f),
+                                Color.Transparent
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(AppColors.SurfaceDark)
+                        .border(1.dp, AppColors.AccentOrange.copy(alpha = 0.3f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(Res.drawable.message_circle),
+                        contentDescription = null,
+                        tint = AppColors.AccentOrange,
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "No Chat Selected",
+                color = AppColors.TextPrimary,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "Select a contact from the list on the left to start messaging, or head to the map to match with new opponents!",
+                color = AppColors.TextSecondary,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(max = 320.dp),
+                lineHeight = 20.sp
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ThreadListPane(
+    chatThreads: List<ChatThreadDto>,
+    isLoading: Boolean,
+    searchQuery: String,
+    isSearchExpanded: Boolean,
+    onSearchExpandedChange: (Boolean) -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+    onThreadClick: (ChatThreadDto) -> Unit,
+    showOfflineBanner: Boolean,
+    onOfflineBannerDismiss: () -> Unit,
+    showSuccessBanner: Boolean,
+    onSuccessBannerDismiss: () -> Unit,
+    selectedThreadId: String?,
+    modifier: Modifier = Modifier
+) {
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    Column(modifier = modifier) {
+        MobileTopBar(
+            showSearch = true,
+            onSearchClick = { onSearchExpandedChange(true) }
+        )
+
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (isLoading && chatThreads.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = AppColors.AccentOrange)
+                }
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(top = 0.dp, bottom = 10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    item {
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = isSearchExpanded,
+                            enter = expandVertically() + fadeIn(),
+                            exit = shrinkVertically() + fadeOut()
+                        ) {
+                            Column {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    LaunchedEffect(Unit) {
+                                        focusRequester.requestFocus()
+                                        keyboardController?.show()
+                                    }
+
+                                    OutlinedTextField(
+                                        value = searchQuery,
+                                        onValueChange = onSearchQueryChange,
+                                        placeholder = {
+                                            Text(
+                                                stringResource(SharedRes.string.search_username_placeholder),
+                                                color = AppColors.TextGray
+                                            )
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .focusRequester(focusRequester),
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(24.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = AppColors.AccentOrange,
+                                            unfocusedBorderColor = AppColors.TextGray.copy(alpha = 0.5f),
+                                            focusedTextColor = AppColors.TextPrimary,
+                                            unfocusedTextColor = AppColors.TextPrimary
+                                        ),
+                                        trailingIcon = {
+                                            IconButton(onClick = {
+                                                onSearchExpandedChange(false)
+                                                onSearchQueryChange("")
+                                            }) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Close,
+                                                    contentDescription = "Close Search",
+                                                    tint = AppColors.TextPrimary
+                                                )
+                                            }
+                                        }
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+                        }
+                    }
+
+                    if (chatThreads.isEmpty()) {
+                        item {
+                            if (searchQuery.isNotBlank()) {
+                                EmptySearchState(searchQuery)
+                            } else {
+                                EmptyMessagesState()
+                            }
+                        }
+                    } else {
+                        itemsIndexed(chatThreads, key = { _, thread -> thread.id }) { _, thread ->
+                            Column {
+                                ChatListItem(
+                                    thread = thread,
+                                    isSelected = thread.id == selectedThreadId,
+                                    onClick = { onThreadClick(thread) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Offline Warning Banner
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showOfflineBanner && !isIosPlatform(),
+                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 16.dp, start = 16.dp, end = 16.dp)
+                    .zIndex(15f)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = AppColors.SurfaceDark.copy(alpha = 0.95f),
+                    shadowElevation = 6.dp,
+                    border = BorderStroke(1.dp, Color(0xFFEF5350).copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color(0xFFEF5350).copy(alpha = 0.2f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Offline",
+                                tint = Color(0xFFEF5350),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = stringResource(SharedRes.string.offline_messages_warning),
+                            color = AppColors.TextPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(
+                            onClick = onOfflineBannerDismiss,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = Color.Gray,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Connection Restored Success Banner
+            androidx.compose.animation.AnimatedVisibility(
+                visible = showSuccessBanner && !isIosPlatform(),
+                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 16.dp, start = 16.dp, end = 16.dp)
+                    .zIndex(15f)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = AppColors.SurfaceDark.copy(alpha = 0.95f),
+                    shadowElevation = 6.dp,
+                    border = BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color(0xFF4CAF50).copy(alpha = 0.2f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Online",
+                                tint = Color(0xFF4CAF50),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = stringResource(SharedRes.string.connection_restored),
+                            color = AppColors.TextPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(
+                            onClick = onSuccessBannerDismiss,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = Color.Gray,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,7 +43,10 @@ fun MobileTopBar(
     showSearch: Boolean = false,
     onSearchClick: () -> Unit = {},
     showSettings: Boolean = false,
-    onSettingsClick: () -> Unit = {}
+    onSettingsClick: () -> Unit = {},
+    showLikesFeed: Boolean = false,
+    likesCount: Int = 0,
+    onLikesFeedClick: () -> Unit = {}
 ) {
     TopAppBar(
         title = {
@@ -61,7 +65,6 @@ fun MobileTopBar(
                 )
             }
         },
-        // 👇 Removed the navigationIcon entirely!
         actions = {
             if (showSettings) {
                 IconButton(onClick = onSettingsClick) {
@@ -71,12 +74,43 @@ fun MobileTopBar(
                         tint = AppColors.TextPrimary
                     )
                 }
+            } else if (showLikesFeed) {
+                Box(
+                    modifier = Modifier.padding(end = 8.dp),
+                    contentAlignment = Alignment.TopEnd
+                ) {
+                    IconButton(onClick = onLikesFeedClick) {
+                        Icon(
+                            imageVector = Icons.Default.Favorite,
+                            contentDescription = "Likes Feed",
+                            tint = AppColors.AccentOrange,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                    if (likesCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 4.dp, end = 4.dp)
+                                .size(16.dp)
+                                .background(Color.Red, CircleShape)
+                                .align(Alignment.TopEnd),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = likesCount.toString(),
+                                color = Color.White,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
             } else if (showSearch) {
                 IconButton(onClick = onSearchClick) {
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = "Search",
-                        tint = AppColors.TextPrimary // Or Color.White depending on your theme
+                        tint = AppColors.TextPrimary
                     )
                 }
             } else {

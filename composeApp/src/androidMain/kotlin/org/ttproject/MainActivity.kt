@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
         }
 
         pendingChatId = intent.extras?.getString("chatId")
+        handleIntent(intent)
 
         // 👇 1. Create a safe anonymous stub for the gallery launcher interface on Android
         val androidGalleryLauncher = object : NativeGalleryLauncher {
@@ -94,5 +95,12 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         pendingChatId = intent.extras?.getString("chatId")
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        val data = intent?.data ?: return
+        val dataString = data.toString()
+        org.ttproject.util.AuthEventBus.handleDeeplink(dataString)
     }
 }

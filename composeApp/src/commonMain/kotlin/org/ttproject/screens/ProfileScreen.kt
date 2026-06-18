@@ -336,7 +336,8 @@ fun ProfileScreen(
             }
 
             SharedTransitionLayout {
-                Box(modifier = Modifier.fillMaxSize()) {
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val isMobile = maxWidth < 600.dp
                     InAppNotification(
                         message = profileNotificationMessage,
                         onDismiss = { profileNotificationMessage = null },
@@ -348,16 +349,22 @@ fun ProfileScreen(
                     } else {
                         32.dp
                     }
-                    val bottomPadding = if (isIosPlatform()) {
-                        0.dp
+                    val bottomPadding = if (isMobile) {
+                        if (isIosPlatform()) 0.dp else 80.dp
                     } else {
-                        80.dp
+                        0.dp
                     }
 
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(bottom = bottomPadding)
+                            .then(
+                                if (isMobile) {
+                                    Modifier.padding(bottom = bottomPadding)
+                                } else {
+                                    Modifier.navigationBarsPadding()
+                                }
+                            )
                     ) {
                         MobileTopBar(
                             showSettings = true,
@@ -703,13 +710,15 @@ private fun SharedTransitionScope.MatchCardPreviewOverlay(
         colors = listOf(Color(0xFF3B4CCA), Color(0xFF151C2C))
     )
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.85f))
             .pointerInput(Unit) { detectTapGestures { onDismiss() } },
         contentAlignment = Alignment.Center
     ) {
+        val calculatedWidth = minOf(maxWidth * 0.85f, (maxHeight - 180.dp) * 3 / 4).coerceIn(150.dp, 360.dp)
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.pointerInput(Unit) { detectTapGestures { /* Block bubbling */ } }
@@ -725,7 +734,7 @@ private fun SharedTransitionScope.MatchCardPreviewOverlay(
 
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.85f)
+                    .width(calculatedWidth)
                     .aspectRatio(3f / 4f)
                     .sharedBounds(
                         sharedContentState = rememberSharedContentState(key = "matchcard_transition"),
@@ -764,13 +773,15 @@ private fun SharedTransitionScope.AvatarPreviewOverlay(
     onEditClick: () -> Unit,
     onDismissRequest: () -> Unit
 ) {
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.85f))
             .pointerInput(Unit) { detectTapGestures { onDismissRequest() } },
         contentAlignment = Alignment.Center
     ) {
+        val avatarSize = minOf(maxWidth * 0.85f, maxHeight - 160.dp).coerceIn(150.dp, 360.dp)
+
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -782,8 +793,7 @@ private fun SharedTransitionScope.AvatarPreviewOverlay(
                         sharedContentState = rememberSharedContentState(key = "avatar_transition"),
                         animatedVisibilityScope = animatedVisibilityScope
                     )
-                    .fillMaxWidth(0.85f)
-                    .aspectRatio(1f)
+                    .size(avatarSize)
                     .clip(CircleShape)
                     .background(AppColors.SurfaceDark)
                     .border(4.dp, Brush.linearGradient(colors = listOf(Color(0xFFFF4B4B), Color(0xFF9C27B0))), CircleShape),
@@ -1293,12 +1303,13 @@ fun SettingsOverlay(
 
     val backIcon = if (isIosPlatform()) Icons.Filled.ArrowBackIosNew else Icons.AutoMirrored.Filled.ArrowBack
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(AppColors.Background)
             .pointerInput(Unit) { detectTapGestures { /* swallow tags */ } }
     ) {
+        val isMobile = maxWidth < 600.dp
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -1463,8 +1474,17 @@ fun SettingsOverlay(
                     }
 
                     SettingsSubScreen.Appearance -> {
+                        val bottomExtraPadding = if (isMobile) {
+                            if (isIosPlatform()) 0.dp else 80.dp
+                        } else {
+                            0.dp
+                        }
                         Column(
-                            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState())
+                                .navigationBarsPadding()
+                                .padding(bottom = bottomExtraPadding),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             ThemeModeSelector(currentThemeMode, onChangeTheme)
@@ -1483,7 +1503,18 @@ fun SettingsOverlay(
                     }
 
                     SettingsSubScreen.AppIcon -> {
-                        Box(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                        val bottomExtraPadding = if (isMobile) {
+                            if (isIosPlatform()) 0.dp else 80.dp
+                        } else {
+                            0.dp
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState())
+                                .navigationBarsPadding()
+                                .padding(bottom = bottomExtraPadding)
+                        ) {
                             PremiumAppIconSelector(
                                 currentAppIcon = currentAppIcon,
                                 isUserPremium = isUserPremium,
@@ -1656,94 +1687,115 @@ private fun ThemeModeSelector(
     currentThemeMode: ThemeMode,
     onChangeTheme: (ThemeMode) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = stringResource(SharedRes.string.theme).uppercase(),
-            color = AppColors.TextGray,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val columns = (maxWidth / 120.dp).toInt().coerceIn(3, 6)
 
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = stringResource(SharedRes.string.theme).uppercase(),
+                color = AppColors.TextGray,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+
             val modes = listOf(
                 Triple(ThemeMode.System, stringResource(SharedRes.string.system_default), "system"),
                 Triple(ThemeMode.Light, stringResource(SharedRes.string.light), "light"),
                 Triple(ThemeMode.Dark, stringResource(SharedRes.string.dark), "dark")
             )
 
-            modes.forEach { (mode, title, key) ->
-                val isSelected = currentThemeMode == mode
-
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .aspectRatio(3f / 4f)
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { onChangeTheme(mode) }
-                            .border(
-                                width = if (isSelected) 3.dp else 0.dp,
-                                color = if (isSelected) AppColors.AccentOrange else Color.Transparent,
-                                shape = RoundedCornerShape(16.dp)
-                            )
+            val chunkedModes = modes.chunked(columns)
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                chunkedModes.forEach { rowModes ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Canvas(modifier = Modifier.fillMaxSize()) {
-                            val w = size.width
-                            val h = size.height
+                        rowModes.forEach { (mode, title, key) ->
+                            val isSelected = currentThemeMode == mode
 
-                            when (mode) {
-                                ThemeMode.Light -> {
-                                    drawRect(color = Color(0xFFF8F9FA))
-                                }
-                                ThemeMode.Dark -> {
-                                    drawRect(color = Color(0xFF0F172A))
-                                }
-                                ThemeMode.System -> {
-                                    val lightPath = Path().apply {
-                                        moveTo(0f, 0f)
-                                        lineTo(w, 0f)
-                                        lineTo(0f, h)
-                                        close()
-                                    }
-                                    drawPath(lightPath, color = Color(0xFFF8F9FA))
+                            Box(modifier = Modifier.weight(1f)) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .aspectRatio(3f / 4f)
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .clickable { onChangeTheme(mode) }
+                                            .border(
+                                                width = if (isSelected) 3.dp else 0.dp,
+                                                color = if (isSelected) AppColors.AccentOrange else Color.Transparent,
+                                                shape = RoundedCornerShape(16.dp)
+                                            )
+                                    ) {
+                                        Canvas(modifier = Modifier.fillMaxSize()) {
+                                            val w = size.width
+                                            val h = size.height
 
-                                    val darkPath = Path().apply {
-                                        moveTo(w, 0f)
-                                        lineTo(w, h)
-                                        lineTo(0f, h)
-                                        close()
+                                            when (mode) {
+                                                ThemeMode.Light -> {
+                                                    drawRect(color = Color(0xFFF8F9FA))
+                                                }
+
+                                                ThemeMode.Dark -> {
+                                                    drawRect(color = Color(0xFF0F172A))
+                                                }
+
+                                                ThemeMode.System -> {
+                                                    val lightPath = Path().apply {
+                                                        moveTo(0f, 0f)
+                                                        lineTo(w, 0f)
+                                                        lineTo(0f, h)
+                                                        close()
+                                                    }
+                                                    drawPath(lightPath, color = Color(0xFFF8F9FA))
+
+                                                    val darkPath = Path().apply {
+                                                        moveTo(w, 0f)
+                                                        lineTo(w, h)
+                                                        lineTo(0f, h)
+                                                        close()
+                                                    }
+                                                    drawPath(darkPath, color = Color(0xFF0F172A))
+                                                }
+                                            }
+
+                                            drawCircle(
+                                                color = Color(0xFFFF6B00),
+                                                radius = 24f,
+                                                center = center
+                                            )
+                                        }
                                     }
-                                    drawPath(darkPath, color = Color(0xFF0F172A))
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    Text(
+                                        text = title,
+                                        color = if (isSelected) AppColors.AccentOrange else AppColors.TextPrimary,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        maxLines = 1,
+                                        textAlign = TextAlign.Center
+                                    )
                                 }
                             }
-
-                            drawCircle(
-                                color = Color(0xFFFF6B00),
-                                radius = 24f,
-                                center = center
-                            )
+                        }
+                        val emptySlots = columns - rowModes.size
+                        if (emptySlots > 0) {
+                            repeat(emptySlots) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = title,
-                        color = if (isSelected) AppColors.AccentOrange else AppColors.TextPrimary,
-                        fontSize = 12.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        maxLines = 1,
-                        textAlign = TextAlign.Center
-                    )
                 }
             }
         }

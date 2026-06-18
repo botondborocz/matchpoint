@@ -43,17 +43,21 @@ import org.ttproject.AppIcon
 import org.ttproject.isDark
 import org.ttproject.shared.resources.pro_badge
 import ttproject.composeapp.generated.resources.Res
-import ttproject.composeapp.generated.resources.match_logo_long
-import ttproject.composeapp.generated.resources.match_logo_long_dark
 import ttproject.composeapp.generated.resources.matchpoint_logo_long_dark
 import ttproject.composeapp.generated.resources.matchpoint_logo_long_light
+import org.koin.compose.koinInject
+import org.ttproject.getPlatform
 
 @Composable
 fun DesktopSidebar(
     currentRoute: NavRoute,
-    onNavigate: (NavRoute) -> Unit
+    onNavigate: (NavRoute) -> Unit,
+    tokenStorage: org.ttproject.data.TokenStorage = koinInject()
 ) {
-    var isExpanded by remember { mutableStateOf(true) }
+    val isAndroid = getPlatform().name.contains("Android", ignoreCase = true)
+    val defaultExpanded = !isAndroid
+    val savedExpanded = tokenStorage.getSidebarExpanded()
+    var isExpanded by remember { mutableStateOf(savedExpanded ?: defaultExpanded) }
 
     val sidebarWidth by animateDpAsState(
         targetValue = if (isExpanded) 260.dp else 80.dp,
@@ -78,7 +82,11 @@ fun DesktopSidebar(
         ) {
             // By placing the Menu icon in a 48dp Box, it aligns perfectly with the nav icons
             Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                IconButton(onClick = { isExpanded = !isExpanded }) {
+                IconButton(onClick = {
+                    val newValue = !isExpanded
+                    isExpanded = newValue
+                    tokenStorage.saveSidebarExpanded(newValue)
+                }) {
                     Icon(Icons.Default.Menu, "Toggle Sidebar", tint = AppColors.TextPrimary)
                 }
             }
@@ -90,17 +98,6 @@ fun DesktopSidebar(
                 exit = fadeOut(tween(100)) // Hide quickly before width crushes it
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-//                    Box(modifier = Modifier.size(16.dp).clip(CircleShape).background(AppColors.AccentOrange))
-//                    Spacer(modifier = Modifier.width(12.dp))
-//                    Text(
-//                        text = SharedStrings.appName,
-//                        color = AppColors.TextPrimary,
-//                        fontSize = 20.sp,
-//                        fontWeight = FontWeight.Bold,
-//                        letterSpacing = 0.5.sp,
-//                        maxLines = 1,
-//                        softWrap = false // CRUCIAL: Stops text from wrapping to a second line
-//                    )
                     if (isDark) {
                         Image(
                             painter = painterResource(Res.drawable.matchpoint_logo_long_dark),
@@ -115,7 +112,6 @@ fun DesktopSidebar(
                             modifier = Modifier.height(28.dp)
                         )
                     }
-
                 }
             }
         }

@@ -146,7 +146,8 @@ data class MapBounds(val north: Double, val south: Double, val east: Double, val
 @Composable
 expect fun NativeMap(
     modifier: Modifier, locations: List<TTClub>, selectedClub: TTClub?,
-    userLocationTrigger: Int, bottomPadding: Dp, isDark: Boolean,
+    userLocationTrigger: Int, bottomPadding: Dp, leftPadding: Dp = 0.dp,
+    isDark: Boolean,
     onMarkerClick: (TTClub) -> Unit, onBoundsChanged: (MapBounds) -> Unit,
     onMapLoaded: () -> Unit
 )
@@ -424,10 +425,16 @@ fun MapScreen(
             }
         }
 
-        val targetBottomPadding = when (sheetState.targetValue) {
-            SheetState.Expanded -> screenHeight
-            SheetState.HalfExpanded -> screenHeight * 0.33f
-            SheetState.Collapsed -> dynamicBottomOffset
+        val isMobile = screenWidth < 600.dp
+
+        val targetBottomPadding = if (isMobile) {
+            when (sheetState.targetValue) {
+                SheetState.Expanded -> screenHeight
+                SheetState.HalfExpanded -> screenHeight * 0.33f
+                SheetState.Collapsed -> dynamicBottomOffset
+            }
+        } else {
+            if (selectedClub != null) 160.dp + systemNavHeight else 16.dp + systemNavHeight
         }
 
         val mapBottomPadding by animateDpAsState(
@@ -435,8 +442,8 @@ fun MapScreen(
             animationSpec = spring(stiffness = Spring.StiffnessLow), label = "MapPadding"
         )
 
-        val showFloatingElements = selectedClub == null && sheetState.targetValue != SheetState.Expanded
-        val showMapNavBar = sheetState.targetValue != SheetState.Expanded && !isDetailsExpanded && !isAddingTable
+        val showFloatingElements = selectedClub == null && (isMobile && sheetState.targetValue != SheetState.Expanded || !isMobile)
+        val showMapNavBar = (isMobile && sheetState.targetValue != SheetState.Expanded && !isDetailsExpanded && !isAddingTable) || !isMobile
 
         LaunchedEffect(showMapNavBar) {
             onNavBarVisibilityChange(showMapNavBar)
@@ -448,6 +455,7 @@ fun MapScreen(
             selectedClub = selectedClub,
             userLocationTrigger = userLocationTrigger,
             bottomPadding = mapBottomPadding,
+            leftPadding = if (isMobile) 0.dp else screenWidth / 2,
             isDark = isDark,
             onMarkerClick = handleClubSelection,
             onBoundsChanged = { newBounds -> mapBounds = newBounds },
@@ -485,14 +493,14 @@ fun MapScreen(
             enter = slideInVertically(initialOffsetY = { -it }, animationSpec = tween(400, delayMillis = 100)) + fadeIn(tween(400, delayMillis = 100)),
             exit = fadeOut(tween(200)),
             modifier = Modifier
-                .align(Alignment.TopCenter)
+                .align(if (isMobile) Alignment.TopCenter else Alignment.TopStart)
                 .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
                 .padding(top = 16.dp, start = 16.dp, end = 16.dp)
                 .zIndex(searchZIndex)
         ) {
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .width(if (isMobile) screenWidth - 32.dp else (screenWidth / 2) - 32.dp)
                     .animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)),
                 shape = RoundedCornerShape(24.dp),
                 color = cardBg.copy(alpha = 0.95f),
@@ -744,7 +752,7 @@ fun MapScreen(
             exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = 16.dp, bottom = sheetVisibleHeightDp + 16.dp)
+                .padding(end = 16.dp, bottom = if (isMobile) sheetVisibleHeightDp + 16.dp else 16.dp + systemNavHeight)
         ) {
             FloatingActionButton(
                 onClick = { userLocationTrigger++ },
@@ -764,7 +772,7 @@ fun MapScreen(
             label = "ExpandProgress"
         )
 
-        val restingBottomPadding = sheetVisibleHeightDp + 76.dp
+        val restingBottomPadding = if (isMobile) sheetVisibleHeightDp + 76.dp else 76.dp + systemNavHeight
         val currentBottomPadding = restingBottomPadding * (1f - expandProgress)
         val currentEndPadding = 16.dp * (1f - expandProgress)
 
@@ -892,8 +900,13 @@ fun MapScreen(
             },
             contentAlignment = Alignment.BottomCenter,
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = cardBottomPadding, start = cardSidePadding, end = cardSidePadding)
+                .align(if (isMobile || isDetailsExpanded) Alignment.BottomCenter else Alignment.BottomEnd)
+                .width(if (isMobile || isDetailsExpanded) screenWidth else screenWidth / 2)
+                .padding(
+                    bottom = if (isMobile || isDetailsExpanded) cardBottomPadding else 16.dp + systemNavHeight,
+                    start = if (isMobile || isDetailsExpanded) cardSidePadding else 0.dp,
+                    end = if (isMobile || isDetailsExpanded) cardSidePadding else 0.dp
+                )
                 .zIndex(1f)
                 .graphicsLayer(clip = false),
             label = "ClubCardAnimation"
@@ -904,7 +917,7 @@ fun MapScreen(
                     color = AppColors.Background,
                     shadowElevation = 8.dp,
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .then(if (isMobile || isDetailsExpanded) Modifier.fillMaxWidth() else Modifier.width(380.dp).padding(horizontal = 16.dp))
                         .offset { IntOffset(0, detailsOffsetAnimatable.value.roundToInt()) }
                 ) {
                     AnimatedContent(
@@ -1005,7 +1018,7 @@ fun MapScreen(
                 modifier = Modifier
                     .anchoredDraggable(state = sheetState, orientation = Orientation.Vertical)
                     .nestedScroll(nestedScrollConnection)
-                    .fillMaxWidth()
+                    .width(if (isMobile) screenWidth else screenWidth / 2)
                     .height(screenHeight),
                 shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                 color = sheetBg, shadowElevation = 0.dp

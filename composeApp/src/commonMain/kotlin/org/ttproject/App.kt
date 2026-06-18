@@ -72,6 +72,8 @@ import org.ttproject.screens.MatchScreen
 import org.ttproject.screens.MessagesScreen
 import org.ttproject.screens.ProfileScreen
 import org.ttproject.screens.RegisterScreen
+import org.ttproject.screens.ResetPasswordScreen
+import org.ttproject.util.AuthEventBus
 import org.ttproject.util.LocalThemeMode
 import org.ttproject.util.SetStatusBarColors
 import org.ttproject.util.ThemeMode
@@ -162,6 +164,7 @@ fun App(
 
     val loadedTabs = remember { mutableStateListOf<NavRoute>(NavRoute.Map) }
     var isLoggedIn by remember { mutableStateOf(tokenStorage.getToken() != null) }
+    val isResetPasswordActive by AuthEventBus.resetPasswordActive.collectAsState()
     var playMessagesAnimation by remember { mutableStateOf(true) }
 
     LaunchedEffect(externalTabRoute) {
@@ -179,6 +182,7 @@ fun App(
         if (!loadedTabs.contains(targetRoute)) {
             loadedTabs.add(targetRoute)
         }
+        activeSettingsScreen = SettingsSubScreen.None
         onTabChangedBySystem(targetRoute)
     }
 
@@ -275,42 +279,48 @@ fun App(
                 // 👇 Track explicit local map visibility states cleanly
                 val isMapVisible = isLoggedIn && loadedTabs.contains(NavRoute.Map) && currentTabRoute == NavRoute.Map && !isDetailScreen
 
-                // 🗺️ LAYER 1: PERSISTENT BACKGROUND MAP SCREEN
-                if (isLoggedIn && loadedTabs.contains(NavRoute.Map)) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer { alpha = if (isMapVisible) 1f else 0f }
-                            .zIndex(if (isMapVisible) 1f else -1f) // 👈 Sits directly on top of background layers when active
-                    ) {
-                        MapScreen(
-                            viewModel = locationViewModel,
-                            bottomNavHeight = if (isMobile) 82.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() else 0.dp,
-                            systemNavHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
-                            onNavBarVisibilityChange = { isVisible -> isMapNavBarVisible = isVisible },
-                            onMapLoaded = { isMapLoaded = true }
-                        )
-                    }
-                }
-
-                // 📱 LAYER 2: ROOT SUB-SCREEN SYSTEM CONTAINER
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .zIndex(if (isMapVisible) 0f else 2f) // 👈 Drops deep below the map when open to avoid intercepting touches
-                        .background(if (isMapVisible) Color.Transparent else AppColors.Background)
-                ) {
+                Row(modifier = Modifier.fillMaxSize()) {
                     if (!isMobile) {
                         DesktopSidebar(currentRoute = currentTabRoute, onNavigate = onTabNavigate)
                     }
 
-                    NavHost(
-                        navController = rootNavController,
-                        startDestination = HomeBase,
-                        modifier = Modifier.weight(1f).clipToBounds(),
-                        enterTransition = { EnterTransition.None },
-                        exitTransition = { ExitTransition.None }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
                     ) {
+                        // 🗺️ LAYER 1: PERSISTENT BACKGROUND MAP SCREEN
+                        if (isLoggedIn && loadedTabs.contains(NavRoute.Map)) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer { alpha = if (isMapVisible) 1f else 0f }
+                                    .zIndex(if (isMapVisible) 1f else -1f) // 👈 Sits directly on top of background layers when active
+                            ) {
+                                MapScreen(
+                                    viewModel = locationViewModel,
+                                    bottomNavHeight = if (isMobile) 82.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() else 0.dp,
+                                    systemNavHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+                                    onNavBarVisibilityChange = { isVisible -> isMapNavBarVisible = isVisible },
+                                    onMapLoaded = { isMapLoaded = true }
+                                )
+                            }
+                        }
+
+                        // 📱 LAYER 2: ROOT SUB-SCREEN SYSTEM CONTAINER
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .zIndex(if (isMapVisible) 0f else 2f) // 👈 Drops deep below the map when open to avoid intercepting touches
+                                .background(if (isMapVisible) Color.Transparent else AppColors.Background)
+                        ) {
+                            NavHost(
+                                navController = rootNavController,
+                                startDestination = HomeBase,
+                                modifier = Modifier.fillMaxSize().clipToBounds(),
+                                enterTransition = { EnterTransition.None },
+                                exitTransition = { ExitTransition.None }
+                            ) {
                         composable<HomeBase>(
                             exitTransition = {
                                 if (targetState.destination.hasRoute(NavRoute.ChatDetail::class) ||
@@ -374,70 +384,98 @@ fun App(
                                                             onNavigateToChat = { chatId, otherUsername, otherUserImageUrl, themeName ->
                                                                 playMessagesAnimation = false
                                                                 rootNavController.navigate(NavRoute.ChatDetail(chatId, otherUsername, otherUserImageUrl, themeName))
-                                                            }
+                                                            },
+                                                            galleryLauncher = galleryLauncher
                                                         )
                                                     }
                                                     NavRoute.Profile -> {
-                                                        ProfileScreen(
-                                                            isVisible = currentTabRoute == NavRoute.Profile,
-                                                            currentLanguage = currentLanguage,
-                                                            currentThemeMode = currentThemeMode,
-                                                            currentAppIcon = currentAppIcon,
-                                                            activeSettingsScreen = activeSettingsScreen,
-                                                            onActiveSettingsScreenChange = { activeSettingsScreen = it },
-                                                            viewModel = profileViewModel,
-                                                            onLogoutClick = {
-                                                                tokenStorage.clearToken()
-                                                                tokenStorage.clearUserId()
-                                                                tokenStorage.clearPremiumStatus()
-                                                                profileViewModel.clearData()
-                                                                matchViewModel.clearData()
-                                                                locationViewModel.clearData()
-                                                                messagesViewModel.clearData()
-                                                                loginViewModel.resetState()
-                                                                isLoggedIn = false
-                                                                activeSettingsScreen = SettingsSubScreen.None
-                                                            },
-                                                            onChangeLanguage = { newLangCode ->
-                                                                tokenStorage.saveLanguage(newLangCode)
-                                                                currentLanguage = newLangCode
-                                                                changePlatformLanguage(newLangCode)
-                                                            },
-                                                            onChangeTheme = { newThemeMode ->
-                                                                tokenStorage.saveThemeMode(
-                                                                    when (newThemeMode) {
-                                                                        ThemeMode.Light -> "light"
-                                                                        ThemeMode.Dark -> "dark"
-                                                                        ThemeMode.System -> "system"
-                                                                    }
-                                                                )
-                                                                currentThemeMode = newThemeMode
-                                                            },
-                                                            onChangeAppThemeStyle = { newStyle ->
-                                                                tokenStorage.saveAppTheme(
-                                                                    when (newStyle) {
-                                                                        AppThemeStyle.DEFAULT -> "default"
-                                                                        AppThemeStyle.VIP -> "vip"
-                                                                        AppThemeStyle.ADRENALIN -> "adrenalin"
-                                                                        AppThemeStyle.MATRIX -> "matrix"
-                                                                        AppThemeStyle.ARCTIC -> "arctic"
-                                                                        AppThemeStyle.NEON -> "neon"
-                                                                        AppThemeStyle.STEALTH -> "stealth"
-                                                                        AppThemeStyle.TOKYO -> "tokyo"
-                                                                        AppThemeStyle.CLASSIC -> "classic"
-                                                                        AppThemeStyle.ROYAL -> "royal"
-                                                                        AppThemeStyle.VOLT -> "volt"
-                                                                        AppThemeStyle.SUNSET -> "sunset"
-                                                                    }
-                                                                )
-                                                                currentThemeStyle = newStyle
-                                                            },
-                                                            onChangeAppIcon = { newIcon ->
-                                                                tokenStorage.saveAppIcon(newIcon.alias)
-                                                                currentAppIcon = newIcon
-                                                                appIconManager.changeIcon(newIcon)
+                                                        if (isLoggedIn) {
+                                                            ProfileScreen(
+                                                                isVisible = currentTabRoute == NavRoute.Profile,
+                                                                currentLanguage = currentLanguage,
+                                                                currentThemeMode = currentThemeMode,
+                                                                currentAppIcon = currentAppIcon,
+                                                                activeSettingsScreen = activeSettingsScreen,
+                                                                onActiveSettingsScreenChange = { activeSettingsScreen = it },
+                                                                viewModel = profileViewModel,
+                                                                onLogoutClick = {
+                                                                    tokenStorage.clearToken()
+                                                                    tokenStorage.clearUserId()
+                                                                    tokenStorage.clearPremiumStatus()
+                                                                    profileViewModel.clearData()
+                                                                    matchViewModel.clearData()
+                                                                    locationViewModel.clearData()
+                                                                    messagesViewModel.clearData()
+                                                                    loginViewModel.resetState()
+                                                                    isLoggedIn = false
+                                                                    activeSettingsScreen = SettingsSubScreen.None
+                                                                },
+                                                                onChangeLanguage = { newLangCode ->
+                                                                    tokenStorage.saveLanguage(newLangCode)
+                                                                    currentLanguage = newLangCode
+                                                                    changePlatformLanguage(newLangCode)
+                                                                },
+                                                                onChangeTheme = { newThemeMode ->
+                                                                    tokenStorage.saveThemeMode(
+                                                                        when (newThemeMode) {
+                                                                            ThemeMode.Light -> "light"
+                                                                            ThemeMode.Dark -> "dark"
+                                                                            ThemeMode.System -> "system"
+                                                                        }
+                                                                    )
+                                                                    currentThemeMode = newThemeMode
+                                                                },
+                                                                onChangeAppThemeStyle = { newStyle ->
+                                                                    tokenStorage.saveAppTheme(
+                                                                        when (newStyle) {
+                                                                            AppThemeStyle.DEFAULT -> "default"
+                                                                            AppThemeStyle.VIP -> "vip"
+                                                                            AppThemeStyle.ADRENALIN -> "adrenalin"
+                                                                            AppThemeStyle.MATRIX -> "matrix"
+                                                                            AppThemeStyle.ARCTIC -> "arctic"
+                                                                            AppThemeStyle.NEON -> "neon"
+                                                                            AppThemeStyle.STEALTH -> "stealth"
+                                                                            AppThemeStyle.TOKYO -> "tokyo"
+                                                                            AppThemeStyle.CLASSIC -> "classic"
+                                                                            AppThemeStyle.ROYAL -> "royal"
+                                                                            AppThemeStyle.VOLT -> "volt"
+                                                                            AppThemeStyle.SUNSET -> "sunset"
+                                                                        }
+                                                                    )
+                                                                    currentThemeStyle = newStyle
+                                                                },
+                                                                onChangeAppIcon = { newIcon ->
+                                                                    tokenStorage.saveAppIcon(newIcon.alias)
+                                                                    currentAppIcon = newIcon
+                                                                    appIconManager.changeIcon(newIcon)
+                                                                }
+                                                            )
+                                                        } else {
+                                                            when (currentAuthRoute) {
+                                                                AuthRoute.Login -> {
+                                                                    LoginScreen(
+                                                                        viewModel = loginViewModel,
+                                                                        onLoginSuccess = {
+                                                                            isLoggedIn = true
+                                                                        },
+                                                                        onNavigateToRegister = {
+                                                                            currentAuthRoute = AuthRoute.Register
+                                                                        }
+                                                                    )
+                                                                }
+                                                                AuthRoute.Register -> {
+                                                                    RegisterScreen(
+                                                                        viewModel = loginViewModel,
+                                                                        onRegisterSuccess = {
+                                                                            currentAuthRoute = AuthRoute.Login
+                                                                        },
+                                                                        onNavigateToLogin = {
+                                                                            currentAuthRoute = AuthRoute.Login
+                                                                        }
+                                                                    )
+                                                                }
                                                             }
-                                                        )
+                                                        }
                                                     }
                                                     else -> {}
                                                 }
@@ -465,7 +503,7 @@ fun App(
                             }
                         ) { backStackEntry ->
                             val route = backStackEntry.toRoute<NavRoute.ChatDetail>()
-                            val chatViewModel = koinViewModel<ChatViewModel>(parameters = { org.koin.core.parameter.parametersOf(route.chatId) })
+                            val chatViewModel = koinViewModel<ChatViewModel>(key = route.chatId, parameters = { org.koin.core.parameter.parametersOf(route.chatId) })
 
                             Box(modifier = Modifier.fillMaxSize()) {
                                 ChatDetailScreen(
@@ -497,6 +535,8 @@ fun App(
                         }
                     }
                 }
+            }
+        }
 
                 // 🌟 LAYER 3: GLOBAL FLOATING BOTTOM NAVIGATION OVERLAY
                 if (isMobile && !isIosPlatform()) {
@@ -545,6 +585,15 @@ fun App(
                             profileViewModel.dismissBadgeProgressEvent()
                         }
                     }
+                }
+
+                if (isResetPasswordActive) {
+                    ResetPasswordScreen(
+                        viewModel = loginViewModel,
+                        onDismiss = {
+                            AuthEventBus.clearResetPassword()
+                        }
+                    )
                 }
 
                 AnimatedVisibility(

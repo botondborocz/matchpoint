@@ -2,6 +2,7 @@ package org.ttproject.database
 
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import io.github.cdimascio.dotenv.dotenv
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.Table
@@ -19,21 +20,19 @@ import org.ttproject.database.tables.Swipes
 import org.ttproject.database.tables.UserBadgeMetrics
 import org.ttproject.database.tables.Users
 
-// 1. Define the 1-table schema
-//object Users : Table("users") {
-//    val id = integer("id").autoIncrement()
-//    val name = varchar("name", 50)
-//
-//    override val primaryKey = PrimaryKey(id)
-//}
-
 // 2. The connection function
 fun initDatabase() {
+    val dotenv = dotenv {
+        ignoreIfMissing = true
+    }
+    val dbPassword = dotenv["SUPABASE_DB_PASSWORD"]
+    val dbUser = dotenv["SUPABASE_DB_USER"]
+    val dbUrl = dotenv["SUPABASE_DB_URL"]
+
     val config = HikariConfig().apply {
-        // Notice the "db" host! This is how Docker containers find each other.
-        jdbcUrl = System.getenv("DB_URL") ?: "jdbc:postgresql://localhost:5433/match_db"
-        username = "ktor_user"
-        password = "ktor_password"
+        jdbcUrl = dbUrl
+        username = dbUser
+        password = dbPassword
         driverClassName = "org.postgresql.Driver"
         maximumPoolSize = 3
         isAutoCommit = false

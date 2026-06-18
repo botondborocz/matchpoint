@@ -2,12 +2,14 @@ package org.ttproject.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.ttproject.data.Player
+import org.ttproject.di.supabase
 import org.ttproject.repository.MatchRepository
 import org.ttproject.repository.UserRepository
 import org.ttproject.util.NotificationEventBus

@@ -56,6 +56,7 @@ import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import org.ttproject.AppColors
 import org.ttproject.data.Player
+import org.ttproject.components.MobileTopBar
 import org.ttproject.shared.resources.*
 import org.ttproject.shared.resources.Res as SharedRes
 import org.ttproject.viewmodel.MatchUiState
@@ -147,12 +148,6 @@ fun MatchScreen(
 
     val isGeneralError = isErrorState && !isUnauth
 
-    val topPadding = if (isIosPlatform()) {
-        WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    } else {
-        24.dp
-    }
-
     Box(modifier = Modifier.fillMaxSize().background(Color.Transparent)) {
         InAppNotification(
             message = matchNotificationMessage,
@@ -164,58 +159,21 @@ fun MatchScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .navigationBarsPadding()
                 .then(if (isErrorState || isLikesPopupOpen) Modifier.blur(16.dp) else Modifier),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(topPadding))
-
-            // --- HEADER ---
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = null,
-                        tint = AppColors.AccentOrange,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = stringResource(SharedRes.string.find_your_match),
-                        color = AppColors.TextPrimary,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                // 🌟 FIX: Removed "if (likedMePlayers.isNotEmpty())" wrapper.
-                // The floating counter pill is now permanently visible to give free users a clear upgrade path!
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(AppColors.SurfaceDark)
-                        .clickable {
-                            if (!connectivityChecker.isConnected()) {
-                                matchNotificationMessage = "No internet connection"
-                            } else {
-                                isLikesPopupOpen = true
-                            }
-                        }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "❤️ ${likedMePlayers.size}",
-                            color = AppColors.AccentOrange,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+            MobileTopBar(
+                showLikesFeed = true,
+                likesCount = likedMePlayers.size,
+                onLikesFeedClick = {
+                    if (!connectivityChecker.isConnected()) {
+                        matchNotificationMessage = "No internet connection"
+                    } else {
+                        isLikesPopupOpen = true
                     }
                 }
-            }
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 

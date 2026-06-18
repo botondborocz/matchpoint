@@ -15,39 +15,73 @@ class LoginViewModel(
     private val _uiState = MutableStateFlow<LoginState>(LoginState.Idle)
     val uiState: StateFlow<LoginState> = _uiState
 
-    // --- STANDARD LOGIN ---
+    // --- STANDARD LOGIN (SUPABASE) ---
     fun login(email: String, password: String) {
         _uiState.value = LoginState.Loading
 
         viewModelScope.launch {
-            val result = authRepository.login(email, password)
+            val result = authRepository.loginWithSupabase(email, password)
 
             result.fold(
                 onSuccess = {
                     _uiState.value = LoginState.Success
-                    // val userLang = apiResponse.user.preferredLanguage ?: "en"
-                    // tokenStorage.saveLanguage(userLang)
                 },
                 onFailure = { error ->
-                    _uiState.value = LoginState.Error(error.message ?: "Unknown error")
+                    _uiState.value = LoginState.Error(error.message ?: "Invalid email or password")
                 }
             )
         }
     }
 
-    // --- REGISTRATION ---
+    // --- REGISTRATION (SUPABASE) ---
     fun register(email: String, password: String) {
         _uiState.value = LoginState.Loading
 
         viewModelScope.launch {
-            val result = authRepository.register(email, password)
+            val result = authRepository.signUpWithSupabase(email, password)
+
+            result.fold(
+                onSuccess = {
+                    _uiState.value = LoginState.VerificationSent
+                },
+                onFailure = { error ->
+                    _uiState.value = LoginState.Error(error.message ?: "Registration failed")
+                }
+            )
+        }
+    }
+
+    // --- FORGOT PASSWORD EMAIL (SUPABASE) ---
+    fun sendPasswordResetEmail(email: String) {
+        _uiState.value = LoginState.Loading
+
+        viewModelScope.launch {
+            val result = authRepository.sendPasswordResetEmail(email)
+
+            result.fold(
+                onSuccess = {
+                    _uiState.value = LoginState.PasswordResetSent
+                },
+                onFailure = { error ->
+                    _uiState.value = LoginState.Error(error.message ?: "Failed to send reset link")
+                }
+            )
+        }
+    }
+
+    // --- RESET PASSWORD RESET (SUPABASE) ---
+    fun resetPassword(password: String) {
+        _uiState.value = LoginState.Loading
+
+        viewModelScope.launch {
+            val result = authRepository.resetPassword(password)
 
             result.fold(
                 onSuccess = {
                     _uiState.value = LoginState.Success
                 },
                 onFailure = { error ->
-                    _uiState.value = LoginState.Error(error.message ?: "Registration failed")
+                    _uiState.value = LoginState.Error(error.message ?: "Failed to reset password")
                 }
             )
         }
@@ -81,5 +115,7 @@ sealed class LoginState {
     data object Idle : LoginState()
     data object Loading : LoginState()
     data object Success : LoginState()
+    data object VerificationSent : LoginState()
+    data object PasswordResetSent : LoginState()
     data class Error(val message: String) : LoginState()
 }

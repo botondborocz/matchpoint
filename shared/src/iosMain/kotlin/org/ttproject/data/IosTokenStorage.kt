@@ -71,4 +71,8 @@ class IosTokenStorage : TokenStorage {
     override fun getPendingLanguageSync(): String? = vault.string("pending_language_sync")
 
     override fun clearPendingLanguageSync() { vault.deleteObject("pending_language_sync") }
+
+    override fun saveSidebarExpanded(isExpanded: Boolean) { vault.set("sidebar_expanded", isExpanded.toString()) }
+
+    override fun getSidebarExpanded(): Boolean? = vault.string("sidebar_expanded")?.toBoolean()
 }

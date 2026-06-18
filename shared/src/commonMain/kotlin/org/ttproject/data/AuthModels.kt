@@ -30,3 +30,8 @@ data class TokenResponse(
 data class UpdateLanguageRequest(
     val language: String
 )
+
+@Serializable
+data class SupabaseTokenRequest(
+    val supabaseToken: String
+)

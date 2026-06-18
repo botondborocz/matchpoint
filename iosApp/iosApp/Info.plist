@@ -68,6 +68,12 @@
                 <string>com.googleusercontent.apps.115244117318-35pj0hqg5ko98esh44q6i9gn7t3e7vae</string>
             </array>
         </dict>
+        <dict>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>matchpointapp</string>
+            </array>
+        </dict>
     </array>
 
     <key>NSPhotoLibraryUsageDescription</key>

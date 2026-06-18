@@ -38,42 +38,46 @@ fun PremiumThemeSelector(
 ) {
     val allThemes = AppThemeStyle.values()
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "TÉMÁK ÉS SZÍNEK",
-            color = AppColors.TextGray,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val columns = (maxWidth / 120.dp).toInt().coerceIn(3, 6)
 
-        val chunkedThemes = allThemes.toList().chunked(3)
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            chunkedThemes.forEach { rowThemes ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    rowThemes.forEach { theme ->
-                        Box(modifier = Modifier.weight(1f)) {
-                            ThemeCardItem(
-                                theme = theme,
-                                isSelected = currentThemeStyle == theme,
-                                isLocked = theme.isPremium && !isUserPremium,
-                                onThemeSelected = onThemeSelected,
-                                onPremiumLockedClick = onPremiumLockedClick,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "TÉMÁK ÉS SZÍNEK",
+                color = AppColors.TextGray,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+
+            val chunkedThemes = allThemes.toList().chunked(columns)
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                chunkedThemes.forEach { rowThemes ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        rowThemes.forEach { theme ->
+                            Box(modifier = Modifier.weight(1f)) {
+                                ThemeCardItem(
+                                    theme = theme,
+                                    isSelected = currentThemeStyle == theme,
+                                    isLocked = theme.isPremium && !isUserPremium,
+                                    onThemeSelected = onThemeSelected,
+                                    onPremiumLockedClick = onPremiumLockedClick,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
-                    }
-                    val emptySlots = 3 - rowThemes.size
-                    if (emptySlots > 0) {
-                        repeat(emptySlots) {
-                            Spacer(modifier = Modifier.weight(1f))
+                        val emptySlots = columns - rowThemes.size
+                        if (emptySlots > 0) {
+                            repeat(emptySlots) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
                         }
                     }
                 }

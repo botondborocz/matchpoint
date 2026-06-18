@@ -38,47 +38,51 @@ fun PremiumAppIconSelector(
     onIconSelected: (PremiumAppIcon) -> Unit,
     onPremiumLockedClick: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "APP IKON", // Matches the style of "PRÉMIUM TÉMÁK"
-            color = AppColors.TextGray,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val columns = (maxWidth / 100.dp).toInt().coerceIn(3, 6)
 
-        val chunkedIcons = availableAppIcons.chunked(3)
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            chunkedIcons.forEach { rowIcons ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    rowIcons.forEach { icon ->
-                        Box(modifier = Modifier.weight(1f)) {
-                            AppIconGridItem(
-                                icon = icon,
-                                isSelected = currentAppIcon == icon,
-                                isUserPremium = isUserPremium,
-                                onClick = {
-                                    if (icon.isPremium && !isUserPremium) {
-                                        onPremiumLockedClick()
-                                    } else {
-                                        onIconSelected(icon)
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = "APP IKON", // Matches the style of "PRÉMIUM TÉMÁK"
+                color = AppColors.TextGray,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+
+            val chunkedIcons = availableAppIcons.chunked(columns)
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                chunkedIcons.forEach { rowIcons ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        rowIcons.forEach { icon ->
+                            Box(modifier = Modifier.weight(1f)) {
+                                AppIconGridItem(
+                                    icon = icon,
+                                    isSelected = currentAppIcon == icon,
+                                    isUserPremium = isUserPremium,
+                                    onClick = {
+                                        if (icon.isPremium && !isUserPremium) {
+                                            onPremiumLockedClick()
+                                        } else {
+                                            onIconSelected(icon)
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
-                    }
-                    val emptySlots = 3 - rowIcons.size
-                    if (emptySlots > 0) {
-                        repeat(emptySlots) {
-                            Spacer(modifier = Modifier.weight(1f))
+                        val emptySlots = columns - rowIcons.size
+                        if (emptySlots > 0) {
+                            repeat(emptySlots) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
                         }
                     }
                 }

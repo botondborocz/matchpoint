@@ -24,6 +24,10 @@ interface TokenStorage {
     fun getPremiumStatus(): Boolean
     fun clearPremiumStatus()
     
+    // 👇 Sidebar expanded state persistence
+    fun saveSidebarExpanded(isExpanded: Boolean)
+    fun getSidebarExpanded(): Boolean?
+
     // 👇 Profile & Badge metrics caching for offline viewing
     fun saveUserProfile(profile: UserProfile)
     fun getUserProfile(): UserProfile?

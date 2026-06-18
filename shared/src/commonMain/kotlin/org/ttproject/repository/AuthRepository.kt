@@ -14,12 +14,23 @@ import org.ttproject.data.LoginRequest
 import org.ttproject.data.RegisterRequest
 import org.ttproject.data.TokenResponse
 import org.ttproject.data.TokenStorage
+import org.ttproject.data.SupabaseTokenRequest
+import org.ttproject.di.supabase
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.providers.builtin.Email
+import io.github.jan.supabase.auth.user.UserSession
 
 // 1. The Interface
 interface AuthRepository {
     suspend fun login(email: String, password: String): Result<String>
     suspend fun register(email: String, password: String): Result<String>
     suspend fun googleLogin(idToken: String): Result<String>
+    
+    // Supabase Auth Integration
+    suspend fun signUpWithSupabase(email: String, password: String): Result<Unit>
+    suspend fun loginWithSupabase(email: String, password: String): Result<String>
+    suspend fun sendPasswordResetEmail(email: String): Result<Unit>
+    suspend fun resetPassword(password: String): Result<Unit>
 }
 
 // 2. The Implementation (where Ktor lives)
@@ -92,6 +103,75 @@ class AuthRepositoryImpl(
         } catch (e: Exception) {
             println("🚨 NETWORK CRASH: ${e.message}")
             Result.failure(Exception("Network error: ${e.message}"))
+        }
+    }
+
+    // --- SUPABASE SIGN UP ---
+    override suspend fun signUpWithSupabase(email: String, password: String): Result<Unit> {
+        return try {
+            supabase.auth.signUpWith(Email, redirectUrl = "matchpointapp://confirm-signup") {
+                this.email = email.trim()
+                this.password = password
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            println("🚨 Supabase SignUp Error: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    // --- SUPABASE LOGIN ---
+    override suspend fun loginWithSupabase(email: String, password: String): Result<String> {
+        return try {
+            supabase.auth.signInWith(Email) {
+                this.email = email.trim()
+                this.password = password
+            }
+            val activeSession = supabase.auth.currentSessionOrNull() ?: throw Exception("Session not found")
+            
+            // Forward Supabase access token to Ktor backend to obtain custom JWT
+            val response = httpClient.post("${SERVER_IP}/api/auth/login-supabase") {
+                contentType(ContentType.Application.Json)
+                setBody(SupabaseTokenRequest(activeSession.accessToken))
+            }
+
+            if (response.status.isSuccess()) {
+                val tokenResponse = response.body<TokenResponse>()
+                tokenStorage.saveToken(tokenResponse.token)
+                Result.success("Supabase login successful!")
+            } else {
+                val serverError = response.bodyAsText()
+                Result.failure(Exception(serverError))
+            }
+        } catch (e: Exception) {
+            println("🚨 Supabase Login Error: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    // --- SUPABASE FORGOT PASSWORD EMAIL ---
+    override suspend fun sendPasswordResetEmail(email: String): Result<Unit> {
+        return try {
+            supabase.auth.resetPasswordForEmail(email = email.trim(), redirectUrl = "matchpointapp://reset-password")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            println("🚨 Supabase Reset Password Email Error: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    // --- SUPABASE RESET PASSWORD COMMIT ---
+    override suspend fun resetPassword(password: String): Result<Unit> {
+        return try {
+            supabase.auth.updateUser {
+                this.password = password
+            }
+            // Sign out of Supabase to ensure a clean slate, requiring them to login with new password
+            supabase.auth.signOut()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            println("🚨 Supabase Reset Password Commit Error: ${e.message}")
+            Result.failure(e)
         }
     }
 }

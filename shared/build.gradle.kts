@@ -79,6 +79,9 @@ kotlin {
             implementation("io.github.cdimascio:dotenv-kotlin:6.5.0")
             implementation("io.ktor:ktor-client-websockets:3.3.0")
             implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
+
+            implementation("io.github.jan-tennert.supabase:postgrest-kt:3.0.3") // Database
+            implementation("io.github.jan-tennert.supabase:auth-kt:3.0.3")      // Authentication
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
