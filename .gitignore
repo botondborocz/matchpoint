@@ -26,3 +26,6 @@ nginx.conf
 Caddyfile
 google-services.json
 firebase-adminsdk.json
+
+# CocoaPods
+/iosApp/Pods/

@@ -1,7 +1,6 @@
 import UIKit
 import SwiftUI
 import ComposeApp
-import shared
 
 // MARK: - Native Gallery Bridge Models
 // ... (previous contents unmodified)

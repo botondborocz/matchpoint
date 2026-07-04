@@ -1,6 +1,6 @@
 import SwiftUI
 import MapKit
-import shared
+import ComposeApp
 import PhotosUI
 
 // MARK: - Location Identifiable Conformance for SwiftUI sheets

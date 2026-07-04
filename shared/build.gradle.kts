@@ -76,7 +76,6 @@ kotlin {
             implementation("io.ktor:ktor-client-content-negotiation:3.3.0")
             implementation("io.ktor:ktor-serialization-kotlinx-json:3.3.0")
             implementation("io.ktor:ktor-client-auth:3.3.0")
-            implementation("io.github.cdimascio:dotenv-kotlin:6.5.0")
             implementation("io.ktor:ktor-client-websockets:3.3.0")
             implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
 
@@ -136,8 +135,12 @@ buildkonfig {
         // Look in local.properties first (Local PC), then check System.getenv() (Codemagic)
         val webClientId = localProperties.getProperty("GOOGLE_WEB_CLIENT_ID")?.toString() ?: System.getenv("GOOGLE_WEB_CLIENT_ID") ?: ""
         val iosClientId = localProperties.getProperty("GOOGLE_IOS_CLIENT_ID")?.toString() ?: System.getenv("GOOGLE_IOS_CLIENT_ID") ?: ""
+        val supabaseUrl = localProperties.getProperty("SUPABASE_URL")?.toString() ?: System.getenv("SUPABASE_URL") ?: ""
+        val supabaseAnonKey = localProperties.getProperty("SUPABASE_ANON_KEY")?.toString() ?: System.getenv("SUPABASE_ANON_KEY") ?: ""
 
         buildConfigField(com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING, "WEB_CLIENT_ID", webClientId)
         buildConfigField(com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING, "IOS_CLIENT_ID", iosClientId)
+        buildConfigField(com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING, "SUPABASE_URL", supabaseUrl)
+        buildConfigField(com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING, "SUPABASE_ANON_KEY", supabaseAnonKey)
     }
 }

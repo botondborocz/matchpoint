@@ -10,7 +10,6 @@ import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
-import io.github.cdimascio.dotenv.dotenv
 import kotlinx.coroutines.CancellationException
 import org.ttproject.config.BuildKonfig
 import java.io.File
